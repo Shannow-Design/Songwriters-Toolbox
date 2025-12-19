@@ -11,14 +11,12 @@
     <link rel="apple-touch-icon" href="icon.png">
 </head>
 <body>
-
     <div class="toolbox-wrapper">
         <header>
             <h1>Songwriters Toolbox</h1>
         </header>
 
         <section class="control-panel">
-            
             <div class="controls-left">
                 <div class="control-group">
                     <label for="key-select">Select Root Key</label>
@@ -28,7 +26,6 @@
                     <label for="scale-select">Select Scale</label>
                     <select id="scale-select"></select>
                 </div>
-
                 <div class="control-group">
                     <label for="tuning-select">Guitar Tuning</label>
                     <select id="tuning-select"></select>
@@ -50,7 +47,6 @@
                         <option value="11">Fret 11</option>
                     </select>
                 </div>
-
                 <div class="control-group">
                     <label for="bass-tuning-select">Bass Tuning</label>
                     <select id="bass-tuning-select"></select>
@@ -59,25 +55,13 @@
 
             <div class="display-options">
                 <label style="margin-bottom: 10px; display: block; color: var(--text-dim);">Display Options</label>
-                
-                <div class="checkbox-group">
-                    <input type="checkbox" id="cb-tuner" checked> <label for="cb-tuner">Chromatic Tuner</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="cb-buttons" checked> <label for="cb-buttons">Note Buttons</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="cb-keyboard" checked> <label for="cb-keyboard">Keyboard (MIDI)</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="cb-chords" checked> <label for="cb-chords">Chord Charts</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="cb-guitar" checked> <label for="cb-guitar">Guitar Fretboard</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="cb-bass" checked> <label for="cb-bass">Bass Fretboard</label>
-                </div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-tuner" checked> <label for="cb-tuner">Chromatic Tuner</label></div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-buttons" checked> <label for="cb-buttons">Note Buttons</label></div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-keyboard" checked> <label for="cb-keyboard">Keyboard (MIDI)</label></div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-guitar" checked> <label for="cb-guitar">Guitar Fretboard</label></div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-bass" checked> <label for="cb-bass">Bass Fretboard</label></div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-chords" checked> <label for="cb-chords">Chord Charts</label></div>
+                <div class="checkbox-group"><input type="checkbox" id="cb-sequencer" checked> <label for="cb-sequencer">Backing Track Sequencer</label></div>
 
                 <div class="play-section">
                     <div style="font-size: 0.8rem; color:#666; margin-bottom: 5px; text-align: center;">
@@ -90,53 +74,56 @@
 
         <div id="wrapper-tuner">
             <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Chromatic Tuner</h3>
-            <section id="tuner-container" style="margin-bottom: 30px;">
-                </section>
+            <section id="tuner-container" style="margin-bottom: 30px;"></section>
         </div>
 
         <div id="wrapper-buttons">
-            <section id="note-buttons-display" class="note-buttons-display">
-                </section>
+            <section id="note-buttons-display" class="note-buttons-display"></section>
         </div>
 
         <div id="wrapper-keyboard">
-    <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Keyboard (C3-C5)</h3>
-    
-    <div id="keyboard-info" style="
-        background: #111; 
-        color: #00e5ff; 
-        font-family: monospace; 
-        font-size: 1.2rem; 
-        text-align: center; 
-        padding: 10px; 
-        border-radius: 4px; 
-        border: 1px solid #333; 
-        margin-bottom: 10px; 
-        min-height: 24px;
-        letter-spacing: 1px;">
-        Ready
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="color:#666; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; margin:0;">Keyboard (MIDI)</h3>
+        <select id="keyboard-instrument-select" style="background:#222; color:var(--primary-cyan); border:1px solid #444; padding:2px 5px; border-radius:4px; font-size:0.8rem;">
+            </select>
     </div>
+    
+    <div id="keyboard-info" style="background: #111; color: #00e5ff; font-family: monospace; font-size: 1.2rem; text-align: center; padding: 10px; border-radius: 4px; border: 1px solid #333; margin-bottom: 10px; min-height: 24px; letter-spacing: 1px;">Ready</div>
+    <section id="keyboard-container" style="overflow-x: auto; padding-bottom: 10px; text-align: center; margin-bottom: 30px;"></section>
+</div>
 
-    <section id="keyboard-container" style="overflow-x: auto; padding-bottom: 10px; text-align: center; margin-bottom: 30px;">
+        <div id="wrapper-guitar">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="color:#666; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; margin:0;">Guitar</h3>
+        <select id="guitar-display-mode" style="background:#222; color:var(--primary-cyan); border:1px solid #444; padding:2px 5px; border-radius:4px; font-size:0.8rem;">
+            <option value="scale">Show Full Scale</option>
+            <option value="chord">Show Active Chord</option>
+        </select>
+    </div>
+    <section id="fretboard-container" class="display-area" style="margin-bottom: 30px;">
+        </section>
+</div>
+
+        <div id="wrapper-bass">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="color:#666; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px; margin:0;">Bass</h3>
+        <select id="bass-display-mode" style="background:#222; color:var(--primary-cyan); border:1px solid #444; padding:2px 5px; border-radius:4px; font-size:0.8rem;">
+            <option value="scale">Show Full Scale</option>
+            <option value="chord">Show Chord Tones (R-3-5)</option>
+        </select>
+    </div>
+    <section id="bass-fretboard-container" class="display-area">
         </section>
 </div>
 
         <div id="wrapper-chords">
             <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Chords in Key</h3>
-            <section id="chords-container" class="chords-display">
-                </section>
+            <section id="chords-container" class="chords-display"></section>
         </div>
 
-        <div id="wrapper-guitar">
-            <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Guitar</h3>
-            <section id="fretboard-container" class="display-area" style="margin-bottom: 30px;">
-                </section>
-        </div>
-
-        <div id="wrapper-bass">
-            <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Bass</h3>
-            <section id="bass-fretboard-container" class="display-area">
-                </section>
+        <div id="wrapper-sequencer">
+            <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Backing Track Sequencer</h3>
+            <section id="sequencer-container" style="margin-bottom: 30px;"></section>
         </div>
 
     </div>

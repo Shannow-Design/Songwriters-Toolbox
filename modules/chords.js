@@ -2,193 +2,212 @@
 import { getNoteIndex, getNotes } from './theory.js';
 import { playStrum } from './audio.js';
 
-// Standard Tuning Reference & Frequencies
-const STANDARD_TUNING_INDICES = [4, 9, 14, 19, 23, 28];
-const STANDARD_FREQUENCIES = [82.41, 110.00, 146.83, 196.00, 246.94, 329.63];
-const SHARPS = getNotes(); 
+// --- CHORD DICTIONARY ---
+// -1 = Mute (x), 0 = Open, 1-4 = Fret
+const CHORD_SHAPES = {
+    // Major
+    'C':  [-1, 3, 2, 0, 1, 0],
+    'C#': [-1, 4, 3, 1, 2, 1], 
+    'Db': [-1, 4, 3, 1, 2, 1], 
+    'D':  [-1, -1, 0, 2, 3, 2],
+    'D#': [-1, -1, 1, 3, 4, 3],
+    'Eb': [-1, -1, 1, 3, 4, 3], 
+    'E':  [0, 2, 2, 1, 0, 0],
+    'F':  [1, 3, 3, 2, 1, 1], 
+    'F#': [2, 4, 4, 3, 2, 2],
+    'Gb': [2, 4, 4, 3, 2, 2], 
+    'G':  [3, 2, 0, 0, 0, 3],
+    'G#': [4, 6, 6, 5, 4, 4],
+    'Ab': [4, 6, 6, 5, 4, 4], 
+    'A':  [-1, 0, 2, 2, 2, 0],
+    'A#': [-1, 1, 3, 3, 3, 1],
+    'Bb': [-1, 1, 3, 3, 3, 1], 
+    'B':  [-1, 2, 4, 4, 4, 2],
 
-const OPEN_CHORDS = {
-    'C': [-1, 3, 2, 0, 1, 0], 'A': [-1, 0, 2, 2, 2, 0], 'G': [3, 2, 0, 0, 0, 3],
-    'E': [0, 2, 2, 1, 0, 0], 'D': [-1, -1, 0, 2, 3, 2], 'Am': [-1, 0, 2, 2, 1, 0],
-    'Em': [0, 2, 2, 0, 0, 0], 'Dm': [-1, -1, 0, 2, 3, 1]
+    // Minor
+    'Cm': [-1, 3, 5, 5, 4, 3],
+    'C#m':[-1, 4, 6, 6, 5, 4],
+    'Dbm':[-1, 4, 6, 6, 5, 4],
+    'Dm': [-1, -1, 0, 2, 3, 1],
+    'D#m':[-1, -1, 1, 3, 4, 2],
+    'Ebm':[-1, -1, 1, 3, 4, 2],
+    'Em': [0, 2, 2, 0, 0, 0],
+    'Fm': [1, 3, 3, 1, 1, 1],
+    'F#m':[2, 4, 4, 2, 2, 2],
+    'Gbm':[2, 4, 4, 2, 2, 2],
+    'Gm': [3, 5, 5, 3, 3, 3],
+    'G#m':[4, 6, 6, 4, 4, 4],
+    'Abm':[4, 6, 6, 4, 4, 4],
+    'Am': [-1, 0, 2, 2, 1, 0],
+    'A#m':[-1, 1, 3, 3, 2, 1],
+    'Bbm':[-1, 1, 3, 3, 2, 1],
+    'Bm': [-1, 2, 4, 4, 3, 2],
+
+    // Diminished
+    'Cdim': [-1, 3, 4, 2, 4, -1], 
+    'Ddim': [-1, -1, 0, 1, 0, 1],
+    'Edim': [0, 1, 2, 0, 2, 0], 
+    'Fdim': [1, 2, 3, 1, 3, 1],
+    'Gdim': [3, 4, 5, 3, 5, 3],
+    'Adim': [-1, 0, 1, 2, 1, 2], 
+    'Bdim': [-1, 2, 3, 4, 3, -1],
+    'F#dim': [-1, -1, 4, 5, 4, 5],
+    'G#dim': [4, -1, 3, 4, 3, -1]
 };
 
-const BARRE_SHAPES = {
-    'Major': { 'E': [0, 2, 2, 1, 0, 0], 'A': [-1, 0, 2, 2, 2, 0] },
-    'Minor': { 'E': [0, 2, 2, 0, 0, 0], 'A': [-1, 0, 2, 2, 1, 0] }
-};
+// Base Roman Numerals (1-7)
+const ROMAN_BASE = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 
 export class ChordRenderer {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
     }
 
-    // UPDATED: Now accepts an 'onClickCallback'
-    render(chordsList, capo = 0, currentTuning = ['E','A','D','G','B','E'], onClickCallback = null) {
-        if (!this.container) return;
-        this.container.innerHTML = ''; 
-        capo = parseInt(capo);
-
-        chordsList.forEach(chord => {
+    render(chords, capo, tuning, onChordClick, keyRoot) {
+        this.container.innerHTML = '';
+        
+        chords.forEach((chord, index) => {
             const card = document.createElement('div');
             card.className = 'chord-card';
-            
-            // 1. Calculate Standard Shape
-            const rootIndex = getNoteIndex(chord.root);
-            const relativeRootIndex = (rootIndex - capo + 12) % 12;
-            const relativeRootName = SHARPS[relativeRootIndex];
+            card.dataset.index = index;
 
-            const standardFrets = this.getFingering(relativeRootName, relativeRootName, chord.quality);
-            
-            // 2. Adjust for Tuning
-            const adjustedFrets = this.adjustFretsForTuning(standardFrets, currentTuning);
+            // 1. Roman Numeral Header
+            const roman = this.getRomanNumeral(index, chord.name);
+            const romanEl = document.createElement('div');
+            romanEl.className = 'chord-roman';
+            romanEl.textContent = roman;
 
-            // 3. Draw SVG
-            const svg = this.createChordSVG(adjustedFrets, capo);
+            // 2. Chord Title
+            const title = document.createElement('div');
+            title.className = 'chord-title';
+            title.textContent = chord.name;
             
-            let subtext = "";
-            if (capo > 0) subtext += `<span style="font-size:0.8rem; color:#888;">(${relativeRootName} Shape)</span>`;
-            if (adjustedFrets.includes(-999)) {
-                subtext += `<br><span style="font-size:0.7rem; color:#d32f2f;">Shape unavailable</span>`;
-            }
-
-            card.innerHTML = `<div class="chord-title">${chord.name}</div>${subtext}${svg}`;
+            // 3. Diagram
+            const diagram = this.createSVG(chord.name, capo);
             
-            // 4. Click Listener
+            // Append Order: Roman -> Title -> Diagram
+            card.appendChild(romanEl);
+            card.appendChild(title);
+            card.appendChild(diagram);
+            
             card.addEventListener('click', () => {
-                if (!adjustedFrets.includes(-999)) {
-                    this.playChordAudio(adjustedFrets, capo, currentTuning);
-                    
-                    // --- TRIGGER THE KEYBOARD HIGHLIGHT ---
-                    if (onClickCallback) {
-                        onClickCallback(chord.notes); // Send ['C', 'E', 'G'] to app.js
-                    }
-
-                    // Animation
-                    card.style.borderColor = "#00e5ff";
-                    card.style.transform = "scale(1.05)";
-                    setTimeout(() => {
-                        card.style.borderColor = "";
-                        card.style.transform = "";
-                    }, 200);
-                }
+                const frequencies = this.getFrequencies(chord, keyRoot, tuning);
+                playStrum(frequencies); 
+                if (onChordClick) onChordClick(chord.notes);
             });
-
+            
             this.container.appendChild(card);
         });
     }
 
-    adjustForTuning(standardFrets, currentTuning) {
-        const standardNotes = ['E','A','D','G','B','E'];
-        return standardFrets.map((fret, i) => {
-            if (fret === -1) return -1;
-            const stdIndex = getNoteIndex(standardNotes[i]);
-            const curIndex = getNoteIndex(currentTuning[i]);
-            let diff = stdIndex - curIndex;
-            if (diff > 6) diff -= 12;
-            if (diff < -6) diff += 12;
-            const newFret = fret + diff;
-            if (newFret < 0) return -999; 
-            return newFret;
-        });
+    // NEW: Smart Roman Numeral Generator
+    getRomanNumeral(index, chordName) {
+        let base = ROMAN_BASE[index];
+        
+        if (chordName.includes('dim')) {
+            // Diminished: lowercase + degree symbol
+            return base.toLowerCase() + '°';
+        } else if (chordName.includes('m') && !chordName.includes('maj')) {
+            // Minor: lowercase
+            return base.toLowerCase();
+        } else {
+            // Major: keep uppercase
+            return base;
+        }
     }
     
-    adjustFretsForTuning(standardFrets, currentTuning) {
-        return this.adjustForTuning(standardFrets, currentTuning);
-    }
+    getFrequencies(chord, keyRoot, tuning) {
+        const chordRootName = chord.root;
+        const keyIndex = getNoteIndex(keyRoot);
+        const chordRootIndex = getNoteIndex(chordRootName);
 
-    playChordAudio(frets, capo, currentTuningNotes) {
-        const frequencies = [];
-        const currentBaseFreqs = STANDARD_FREQUENCIES.map((freq, i) => {
-            const standardNotes = ['E','A','D','G','B','E'];
-            const stdIndex = getNoteIndex(standardNotes[i]);
-            const curIndex = getNoteIndex(currentTuningNotes[i]);
-            let diff = curIndex - stdIndex;
-            if (diff > 6) diff -= 12;
-            if (diff < -6) diff += 12;
-            return freq * Math.pow(2, diff / 12);
-        });
+        let chordBaseOctave = 3;
+        if (chordRootIndex < keyIndex) {
+            chordBaseOctave = 4;
+        }
 
-        frets.forEach((fret, stringIndex) => {
-            if (fret !== -1 && fret !== -999) {
-                const baseFreq = currentBaseFreqs[stringIndex];
-                const absoluteFret = fret + capo;
-                const pitch = baseFreq * Math.pow(2, absoluteFret / 12);
-                frequencies.push(pitch);
+        return chord.notes.map(noteName => {
+            const noteIndex = getNoteIndex(noteName);
+            let noteOctave = chordBaseOctave;
+            if (noteIndex < chordRootIndex) {
+                noteOctave += 1;
             }
+            const semitones = (noteIndex - 9) + ((noteOctave - 4) * 12);
+            return 440 * Math.pow(2, semitones / 12);
         });
-        playStrum(frequencies);
     }
 
-    createChordSVG(frets, capo) {
-        const width = 100, height = 120, margin = 15, fretSpacing = 18, stringSpacing = 14;
-        let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+    createSVG(chordName, capo) {
+        const width = 80;
+        const height = 90; 
         
-        if (frets.includes(-999)) return `<svg width="${width}" height="${height}"><text x="50%" y="50%" text-anchor="middle" fill="#666" font-size="10">Impossible</text></svg>`;
-
-        const minFret = Math.min(...frets.filter(f => f > 0));
-        const baseFret = (minFret > 4) ? minFret - 1 : 0;
-
-        if (baseFret === 0) {
-            if (capo > 0) {
-                svg += `<rect x="${margin}" y="${margin}" width="${5 * stringSpacing}" height="6" fill="#00e5ff" />`;
-                svg += `<text x="${width/2}" y="${margin-4}" font-size="9" fill="#00e5ff" text-anchor="middle">CAPO ${capo}</text>`;
-            } else {
-                svg += `<rect x="${margin}" y="${margin}" width="${5 * stringSpacing}" height="4" fill="#666" />`;
+        let shape = CHORD_SHAPES[chordName];
+        if (!shape) {
+            const rootMatch = chordName.match(/^[A-G][#b]?/);
+            if (rootMatch) {
+                const root = rootMatch[0];
+                const isMinor = chordName.includes('m') && !chordName.includes('maj');
+                const genericName = root + (isMinor ? 'm' : '');
+                shape = CHORD_SHAPES[genericName];
             }
-        } else {
-            svg += `<text x="0" y="${margin + fretSpacing}" font-size="10" fill="#888">${baseFret + 1}</text>`;
+        }
+        if (!shape) shape = [-1, -1, -1, -1, -1, -1]; 
+
+        let svgContent = '';
+        if (capo > 0) {
+            svgContent += `<text x="40" y="10" text-anchor="middle" fill="#888" font-size="10">Capo ${capo}</text>`;
         }
 
-        for (let i = 0; i <= 5; i++) {
-            let y = margin + (i * fretSpacing);
-            if (baseFret === 0 && i === 0) continue;
-            svg += `<line x1="${margin}" y1="${y}" x2="${margin + 5 * stringSpacing}" y2="${y}" stroke="#444" stroke-width="2" />`;
+        const topY = 15;
+        svgContent += `<line x1="10" y1="${topY}" x2="70" y2="${topY}" stroke="${capo > 0 ? '#888' : 'white'}" stroke-width="${capo > 0 ? 1 : 2}" />`;
+        
+        for(let i=1; i<=5; i++) {
+            let y = topY + (i * 12); 
+            svgContent += `<line x1="10" y1="${y}" x2="70" y2="${y}" stroke="#444" stroke-width="1" />`;
         }
-        for (let i = 0; i < 6; i++) {
-            let x = margin + (i * stringSpacing);
-            svg += `<line x1="${x}" y1="${margin}" x2="${x}" y2="${margin + 5 * fretSpacing}" stroke="#666" stroke-width="1" />`;
+        
+        for(let i=0; i<6; i++) {
+            let x = 10 + (i * 12); 
+            svgContent += `<line x1="${x}" y1="${topY}" x2="${x}" y2="${topY + 60}" stroke="#555" stroke-width="1" />`;
         }
 
-        frets.forEach((fret, stringIndex) => {
-            let x = margin + (stringIndex * stringSpacing);
+        let rootStringIndex = -1;
+        for(let i=0; i<6; i++) {
+            if (shape[i] !== -1) {
+                rootStringIndex = i;
+                break;
+            }
+        }
+
+        shape.forEach((fret, stringIndex) => {
+            const x = 10 + (stringIndex * 12);
+            
             if (fret === -1) {
-                svg += `<text x="${x}" y="${margin - 5}" text-anchor="middle" font-size="10" fill="#666">×</text>`;
+                svgContent += `<text x="${x}" y="${topY - 4}" text-anchor="middle" fill="#666" font-size="9" font-family="sans-serif">×</text>`;
             } else if (fret === 0) {
-                let color = (capo > 0) ? "#00e5ff" : "#888";
-                svg += `<circle cx="${x}" cy="${margin - 4}" r="3" stroke="${color}" fill="none" />`;
+                svgContent += `<circle cx="${x}" cy="${topY - 6}" r="2.5" stroke="#888" stroke-width="1.5" fill="none" />`;
             } else {
-                let relativeFret = fret - baseFret;
-                let y = margin + (relativeFret * fretSpacing) - (fretSpacing / 2);
-                svg += `<circle cx="${x}" cy="${y}" r="5" fill="#00e5ff" />`;
+                const y = topY + (fret * 12) - 6;
+                const color = (stringIndex === rootStringIndex) ? '#ffb300' : '#00e5ff';
+                svgContent += `<circle cx="${x}" cy="${y}" r="3.5" fill="${color}"></circle>`;
             }
         });
-        svg += `</svg>`;
-        return svg;
+        
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 80 100">${svgContent}</svg>`;
+        return wrapper.firstElementChild;
     }
-
-    getFingering(chordName, root, quality) {
-        const OPEN_CHORDS_REF = {
-            'C': [-1, 3, 2, 0, 1, 0], 'A': [-1, 0, 2, 2, 2, 0], 'G': [3, 2, 0, 0, 0, 3],
-            'E': [0, 2, 2, 1, 0, 0], 'D': [-1, -1, 0, 2, 3, 2], 'Am': [-1, 0, 2, 2, 1, 0],
-            'Em': [0, 2, 2, 0, 0, 0], 'Dm': [-1, -1, 0, 2, 3, 1]
-        };
-        let searchKey = root;
-        if (quality === 'Minor') searchKey += 'm';
-        if (OPEN_CHORDS_REF[searchKey]) return OPEN_CHORDS_REF[searchKey];
-
-        const rootIndex = getNoteIndex(root);
-        let distE = (rootIndex - 4 + 12) % 12;
-        let distA = (rootIndex - 9 + 12) % 12;
-        let baseFret, baseShape;
-
-        if (rootIndex >= 5 && rootIndex <= 8) {
-            baseShape = (quality === 'Minor') ? BARRE_SHAPES.Minor.E : BARRE_SHAPES.Major.E;
-            baseFret = distE;
-        } else {
-            baseShape = (quality === 'Minor') ? BARRE_SHAPES.Minor.A : BARRE_SHAPES.Major.A;
-            baseFret = distA;
+    
+    highlightChord(index) {
+        this.clearHighlights();
+        const cards = this.container.querySelectorAll('.chord-card');
+        if (cards[index]) {
+            cards[index].classList.add('active-playing');
         }
-        return baseShape.map(f => (f === -1 ? -1 : f + baseFret));
+    }
+    
+    clearHighlights() {
+        const cards = this.container.querySelectorAll('.chord-card');
+        cards.forEach(c => c.classList.remove('active-playing'));
     }
 }

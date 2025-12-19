@@ -1,6 +1,6 @@
 // modules/keyboard.js
 import { getNoteIndex, getNotes } from './theory.js';
-import { startNote, stopNote } from './audio.js';
+import { startNote, stopNote, INSTRUMENTS } from './audio.js'; // Import INSTRUMENTS
 
 const START_MIDI_NOTE = 48; // C3
 const NUM_KEYS = 25;        // C3 to C5
@@ -9,11 +9,38 @@ const SHARPS = getNotes();
 export class Keyboard {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
-        this.display = document.getElementById('keyboard-info'); // Grab the new display
+        this.display = document.getElementById('keyboard-info'); 
+        this.select = document.getElementById('keyboard-instrument-select'); // Grab Dropdown
+
         this.highlightedIndices = []; 
-        this.pressedNotes = new Set(); // Track notes currently held down
+        this.rootNoteIndex = -1; 
+        this.pressedNotes = new Set(); 
+        
+        this.instrument = 'Lead Synth'; // Default
+
+        this.initUI();
         this.render(); 
         this.initMIDI();
+    }
+
+    initUI() {
+        // Populate Instrument Select
+        if (this.select) {
+            Object.keys(INSTRUMENTS).forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                this.select.appendChild(opt);
+            });
+            this.select.value = this.instrument;
+
+            // Listener
+            this.select.addEventListener('change', (e) => {
+                this.instrument = e.target.value;
+                // Focus container to prevent spacebar triggering dropdown
+                if(this.container) this.container.focus();
+            });
+        }
     }
 
     render() {
@@ -33,15 +60,14 @@ export class Keyboard {
             const midiNote = START_MIDI_NOTE + i;
             const noteName = this.getNoteNameFromMidi(midiNote);
             if (!noteName.includes('#')) {
-                const isHighlighted = this.isNoteHighlighted(midiNote);
-                const color = isHighlighted ? 'var(--primary-cyan)' : 'white';
+                const { color, labelColor } = this.getKeyColor(midiNote);
                 
                 svg += `<rect id="key-${midiNote}" x="${x}" y="0" width="${keyWidth}" height="${keyHeight}" 
                         fill="${color}" stroke="black" stroke-width="1" class="piano-key white-key" 
                         data-note="${midiNote}" />`;
                 
-                if (isHighlighted) {
-                     svg += `<text x="${x + keyWidth/2}" y="${keyHeight - 10}" text-anchor="middle" font-size="10" pointer-events="none" fill="#333">${noteName}</text>`;
+                if (this.isNoteHighlighted(midiNote)) {
+                     svg += `<text x="${x + keyWidth/2}" y="${keyHeight - 10}" text-anchor="middle" font-size="10" pointer-events="none" fill="${labelColor}" font-weight="bold">${noteName}</text>`;
                 }
                 x += keyWidth;
             }
@@ -58,11 +84,10 @@ export class Keyboard {
                 
                 if (nextName.includes('#')) {
                     const bx = whiteKeyX + (keyWidth * 0.7);
-                    const isHighlighted = this.isNoteHighlighted(nextMidi);
-                    const fill = isHighlighted ? 'var(--primary-cyan)' : '#333';
+                    const { color } = this.getKeyColor(nextMidi);
                     
                     svg += `<rect id="key-${nextMidi}" x="${bx}" y="0" width="${keyWidth * 0.6}" height="${blackKeyHeight}" 
-                            fill="${fill}" stroke="black" class="piano-key black-key" 
+                            fill="${color}" stroke="black" class="piano-key black-key" 
                             data-note="${nextMidi}" />`;
                 }
                 whiteKeyX += keyWidth;
@@ -74,35 +99,58 @@ export class Keyboard {
         this.addMouseListeners();
     }
 
-    // --- UPDATED: Highlight with optional Label ---
-    highlightNotes(noteNames, label = null) {
+    getKeyColor(midiNote) {
+        const isHighlighted = this.isNoteHighlighted(midiNote);
+        const noteIndex = midiNote % 12;
+        const isRoot = (noteIndex === this.rootNoteIndex);
+        const noteName = this.getNoteNameFromMidi(midiNote);
+        const isBlack = noteName.includes('#');
+
+        let color = isBlack ? '#333' : 'white';
+        let labelColor = '#333';
+
+        if (isHighlighted) {
+            if (isRoot) {
+                color = 'var(--root-color)'; 
+                labelColor = '#000';
+            } else {
+                color = 'var(--primary-cyan)'; 
+                labelColor = '#000';
+            }
+        }
+        return { color, labelColor };
+    }
+
+    highlightNotes(noteNames, label = null, rootNote = null) {
         this.highlightedIndices = noteNames.map(name => getNoteIndex(name));
+        this.rootNoteIndex = rootNote ? getNoteIndex(rootNote) : -1;
         
-        // If a specific label (e.g. "C Major") was passed, show it
         if (label) {
             this.updateDisplay(label);
         } else {
-            // Otherwise just show the notes joined
             this.updateDisplay(noteNames.join(' '));
         }
-        
         this.render();
     }
     
-    // --- UPDATED: Display Logic ---
     updateDisplay(text) {
         if (!this.display) return;
         this.display.textContent = text || "Ready";
-        this.display.style.color = text ? "#00e5ff" : "#444";
+        this.display.style.color = text ? "var(--primary-cyan)" : "#444";
     }
 
-    // Called when user MANUALLY presses keys (Mouse/MIDI)
     updatePressedDisplay() {
         if (this.pressedNotes.size === 0) {
-            this.updateDisplay("Ready");
+            // Keep the Scale/Chord name visible if nothing is pressed
+            // or revert to Ready? Let's keep existing display unless empty.
+            // If we want to show keys being pressed, we can override.
+            // For now, let's just use it to show what keys are down.
+            if(this.display.textContent.includes(",")) { 
+                // Only reset if we were showing specific keys
+                this.updateDisplay("Ready");
+            }
             return;
         }
-        // Convert Set to Array, sort by MIDI number
         const sortedMidi = Array.from(this.pressedNotes).sort((a,b) => a - b);
         const noteNames = sortedMidi.map(m => this.getNoteNameWithOctave(m));
         this.updateDisplay(noteNames.join(', '));
@@ -115,6 +163,7 @@ export class Keyboard {
     
     clearHighlights() {
         this.highlightedIndices = [];
+        this.rootNoteIndex = -1;
         this.render();
         this.updateDisplay("Ready");
     }
@@ -124,7 +173,6 @@ export class Keyboard {
         return SHARPS[noteIndex];
     }
     
-    // NEW: Returns "C3", "F#4", etc.
     getNoteNameWithOctave(midiNumber) {
         const noteIndex = midiNumber % 12;
         const octave = Math.floor(midiNumber / 12) - 1;
@@ -173,11 +221,11 @@ export class Keyboard {
 
     handleNoteOn(midiNumber) {
         const key = this.container.querySelector(`#key-${midiNumber}`);
-        if (key) key.style.fill = "#ff0055"; 
+        if (key) key.style.fill = "var(--accent-pink)"; 
         
-        startNote(this.getFrequency(midiNumber), midiNumber);
+        // Pass selected instrument to Audio Engine
+        startNote(this.getFrequency(midiNumber), midiNumber, this.instrument);
         
-        // Track Press
         this.pressedNotes.add(midiNumber);
         this.updatePressedDisplay();
     }
@@ -185,19 +233,11 @@ export class Keyboard {
     handleNoteOff(midiNumber) {
         const key = this.container.querySelector(`#key-${midiNumber}`);
         if (key) {
-            const isHighlighted = this.isNoteHighlighted(midiNumber);
-            const noteName = this.getNoteNameFromMidi(midiNumber);
-            const isBlack = noteName.includes('#');
-
-            if (isHighlighted) {
-                key.style.fill = "var(--primary-cyan)";
-            } else {
-                key.style.fill = isBlack ? "#333" : "white";
-            }
+            const { color } = this.getKeyColor(midiNumber);
+            key.style.fill = color;
         }
         stopNote(midiNumber);
         
-        // Track Release
         this.pressedNotes.delete(midiNumber);
         this.updatePressedDisplay();
     }

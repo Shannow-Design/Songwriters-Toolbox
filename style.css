@@ -1,419 +1,564 @@
 :root {
+    --primary-bg: #121212;
+    --secondary-bg: #1e1e1e;
+    --text-main: #ffffff;
+    --text-dim: #888888;
     --primary-cyan: #00e5ff;
-    --primary-cyan-dim: #00b8cc;
-    --bg-dark: #121212;
-    --panel-bg: #1e1e1e;
-    --text-light: #e0e0e0;
-    --text-dim: #a0a0a0;
-    --fret-color: #444;
-    --string-color: #666;
-    --wood-color: #222; /* Darker wood for modern look */
+    --accent-pink: #ff0055;
+    /* NEW: Distinct color for Root Notes (Amber/Gold) */
+    --root-color: #ffb300;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: var(--bg-dark);
-    color: var(--text-light);
-    margin: 0;
-    padding: 20px;
+    background-color: var(--primary-bg);
+    color: var(--text-main);
     display: flex;
     justify-content: center;
+    padding: 20px;
 }
 
 .toolbox-wrapper {
-    max-width: 1200px;
     width: 100%;
+    max-width: 1000px;
 }
 
-/* --- Header --- */
-header h1 {
+header {
     text-align: center;
-    color: var(--primary-cyan);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 20px;
 }
 
-/* --- Main Control Panel --- */
+h1 {
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--primary-cyan);
+}
+
+/* --- CONTROL PANEL --- */
 .control-panel {
-    background: var(--panel-bg);
-    padding: 30px;
-    border-radius: 15px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    margin-bottom: 30px;
     display: flex;
     flex-wrap: wrap;
-    gap: 40px;
-    justify-content: space-between;
+    gap: 20px;
+    background-color: var(--secondary-bg);
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #333;
 }
 
 .controls-left {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
     flex: 2;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.display-options {
+    flex: 1;
+    min-width: 200px;
+    border-left: 1px solid #333;
+    padding-left: 20px;
 }
 
 .control-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    min-width: 150px;
 }
 
-.control-group label {
-    font-size: 0.9rem;
+label {
+    font-size: 0.85rem;
+    margin-bottom: 5px;
     color: var(--text-dim);
 }
 
 select {
-    background: var(--bg-dark);
-    color: var(--text-light);
+    padding: 8px;
+    background-color: #2a2a2a;
+    color: white;
     border: 1px solid #444;
-    padding: 12px;
-    border-radius: 8px;
+    border-radius: 4px;
     font-size: 1rem;
-    outline: none;
-    cursor: pointer;
-    transition: border-color 0.3s;
 }
 
 select:focus {
+    outline: none;
     border-color: var(--primary-cyan);
-}
-
-/* --- Display Options (Checkboxes) --- */
-.display-options {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    flex: 1;
-    min-width: 200px;
 }
 
 .checkbox-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
+    margin-bottom: 8px;
 }
 
-.checkbox-group input[type="checkbox"] {
-    accent-color: var(--primary-cyan);
-    transform: scale(1.2);
-    cursor: pointer;
-}
-
-/* --- Play Button --- */
-.play-section {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: flex-end;
-    flex: 1;
-}
-
-.midi-status {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--text-dim);
+.checkbox-group label {
     font-size: 0.9rem;
-    margin-bottom: 20px;
+    color: var(--text-main);
+    cursor: pointer;
 }
 
-.status-light {
-    width: 12px;
-    height: 12px;
-    background: var(--primary-cyan);
-    border-radius: 50%;
-    box-shadow: 0 0 10px var(--primary-cyan);
+input[type="checkbox"] {
+    accent-color: var(--primary-cyan);
+}
+
+/* --- PLAY BUTTON --- */
+.play-section {
+    margin-top: 15px;
+    text-align: center;
+    padding-top: 10px;
+    border-top: 1px solid #333;
 }
 
 #play-btn {
-    background: var(--primary-cyan);
-    color: var(--bg-dark);
+    width: 100%;
+    padding: 10px;
+    background-color: var(--primary-cyan);
+    color: #000;
     border: none;
-    padding: 15px 40px;
-    font-size: 1.1rem;
+    border-radius: 4px;
     font-weight: bold;
-    border-radius: 8px;
     cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    transition: background 0.2s;
 }
 
 #play-btn:hover {
-    background: var(--primary-cyan-dim);
-    transform: translateY(-2px);
+    background-color: #00b8cc;
 }
 
-#play-btn:active {
-    transform: translateY(1px);
-}
-
-/* --- Note Buttons Display --- */
-.note-buttons-display {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-    margin: 40px 0;
-    flex-wrap: wrap;
-}
-
-.note-btn {
-    background: var(--panel-bg);
-    border: 2px solid #444;
-    border-radius: 12px;
-    width: 80px;
-    height: 100px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
-}
-
-.note-name {
-    font-size: 2rem;
-    font-weight: bold;
-    color: var(--text-light);
-}
-
-.note-interval {
-    font-size: 1rem;
-    color: var(--text-dim);
-    margin-top: 5px;
-}
-
-.note-btn.root {
-    border-color: var(--primary-cyan);
-}
-
-.note-btn.root .note-interval {
-    color: var(--primary-cyan);
-}
-
-.note-btn.playing {
-    background: var(--primary-cyan);
-    border-color: var(--primary-cyan);
-    box-shadow: 0 0 25px var(--primary-cyan-dim);
-    transform: scale(1.05);
-}
-
-.note-btn.playing .note-name,
-.note-btn.playing .note-interval {
-    color: var(--bg-dark);
-}
-
-/* --- FRETBOARD (The Fixed Part) --- */
-.fretboard {
-    display: flex;           /* Required to stack strings vertically */
-    flex-direction: column;  /* Required to stack strings vertically */
-    background: var(--wood-color);
-    border: 5px solid #333;
-    border-radius: 10px;
-    overflow: hidden;
-    margin-top: 20px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-}
-
-.string {
-    display: flex;           /* Required to layout frets horizontally */
-    height: 40px;            /* Fixed height ensures strings aren't huge blocks */
-    position: relative;      /* Needed for the absolute line positioning */
-}
-
-/* The actual string line */
-.string::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 3px;             /* Thickness of the string */
-    background: var(--string-color);
-    z-index: 1;              /* Sits behind the note markers */
-    pointer-events: none;
-}
-
-.nut, .fret {
-    flex: 1;                 /* Grow to fill space evenly */
-    border-right: 2px solid var(--fret-color);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    z-index: 2;              /* Sits above the string line */
-}
-
-.nut {
-    background: #1a1a1a;
-    border-right: 5px solid #555;
-    flex: 0 0 60px;          /* Fixed width for the nut */
-}
-
-/* --- Note Markers (Dots) --- */
-.note-marker {
-    width: 28px;
-    height: 28px;
-    background: var(--primary-cyan);
-    color: var(--bg-dark);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    font-size: 0.8rem;
-    box-shadow: 0 0 10px var(--primary-cyan);
-    z-index: 3;
-}
-
-.root-note {
-    background: #fff;
-    box-shadow: 0 0 15px #fff;
-}
-
-/* Capo Styling */
-.capo-active {
-    border-left: 8px solid var(--primary-cyan) !important;
-    background: rgba(0, 229, 255, 0.1); /* Subtle glow behind the capo fret */
-}
-
-/* Dim the area behind the capo */
-.fret-muted {
-    opacity: 0.2;
-    background: #000;
-    pointer-events: none; /* Can't click notes behind capo */
-}
-
-/* Add to style.css */
-
-.chords-display {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 20px;
-    justify-content: center; /* Center them visually */
-    margin-bottom: 40px;
-}
-
-.chord-card {
-    background: #1e1e1e;
-    border: 1px solid #333;
-    border-radius: 10px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    transition: transform 0.2s, border-color 0.2s;
-    cursor: pointer;
-}
-
-.chord-card:hover {
-    transform: translateY(-5px);
-    border-color: var(--primary-cyan);
-}
-
-.chord-title {
-    color: var(--primary-cyan);
-    font-weight: bold;
-    font-size: 1.1rem;
-    margin-bottom: 5px;
-}
-
-/* Tuner Styles */
-.tuner-display {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background: #111;
+/* --- DISPLAY AREAS --- */
+.display-area {
+    background: var(--secondary-bg);
     padding: 20px;
-    border-radius: 10px;
+    border-radius: 8px;
+    min-height: 100px;
     border: 1px solid #333;
-    width: 100%;
-    max-width: 300px;
-    margin: 0 auto;
+    overflow-x: auto;
+}
+/* --- TUNER --- */
+.tuner-display {
+    text-align: center;
+    background: #000;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .tuner-meter {
-    width: 200px;
-    height: 100px; /* Half circle height */
-    background: linear-gradient(to top, #222 0%, #111 100%);
-    border-top-left-radius: 110px;
-    border-top-right-radius: 110px;
-    border: 2px solid #333;
-    border-bottom: none;
-    position: relative;
+    width: 250px; /* Slightly wider */
+    height: 120px;
+    border-top-left-radius: 125px;
+    border-top-right-radius: 125px;
+    background: #222;
     margin-bottom: 10px;
+    position: relative;
     overflow: hidden;
+    border: 1px solid #444;
+    border-bottom: none;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
 }
 
+/* TICKS (Scale) */
+.tuner-tick {
+    position: absolute;
+    bottom: 0;
+    width: 1px;
+    height: 10px;
+    background: #666;
+    transform-origin: bottom center;
+}
+.tuner-tick.major {
+    height: 20px;
+    width: 2px;
+    background: #888;
+}
+/* Center marker (Green) */
 .tuner-center-marker {
     position: absolute;
     bottom: 0;
     left: 50%;
     width: 2px;
-    height: 15px;
-    background: #00ff00; /* Green center target */
+    height: 30px;
+    background: #00ff00;
     transform: translateX(-50%);
-    z-index: 1;
+    z-index: 10;
+    box-shadow: 0 0 5px #00ff00;
 }
 
 .tuner-needle {
-    position: absolute;
-    bottom: 0;
-    left: 50%;
     width: 4px;
-    height: 90px;
-    background: var(--primary-cyan);
+    height: 100px;
+    background: #ff0055;
+    position: absolute;
+    bottom: -10px; /* Hinge slightly below */
+    left: 50%;
     transform-origin: bottom center;
     transform: translateX(-50%) rotate(0deg);
-    transition: transform 0.1s linear; /* Smooth movement */
-    z-index: 2;
+    transition: transform 0.1s linear;
     border-radius: 2px;
+    z-index: 20;
+    box-shadow: 0 0 5px rgba(255, 0, 85, 0.5);
 }
 
 .tuner-note {
     font-size: 3rem;
     font-weight: bold;
-    color: #444; /* Dim when inactive */
-    margin: 5px 0;
+    color: #444;
+    min-height: 60px;
     text-shadow: 0 0 10px rgba(0,0,0,0.5);
 }
 
 .tuner-freq {
-    font-family: monospace;
     color: #888;
+    font-family: monospace;
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+}
+
+/* HZ Adjustment Controls */
+.tuner-settings {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+    background: #1a1a1a;
+    padding: 8px 15px;
+    border-radius: 20px;
+    border: 1px solid #333;
+}
+
+.tuner-settings label {
+    margin: 0;
+    color: var(--primary-cyan);
+    font-weight: bold;
     font-size: 0.9rem;
 }
+.tuner-settings input[type=range] {
+    width: 100px;
+    accent-color: var(--primary-cyan);
+}
+.tuner-settings span {
+    font-family: monospace;
+    color: white;
+    min-width: 50px;
+    text-align: right;
+}
 
-#btn-start-mic {
-    margin-top: 15px;
-    padding: 8px 20px;
+.tuner-controls button {
     background: #333;
-    color: #fff;
+    color: white;
     border: 1px solid #555;
-    border-radius: 4px;
-    cursor: pointer;
-}
-#btn-start-mic:hover {
-    background: #444;
-}
-
-#btn-stop-mic {
-    margin-top: 15px;
     padding: 8px 20px;
-    background: #8b0000; /* Dark Red */
-    color: #fff;
-    border: 1px solid #ff4444;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 10px;
+}
+.tuner-controls button:hover {
+    background: #444;
+    border-color: #777;
+}
+
+/* --- NOTE BUTTONS --- */
+.note-buttons-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 30px;
+    justify-content: center;
+}
+
+.note-btn {
+    width: 60px;
+    height: 60px;
+    background: var(--secondary-bg);
+    border: 1px solid #333;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.note-btn:hover {
+    border-color: var(--primary-cyan);
+    transform: translateY(-2px);
+}
+
+.note-btn:active {
+    transform: translateY(0);
+    background: #2a2a2a;
+}
+
+/* ROOT NOTE STYLING (The new Gold Color) */
+.note-btn.root {
+    border-color: var(--root-color);
+    color: var(--root-color);
+    font-weight: bold;
+    background: rgba(255, 179, 0, 0.05); /* Very subtle gold tint */
+}
+
+.note-name {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.note-interval {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+
+/* --- CHORD CARDS --- */
+.chords-display {
+    display: flex;
+    flex-wrap: wrap; /* Allows wrapping on mobile, but fits on desktop now */
+    gap: 10px;       /* Reduced gap from 15px */
+    justify-content: center;
+    margin-bottom: 30px;
+}
+
+.chord-card {
+    background: var(--secondary-bg);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px;   /* Reduced padding from 15px */
+    text-align: center;
+    width: 110px;    /* Reduced width from 140px to fit 7 in a row */
+    min-width: 110px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.chord-card:hover {
+    border-color: var(--primary-cyan);
+    transform: translateY(-2px);
+}
+
+/* NEW: Highlight for the chord currently playing in Sequencer */
+.chord-card.active-playing {
+    border-color: #00ff00 !important; /* Bright Green */
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
+    transform: scale(1.05);
+    background: #1a1a1a;
+}
+
+.chord-title {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--primary-cyan);
+    margin-bottom: 5px;
+}
+
+.chord-roman {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    font-weight: bold;
+    margin-bottom: 2px;
+    letter-spacing: 1px;
+}
+
+/* --- KEYBOARD (MIDI) --- */
+.piano-key {
+    cursor: pointer;
+    transition: fill 0.1s;
+}
+.piano-key:hover {
+    opacity: 0.8;
+}
+
+/* --- SEQUENCER --- */
+.sequencer-controls {
+    background: #181818;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #333;
+}
+
+.seq-row {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.play-btn {
+    background: var(--primary-cyan);
+    color: #000;
+    border: none;
+    padding: 10px 20px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 4px;
+    min-width: 120px;
+}
+.play-btn.playing {
+    background: var(--accent-pink);
+    color: white;
+}
+
+.bpm-control {
+    display: flex;
+    flex-direction: column;
+}
+
+#bpm-slider {
+    width: 150px;
+    accent-color: var(--primary-cyan);
+}
+
+.step-tracker {
+    display: flex;
+    gap: 5px;
+    margin-top: 10px;
+    justify-content: center;
+}
+
+.step-dot {
+    width: 12px;
+    height: 12px;
+    background: #333;
+    border-radius: 50%;
+    transition: background 0.05s;
+}
+
+.sequencer-controls select {
+    background: #222;
+    color: white;
+    border: 1px solid #444;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+/* --- RESPONSIVE --- */
+@media (max-width: 768px) {
+    .control-panel {
+        flex-direction: column;
+    }
+    .display-options {
+        border-left: none;
+        border-top: 1px solid #333;
+        padding-left: 0;
+        padding-top: 20px;
+    }
+}
+
+/* --- MODAL (Custom Chord Creator) --- */
+.modal-overlay {
+    display: none; /* Hidden by default */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    background: var(--secondary-bg);
+    padding: 25px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    text-align: center;
+}
+
+.modal-title {
+    color: var(--primary-cyan);
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.chord-selectors {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.chord-select-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.chord-select-group select {
+    width: 100%;
+    padding: 8px;
+    text-align: center;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.btn-cancel {
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 10px 20px;
     border-radius: 4px;
     cursor: pointer;
 }
 
-#btn-stop-mic:hover {
-    background: #cc0000;
+.btn-save {
+    background: var(--primary-cyan);
+    color: #000;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.btn-new {
+    background: #333;
+    color: var(--primary-cyan);
+    border: 1px solid var(--primary-cyan);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    margin-left: 10px;
+    text-transform: uppercase;
+}
+.btn-new:hover {
+    background: var(--primary-cyan);
+    color: black;
+}
+
+.btn-delete-custom {
+    background: #ff0055;
+    color: white;
+    border: none;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    margin-left: 5px;
 }
