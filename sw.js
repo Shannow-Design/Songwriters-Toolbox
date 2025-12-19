@@ -1,4 +1,4 @@
-const CACHE_NAME = 'musician-toolbox-v1';
+const CACHE_NAME = 'songwriters-toolbox-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
