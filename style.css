@@ -324,3 +324,96 @@ select:focus {
     font-size: 1.1rem;
     margin-bottom: 5px;
 }
+
+/* Tuner Styles */
+.tuner-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #111;
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid #333;
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
+}
+
+.tuner-meter {
+    width: 200px;
+    height: 100px; /* Half circle height */
+    background: linear-gradient(to top, #222 0%, #111 100%);
+    border-top-left-radius: 110px;
+    border-top-right-radius: 110px;
+    border: 2px solid #333;
+    border-bottom: none;
+    position: relative;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.tuner-center-marker {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    height: 15px;
+    background: #00ff00; /* Green center target */
+    transform: translateX(-50%);
+    z-index: 1;
+}
+
+.tuner-needle {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 4px;
+    height: 90px;
+    background: var(--primary-cyan);
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(0deg);
+    transition: transform 0.1s linear; /* Smooth movement */
+    z-index: 2;
+    border-radius: 2px;
+}
+
+.tuner-note {
+    font-size: 3rem;
+    font-weight: bold;
+    color: #444; /* Dim when inactive */
+    margin: 5px 0;
+    text-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+.tuner-freq {
+    font-family: monospace;
+    color: #888;
+    font-size: 0.9rem;
+}
+
+#btn-start-mic {
+    margin-top: 15px;
+    padding: 8px 20px;
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+}
+#btn-start-mic:hover {
+    background: #444;
+}
+
+#btn-stop-mic {
+    margin-top: 15px;
+    padding: 8px 20px;
+    background: #8b0000; /* Dark Red */
+    color: #fff;
+    border: 1px solid #ff4444;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#btn-stop-mic:hover {
+    background: #cc0000;
+}

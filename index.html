@@ -5,19 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Songwriters Toolbox</title>
     <link rel="stylesheet" href="style.css">
+    
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#121212">
     <link rel="apple-touch-icon" href="icon.png">
 </head>
-<script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js')
-                .then(reg => console.log('Service Worker registered!', reg))
-                .catch(err => console.log('Service Worker failed:', err));
-        });
-    }
-</script>
 <body>
 
     <div class="toolbox-wrapper">
@@ -69,7 +61,13 @@
                 <label style="margin-bottom: 10px; display: block; color: var(--text-dim);">Display Options</label>
                 
                 <div class="checkbox-group">
+                    <input type="checkbox" id="cb-tuner" checked> <label for="cb-tuner">Chromatic Tuner</label>
+                </div>
+                <div class="checkbox-group">
                     <input type="checkbox" id="cb-buttons" checked> <label for="cb-buttons">Note Buttons</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="cb-keyboard" checked> <label for="cb-keyboard">Keyboard (MIDI)</label>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" id="cb-chords" checked> <label for="cb-chords">Chord Charts</label>
@@ -82,18 +80,46 @@
                 </div>
 
                 <div class="play-section">
-                    <div class="midi-status">
-                        MIDI Status <div class="status-light"></div>
+                    <div style="font-size: 0.8rem; color:#666; margin-bottom: 5px; text-align: center;">
+                        MIDI <span id="midi-status-light" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#444; margin-left:5px;"></span>
                     </div>
                     <button id="play-btn">Play Scale</button>
                 </div>
             </div>
         </section>
 
+        <div id="wrapper-tuner">
+            <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Chromatic Tuner</h3>
+            <section id="tuner-container" style="margin-bottom: 30px;">
+                </section>
+        </div>
+
         <div id="wrapper-buttons">
             <section id="note-buttons-display" class="note-buttons-display">
                 </section>
         </div>
+
+        <div id="wrapper-keyboard">
+    <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Keyboard (C3-C5)</h3>
+    
+    <div id="keyboard-info" style="
+        background: #111; 
+        color: #00e5ff; 
+        font-family: monospace; 
+        font-size: 1.2rem; 
+        text-align: center; 
+        padding: 10px; 
+        border-radius: 4px; 
+        border: 1px solid #333; 
+        margin-bottom: 10px; 
+        min-height: 24px;
+        letter-spacing: 1px;">
+        Ready
+    </div>
+
+    <section id="keyboard-container" style="overflow-x: auto; padding-bottom: 10px; text-align: center; margin-bottom: 30px;">
+        </section>
+</div>
 
         <div id="wrapper-chords">
             <h3 style="color:#666; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;">Chords in Key</h3>
@@ -116,5 +142,15 @@
     </div>
 
     <script type="module" src="modules/app.js"></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker registered!', reg))
+                    .catch(err => console.log('Service Worker failed:', err));
+            });
+        }
+    </script>
 </body>
 </html>

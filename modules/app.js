@@ -2,9 +2,12 @@
 import { getNotes, SCALES, TUNINGS, generateScale, getNoteIndex, getDiatonicChords } from './theory.js';
 import { Fretboard } from './fretboard.js';
 import { ChordRenderer } from './chords.js';
+import { Tuner } from './tuner.js';
+import { Keyboard } from './keyboard.js';
 import { playScaleSequence, playSingleNote } from './audio.js';
 
 // --- DOM Elements ---
+
 // Dropdowns
 const keySelect = document.getElementById('key-select');
 const scaleSelect = document.getElementById('scale-select');
@@ -21,23 +24,24 @@ const cbButtons = document.getElementById('cb-buttons');
 const cbChords = document.getElementById('cb-chords');
 const cbGuitar = document.getElementById('cb-guitar');
 const cbBass = document.getElementById('cb-bass');
+const cbTuner = document.getElementById('cb-tuner');
+const cbKeyboard = document.getElementById('cb-keyboard');
 
 // Wrappers (Areas to hide/show)
 const wrapperButtons = document.getElementById('wrapper-buttons');
 const wrapperChords = document.getElementById('wrapper-chords');
 const wrapperGuitar = document.getElementById('wrapper-guitar');
 const wrapperBass = document.getElementById('wrapper-bass');
+const wrapperTuner = document.getElementById('wrapper-tuner');
+const wrapperKeyboard = document.getElementById('wrapper-keyboard');
 
 
-// --- Initialize Instruments ---
-// Guitar: Standard Tuning, Base Octave 2
+// --- Initialize Modules ---
 const guitar = new Fretboard('fretboard-container', TUNINGS.standard.notes, 2);
-
-// Bass: Standard Tuning, Base Octave 1 (Deeper sound)
 const bass = new Fretboard('bass-fretboard-container', TUNINGS.bass_standard.notes, 1);
-
-// Chords: Renderer for the SVG charts
 const chordRenderer = new ChordRenderer('chords-container');
+const tuner = new Tuner('tuner-container');
+const keyboard = new Keyboard('keyboard-container');
 
 
 // --- Core Logic ---
@@ -64,13 +68,12 @@ function init() {
         scaleSelect.appendChild(option);
     }
 
-    // Tunings (Split between Guitar and Bass dropdowns)
+    // Tunings (Guitar & Bass)
     for (const [key, value] of Object.entries(TUNINGS)) {
         const option = document.createElement('option');
         option.value = key;
         option.textContent = value.name;
         
-        // Simple logic: 6 strings = Guitar, 4 strings = Bass
         if (value.notes.length === 6) {
             tuningSelect.appendChild(option);
         } else if (value.notes.length === 4) {
@@ -79,8 +82,14 @@ function init() {
     }
 
     // 2. Logic Event Listeners
-    keySelect.addEventListener('change', updateDisplay);
-    scaleSelect.addEventListener('change', updateDisplay);
+    keySelect.addEventListener('change', () => {
+        keyboard.clearHighlights(); // Clear keyboard on key change
+        updateDisplay();
+    });
+    scaleSelect.addEventListener('change', () => {
+        keyboard.clearHighlights(); // Clear keyboard on scale change
+        updateDisplay();
+    });
     
     // Guitar Specific
     tuningSelect.addEventListener('change', () => {
@@ -103,6 +112,7 @@ function init() {
         playBtn.addEventListener('click', () => {
             const notes = getActiveNotes();
             playScaleSequence(notes);
+            keyboard.highlightNotes(notes, "Scale Preview"); // Label the scale
         });
     }
 
@@ -111,29 +121,50 @@ function init() {
     cbChords.addEventListener('change', () => { wrapperChords.style.display = cbChords.checked ? 'block' : 'none'; });
     cbGuitar.addEventListener('change', () => { wrapperGuitar.style.display = cbGuitar.checked ? 'block' : 'none'; });
     cbBass.addEventListener('change', () => { wrapperBass.style.display = cbBass.checked ? 'block' : 'none'; });
+    cbKeyboard.addEventListener('change', () => { wrapperKeyboard.style.display = cbKeyboard.checked ? 'block' : 'none'; });
+    
+    // Tuner Toggle Logic (Stop microphone if hidden)
+    cbTuner.addEventListener('change', () => { 
+        if (cbTuner.checked) {
+            wrapperTuner.style.display = 'block';
+        } else {
+            wrapperTuner.style.display = 'none';
+            tuner.stop(); 
+        }
+    });
 
     // 4. Initial Render
     updateDisplay();
 }
 
-// In modules/app.js
-
 function updateDisplay() {
     const activeNotes = getActiveNotes();
     
+    // Render Fretboards
     guitar.render(activeNotes);
     bass.render(activeNotes);
+    
+    // Render Keyboard (Note: This keeps the visual scale logic if needed, but we mostly rely on highlights now)
+    // We pass activeNotes so the keyboard CAN show safe keys if we want, 
+    // but the clearHighlights call above keeps it clean on change.
+    keyboard.render(activeNotes); 
+
+    // Render Note Buttons
     renderNoteButtons(activeNotes);
 
-    // --- UPDATED CHORD RENDER LOGIC ---
+    // Render Chords
     const chordsList = getDiatonicChords(keySelect.value, scaleSelect.value);
     const capoValue = capoSelect.value; 
-    
-    // NEW: Get the actual notes of the current guitar tuning
-    // We look up the tuning object from the dictionary using the select value
     const currentTuningNotes = TUNINGS[tuningSelect.value].notes;
-
-    chordRenderer.render(chordsList, capoValue, currentTuningNotes);
+    
+    // --- CONNECT CHORDS TO KEYBOARD ---
+    chordRenderer.render(chordsList, capoValue, currentTuningNotes, (notes) => {
+        // Find the chord object that matches these notes to get its name
+        const clickedChord = chordsList.find(c => JSON.stringify(c.notes) === JSON.stringify(notes));
+        const chordName = clickedChord ? clickedChord.name : notes.join(' ');
+        
+        keyboard.highlightNotes(notes, chordName); // Pass Name to Display
+    });
 }
 
 // Function to render the big square note buttons
@@ -143,14 +174,13 @@ function renderNoteButtons(scaleNotes) {
     noteButtonsDisplay.innerHTML = '';
     const intervals = ['R', '2', '3', '4', '5', '6', '7'];
     
-    // Start tracking octave at 3 for button audio
     let currentOctave = 3; 
     let lastNoteIndex = -1;
 
     scaleNotes.forEach((note, index) => {
         const noteIndex = getNoteIndex(note);
         
-        // If note index drops (e.g. B -> C), we wrapped to next octave
+        // Octave logic
         if (noteIndex < lastNoteIndex) currentOctave++;
         lastNoteIndex = noteIndex;
         
@@ -176,6 +206,20 @@ function renderNoteButtons(scaleNotes) {
         // Add Click Listener
         btn.addEventListener('click', () => {
             playSingleNote(note, buttonOctave); 
+            
+            // --- CONNECT BUTTON TO KEYBOARD ---
+            keyboard.highlightNotes([note], note); // Show just "C" or "F#" on screen
+
+            // Visual Animation (Pulse Cyan)
+            btn.style.transition = "transform 0.1s, border-color 0.1s";
+            btn.style.borderColor = "#00e5ff";
+            btn.style.transform = "scale(1.05)";
+            
+            // Reset after 200ms
+            setTimeout(() => {
+                btn.style.borderColor = ""; 
+                btn.style.transform = "";
+            }, 200);
         });
         
         noteButtonsDisplay.appendChild(btn);

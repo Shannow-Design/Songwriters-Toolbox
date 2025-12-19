@@ -1,14 +1,14 @@
 // modules/audio.js
 
 const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const ENHARMONIC_MAP = {
-    'Cb': 'B', 'Db': 'C#', 'Eb': 'D#', 'Fb': 'E', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#'
-};
+const ENHARMONIC_MAP = { 'Cb': 'B', 'Db': 'C#', 'Eb': 'D#', 'Fb': 'E', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#' };
 
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const ctx = new AudioContext();
 
-// --- FREQUENCY CALCULATION ---
+// Track active oscillators for MIDI (so we can stop them individually)
+const activeOscillators = {};
+
 function getFrequency(noteName, octave) {
     let cleanNote = noteName;
     if (!SHARPS.includes(cleanNote)) {
@@ -19,18 +19,21 @@ function getFrequency(noteName, octave) {
     return 440 * Math.pow(2, semitonesFromA4 / 12);
 }
 
-// --- BASIC TONE GENERATOR ---
+// --- 1. GUITAR/PLUCK SOUND (For Chords & Buttons) ---
 export function playTone(freq, startTime, duration) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    osc.type = 'triangle';
+    osc.type = 'triangle'; // Triangle is softer, closer to a string than Sawtooth
     osc.frequency.value = freq;
 
-    // Envelope
+    // Guitar Envelope: Fast Attack -> Exponential Decay (Ring out)
     gain.gain.setValueAtTime(0, startTime);
-    gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05); // Attack
-    gain.gain.linearRampToValueAtTime(0, startTime + duration); // Decay
+    gain.gain.linearRampToValueAtTime(0.4, startTime + 0.02); // Pluck (Attack)
+    
+    // Exponential decay sounds natural (like a string fading)
+    // We ramp down to near-zero (0.001) because exponential can't hit pure 0
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration); 
 
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -39,84 +42,73 @@ export function playTone(freq, startTime, duration) {
     osc.stop(startTime + duration);
 }
 
-// --- NEW: STRUM CHORD ---
-// Accepts an array of frequencies (e.g., [130.8, 164.8, 196.0])
+// --- 2. KEYBOARD/SYNTH SOUND (For MIDI Sustain) ---
+export function startNote(freq, midiNoteNumber) {
+    if (ctx.state === 'suspended') ctx.resume();
+    
+    if (activeOscillators[midiNoteNumber]) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = 'sawtooth'; // Sawtooth cuts through better for keys
+    osc.frequency.value = freq;
+    
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05); // Smooth attack
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+
+    activeOscillators[midiNoteNumber] = { osc, gain };
+}
+
+// --- STOP MIDI NOTE ---
+export function stopNote(midiNoteNumber) {
+    const active = activeOscillators[midiNoteNumber];
+    if (active) {
+        const now = ctx.currentTime;
+        // Smooth release to avoid clicking
+        active.gain.gain.cancelScheduledValues(now);
+        active.gain.gain.setValueAtTime(active.gain.gain.value, now);
+        active.gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        
+        active.osc.stop(now + 0.1);
+        delete activeOscillators[midiNoteNumber];
+    }
+}
+
+// --- HELPERS ---
+export function playSingleNote(noteName, octave) {
+    const freq = getFrequency(noteName, octave);
+    playTone(freq, ctx.currentTime, 1.5); // Longer duration for ring
+}
+
 export function playStrum(frequencies) {
     if (ctx.state === 'suspended') ctx.resume();
     const now = ctx.currentTime;
-    const strumSpeed = 0.03; // Delay between strings (ms) for realism
-
     frequencies.forEach((freq, index) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        osc.type = 'triangle';
-        osc.frequency.value = freq;
-
-        const startTime = now + (index * strumSpeed);
-        const duration = 2.0; // Chords ring out longer
-
-        // Strum Envelope (Lower volume to prevent distortion)
-        gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.15, startTime + 0.05); 
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        osc.start(startTime);
-        osc.stop(startTime + duration);
+        // Stagger notes slightly (strumming effect)
+        // Duration 2.5s gives it a nice long ring
+        playTone(freq, now + (index * 0.05), 2.5);
     });
-}
-
-// --- EXISTING SINGLE NOTE & SCALE FUNCTIONS ---
-export function playSingleNote(noteName, octave) {
-    if (ctx.state === 'suspended') ctx.resume();
-    const freq = getFrequency(noteName, octave);
-    playTone(freq, ctx.currentTime, 0.5);
 }
 
 export function playScaleSequence(notes) {
     if (ctx.state === 'suspended') ctx.resume();
-    
     const now = ctx.currentTime;
     let currentOctave = 3;
     let lastNoteIndex = -1;
-    const duration = 0.5;
-    const interval = 0.4;
     
-    const noteButtons = document.querySelectorAll('.note-btn');
-
     notes.forEach((note, index) => {
         let cleanNote = note;
         if (!SHARPS.includes(cleanNote)) cleanNote = ENHARMONIC_MAP[cleanNote] || cleanNote;
         const noteIndex = SHARPS.indexOf(cleanNote);
-
         if (noteIndex < lastNoteIndex) currentOctave++;
         lastNoteIndex = noteIndex;
-
+        
         const freq = getFrequency(note, currentOctave);
-        const startTime = now + (index * interval);
-
-        playTone(freq, startTime, duration);
-
-        const targetBtn = Array.from(noteButtons).find(btn => btn.dataset.note === note);
-        if (targetBtn) {
-            setTimeout(() => {
-                targetBtn.classList.add('playing');
-            }, (index * interval) * 1000);
-
-            setTimeout(() => {
-                targetBtn.classList.remove('playing');
-            }, ((index * interval) + duration) * 1000);
-        }
+        playTone(freq, now + (index * 0.4), 1.0);
     });
-
-    let rootClean = notes[0];
-    if (!SHARPS.includes(rootClean)) rootClean = ENHARMONIC_MAP[rootClean] || rootClean;
-    const rootIndex = SHARPS.indexOf(rootClean);
-    if (rootIndex < lastNoteIndex) currentOctave++;
-    
-    const rootFreq = getFrequency(notes[0], currentOctave);
-    playTone(rootFreq, now + (notes.length * interval), 0.8);
 }

@@ -1,6 +1,6 @@
 {
   "name": "Songwriters Toolbox",
-  "short_name": "MusicTools",
+  "short_name": "Song Tools",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#121212",

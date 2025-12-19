@@ -1,4 +1,4 @@
-const CACHE_NAME = 'songwriters-toolbox-v2';
+const CACHE_NAME = 'songwriters-toolbox-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -10,6 +10,8 @@ const ASSETS_TO_CACHE = [
   './modules/chords.js',
   './modules/fretboard.js',
   './modules/theory.js'
+  './modules/tuner.js'
+  './modules/keyboard.js',
 ];
 
 // Install Event: Cache files
