@@ -1,5 +1,5 @@
 // modules/looper.js
-import { Microphone, recordSample, autoTrimBuffer, applyFades, shiftBuffer, playSample, ctx, decodeAudioFile, bufferToWav } from './audio.js';
+import { Microphone, recordSample, autoTrimBuffer, applyFades, shiftBuffer, playSample, ctx, decodeAudioFile, bufferToWav, getTrackInput } from './audio.js';
 import { SampleStorage } from './storage.js';
 
 export class Looper {
@@ -14,9 +14,16 @@ export class Looper {
             volume: 1.0,
             recorder: null,
             startTime: 0,
-            activeSource: null 
+            activeSource: null,
+            gainNode: ctx.createGain() // Create gain node for each bank
         }));
         
+        // Connect each bank's gain to the main looper mixer track
+        this.banks.forEach(b => {
+            b.gainNode.gain.value = 1.0;
+            b.gainNode.connect(getTrackInput('looper'));
+        });
+
         this.bpm = 100; 
         this.latencyMs = 50; 
         
@@ -42,7 +49,6 @@ export class Looper {
         }
     }
 
-    // --- FIX: USE 'TIME' PARAMETER FOR SCHEDULING ---
     onStep(stepIndex, progIndex, progLength, cycleCount, time) {
         const isLoopStart = (stepIndex === 0 && progIndex === 0);
         const secondsPerBeat = 60.0 / this.bpm;
@@ -55,7 +61,6 @@ export class Looper {
                 this.updateBankUI(index);
             }
             else if (bank.state === 'recording' && isLoopStart && bank.recorder) {
-                // Check if we have recorded enough (using audio clock)
                 if (ctx.currentTime - bank.startTime > 1.0) {
                     await this.finishRecording(index);
                     bank.state = 'playing';
@@ -66,9 +71,9 @@ export class Looper {
                 if (bank.activeSource) {
                     try { bank.activeSource.stop(time); } catch(e){}
                 }
-                // Play at the EXACT SCHEDULED TIME, not 'now'
                 const playTime = time || ctx.currentTime;
-                const result = playSample(-1, playTime, null, 'looper', bank.buffer);
+                // PASS BANK GAIN NODE AS CUSTOM DESTINATION
+                const result = playSample(-1, playTime, null, 'looper', bank.buffer, bank.gainNode);
                 if (result) bank.activeSource = result.osc; 
             }
         });
@@ -191,6 +196,14 @@ export class Looper {
         if(bank.buffer) SampleStorage.saveSample(index, bank.buffer, newName, 'loop');
     }
 
+    // New: Update Volume
+    updateVolume(index, val) {
+        const bank = this.banks[index];
+        bank.volume = val;
+        // Smooth transition to avoid clicks
+        bank.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.05);
+    }
+
     render() {
         this.container.innerHTML = `
             <div class="input-controls-header">
@@ -233,6 +246,10 @@ export class Looper {
                             <button class="btn-loop-play ${!b.isMuted ? 'playing' : ''}" data-index="${i}">
                                 ▶ PLAY
                             </button>
+                        </div>
+
+                        <div style="margin: 5px 0;">
+                            <input type="range" class="loop-vol-slider" data-index="${i}" min="0" max="1" step="0.05" value="${b.volume}" title="Volume">
                         </div>
 
                         <div class="loop-file-controls">
@@ -282,7 +299,7 @@ export class Looper {
             }
             .active-slot .loop-status { color: #fff; }
 
-            .loop-controls { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+            .loop-controls { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 5px; }
             
             .btn-loop-arm, .btn-loop-play {
                 border: none; border-radius: 4px; padding: 6px 10px; font-size: 0.7rem; font-weight: bold;
@@ -297,6 +314,8 @@ export class Looper {
             
             /* PLAY STATE */
             .btn-loop-play.playing { background: var(--primary-cyan); color: #000; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); }
+
+            .loop-vol-slider { width: 80%; height: 3px; accent-color: var(--primary-cyan); cursor: pointer; }
 
             .loop-file-controls { display: flex; justify-content: center; gap: 15px; border-top: 1px solid #333; padding-top: 8px; }
             .hidden-loop-input { display: none; }
@@ -319,6 +338,13 @@ export class Looper {
 
         this.container.querySelectorAll('.loop-name-input').forEach(inp => {
             inp.addEventListener('change', (e) => this.updateName(parseInt(e.target.dataset.index), e.target.value));
+        });
+
+        // Volume Slider Binding
+        this.container.querySelectorAll('.loop-vol-slider').forEach(inp => {
+            inp.addEventListener('input', (e) => {
+                this.updateVolume(parseInt(e.target.dataset.index), parseFloat(e.target.value));
+            });
         });
 
         this.container.querySelectorAll('.btn-loop-clear').forEach(btn => {

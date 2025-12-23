@@ -141,6 +141,11 @@ export function setTrackFilter(t, v) {
 }
 export function setTrackReverb(t, v) { if(mixer[t]) mixer[t].reverbSend.gain.setTargetAtTime(v * 0.8, ctx.currentTime, 0.02); }
 
+// NEW: Helper to get a mixer track input (so Looper can connect its own gain nodes)
+export function getTrackInput(name) {
+    return mixer[name] ? mixer[name].input : masterCompressor;
+}
+
 // --- SAMPLER ENGINE ---
 export const SAMPLE_BANKS = new Array(8).fill(null);
 
@@ -227,7 +232,7 @@ export function autoTrimBuffer(buffer) {
     return trimmed;
 }
 
-// 3. FADE IN/OUT (DE-CLICKER)
+// 3. FADE IN/OUT
 export function applyFades(buffer, fadeTime = 0.01) { 
     if (!buffer) return null;
     
@@ -249,15 +254,14 @@ export function applyFades(buffer, fadeTime = 0.01) {
     return buffer;
 }
 
-// 4. NEW: SHIFT BUFFER (LATENCY COMPENSATION)
+// 4. SHIFT BUFFER
 export function shiftBuffer(buffer, shiftMs) {
     if (!buffer || shiftMs <= 0) return buffer;
     
-    // Calculate samples to skip
     const shiftSamples = Math.floor((shiftMs / 1000) * buffer.sampleRate);
     const newLen = buffer.length - shiftSamples;
     
-    if (newLen <= 0) return buffer; // Too short to shift
+    if (newLen <= 0) return buffer; 
 
     const newBuf = ctx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
 
@@ -265,15 +269,14 @@ export function shiftBuffer(buffer, shiftMs) {
         const oldData = buffer.getChannelData(c);
         const newData = newBuf.getChannelData(c);
         for(let i=0; i<newLen; i++) {
-            // Copy data shifted by N samples
             newData[i] = oldData[i + shiftSamples];
         }
     }
     return newBuf;
 }
 
-// 5. PLAYBACK
-export function playSample(slotIndex, time, freq = null, track = 'lead', bufferOverride = null) {
+// 5. PLAYBACK (UPDATED: Accepts customDest for per-loop volume control)
+export function playSample(slotIndex, time, freq = null, track = 'lead', bufferOverride = null, customDest = null) {
     let buffer;
     
     if (bufferOverride) {
@@ -295,7 +298,9 @@ export function playSample(slotIndex, time, freq = null, track = 'lead', bufferO
         source.playbackRate.value = rate;
     }
 
-    const dest = mixer[track] ? mixer[track].input : mixer.lead.input;
+    // Use custom destination (like a bank's volume node) if provided, otherwise default to mixer track
+    const dest = customDest || (mixer[track] ? mixer[track].input : mixer.lead.input);
+    
     source.connect(dest);
     source.start(time);
     
@@ -473,6 +478,7 @@ export function playStrum(freqs, time, instName, step = 0) {
     let d = isG ? 0.03 : 0.0;
     
     let notesToPlay = [...freqs];
+    
     if (isG && step % 2 !== 0) {
         notesToPlay.reverse(); 
     }
@@ -481,7 +487,6 @@ export function playStrum(freqs, time, instName, step = 0) {
 }
 
 export function playDrum(type, time) {
-    // ... (Keep drum play code - no changes) ...
     const t = time || ctx.currentTime;
     const dest = mixer.drums.input; 
     

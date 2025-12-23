@@ -2,8 +2,7 @@
 import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb } from './audio.js';
 import { getDiatonicChords } from './theory.js';
 
-// ... (KEEP ALL DATA CONSTANTS: DRUM_PATTERNS, BASS_PATTERNS, etc. unchanged) ...
-// For brevity, assuming the constants (DRUM_PATTERNS to ROMAN_NUMERALS) are here as before.
+// ... (KEEP ALL DATA CONSTANTS UNCHANGED: DRUM_PATTERNS ... ROMAN_NUMERALS) ...
 const DRUM_PATTERNS = {
     'Basic Rock': { kick: [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0] },
     'Four on Floor': { kick: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0] },
@@ -134,6 +133,12 @@ export class Sequencer {
             volumes: { chords:0.8, bass:0.8, lead:0.8, samples:0.8, drums:0.8 },
             filters: { chords:1.0, bass:1.0, lead:1.0, samples:1.0, drums:1.0 },
             reverbs: { chords:0.1, bass:0.1, lead:0.1, samples:0.1 },
+            octaves: { chords: 0, bass: 0, lead: 0, samples: 0 },
+            drops: { chords: false, bass: false, lead: false, samples: false },
+            
+            // NEW: Toggle for Up-Strums
+            upStrums: true,
+            
             progressionIndex: 0 
         };
 
@@ -141,13 +146,7 @@ export class Sequencer {
         this.injectModals(); 
     }
 
-    // ... (Keep renderUI, bindEvents, populateDropdowns, all helpers... NO CHANGES here) ...
-    // Note: I am not pasting the entire UI code again to save space, but please ensure 
-    // renderUI, bindEvents, populateDropdowns, injectModals, openPatternEditor etc. remain exactly as they were.
-    // The critical changes are in `scheduleNote` below.
-
     renderUI() {
-        // ... (Existing renderUI code) ...
         const createSliderGroup = (idPrefix, label, val) => `
             <div style="display:flex; flex-direction:column; margin-bottom:5px;">
                 <label style="font-size:0.65rem; color:#888;">${label}</label>
@@ -163,6 +162,24 @@ export class Sequencer {
                 </div>
             </div>
         `;
+        
+        const createOctaveControl = (track) => `
+            <div style="display:flex; flex-direction:column; margin-left:5px; width:50px;">
+                <label style="font-size:0.65rem; color:#888;">Octave</label>
+                <select id="sel-oct-${track}" style="width:100%; font-size:0.8rem; padding:0; margin-bottom:2px;">
+                    <option value="-2">-2</option>
+                    <option value="-1">-1</option>
+                    <option value="0" selected>0</option>
+                    <option value="1">+1</option>
+                    <option value="2">+2</option>
+                </select>
+                <div style="display:flex; align-items:center; cursor:pointer;" title="Drop chords higher than root">
+                    <input type="checkbox" id="cb-drop-${track}" style="width:10px; height:10px; accent-color:var(--primary-cyan);">
+                    <label for="cb-drop-${track}" style="font-size:0.6rem; color:#888; margin-left:3px; cursor:pointer;">Drop</label>
+                </div>
+            </div>
+        `;
+
         this.container.innerHTML = `
             <div class="sequencer-controls">
                 <div class="seq-row">
@@ -191,6 +208,7 @@ export class Sequencer {
                         <button id="btn-del-preset" class="btn-delete-custom" style="display:none;">X</button>
                     </div>
                 </div>
+
                 <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">CHORDS</strong>
@@ -199,8 +217,18 @@ export class Sequencer {
                         ${createSliderGroup('verb-chords', 'Space', this.settings.reverbs.chords)}
                     </div>
                     <div class="control-group"><label>Sound</label><select id="sel-instrument"></select></div>
-                    <div class="control-group">${createHeader('Rhythm', 'rhythm')}<select id="sel-rhythm"></select></div>
+                    <div class="control-group">
+                        ${createHeader('Rhythm', 'rhythm')}
+                        <select id="sel-rhythm"></select>
+                        
+                        <div style="display:flex; align-items:center; margin-top:5px; cursor:pointer;" title="Alternating Up/Down strums">
+                            <input type="checkbox" id="cb-alt-strum" style="width:12px; height:12px; accent-color:var(--primary-cyan);" checked>
+                            <label for="cb-alt-strum" style="font-size:0.7rem; color:#888; margin-left:5px; cursor:pointer;">Alt Strum</label>
+                        </div>
+                    </div>
+                    ${createOctaveControl('chords')}
                 </div>
+
                 <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">BASS</strong>
@@ -210,7 +238,9 @@ export class Sequencer {
                     </div>
                     <div class="control-group"><label>Sound</label><select id="sel-bass-instrument"></select></div>
                     <div class="control-group">${createHeader('Pattern', 'bass')}<select id="sel-bass-pattern"></select></div>
+                    ${createOctaveControl('bass')}
                 </div>
+
                 <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">LEAD</strong>
@@ -220,7 +250,9 @@ export class Sequencer {
                     </div>
                     <div class="control-group"><label>Sound</label><select id="sel-lead-instrument"></select></div>
                     <div class="control-group">${createHeader('Pattern', 'lead')}<select id="sel-lead-pattern"></select></div>
+                    ${createOctaveControl('lead')}
                 </div>
+
                 <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">SAMPLES</strong>
@@ -230,7 +262,9 @@ export class Sequencer {
                     </div>
                     <div class="control-group"><label>Sampler</label><select id="sel-samples-instrument"></select></div>
                     <div class="control-group">${createHeader('Pattern', 'samples')}<select id="sel-samples-pattern"></select></div>
+                    ${createOctaveControl('samples')}
                 </div>
+
                 <div class="seq-row">
                     <div class="control-group" style="flex:2;">
                         <label style="display:flex; justify-content:space-between;">
@@ -250,23 +284,25 @@ export class Sequencer {
                         <select id="sel-drums"></select>
                     </div>
                 </div>
+
                 <div class="step-tracker">
                     ${Array(16).fill(0).map((_, i) => `<div class="step-dot" id="step-${i}"></div>`).join('')}
                 </div>
             </div>
         `;
+
         this.populateDropdowns();
         this.refreshPresetList();
         this.bindEvents();
     }
 
     bindEvents() {
-        // ... (Standard event binding code) ...
         this.container.querySelector('#btn-seq-play').addEventListener('click', () => this.togglePlay());
         this.container.querySelector('#bpm-slider').addEventListener('input', (e) => {
             this.bpm = parseInt(e.target.value);
             this.container.querySelector('#bpm-val').textContent = this.bpm;
         });
+
         this.container.querySelectorAll('.btn-new').forEach(btn => {
             if(btn.id === 'btn-save-preset') return;
             btn.addEventListener('click', (e) => {
@@ -275,10 +311,12 @@ export class Sequencer {
                 else this.openPatternEditor(type);
             });
         });
+
         ['rhythm', 'bass', 'lead', 'samples', 'drums'].forEach(type => {
             const btn = this.container.querySelector(`#btn-del-${type}`);
             if (btn) btn.addEventListener('click', () => this.deleteCustomPattern(type));
         });
+
         const bindSelect = (id, stateKey, typeKey) => {
             this.container.querySelector(id).addEventListener('change', (e) => {
                 this.state[stateKey] = e.target.value;
@@ -292,6 +330,7 @@ export class Sequencer {
         bindSelect('#sel-samples-pattern', 'samplesName', 'samples'); 
         bindSelect('#sel-drums', 'drumName', 'drums');
         bindSelect('#sel-progression', 'progressionName', 'progression');
+
         const bindMixer = (id, type, track) => {
             this.container.querySelector(id).addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
@@ -306,6 +345,29 @@ export class Sequencer {
             bindMixer(`#filt-${t}`, 'filters', t);
             if(t!=='drums') bindMixer(`#verb-${t}`, 'reverbs', t);
         });
+
+        // OCTAVE + DROP BINDINGS
+        ['chords','bass','lead','samples'].forEach(track => {
+            const elOct = this.container.querySelector(`#sel-oct-${track}`);
+            const elDrop = this.container.querySelector(`#cb-drop-${track}`);
+            
+            if(elOct) {
+                elOct.value = this.settings.octaves[track];
+                elOct.addEventListener('change', (e) => this.settings.octaves[track] = parseInt(e.target.value));
+            }
+            if(elDrop) {
+                elDrop.checked = this.settings.drops[track];
+                elDrop.addEventListener('change', (e) => this.settings.drops[track] = e.target.checked);
+            }
+        });
+
+        // NEW: Alt Strum Binding
+        const cbAltStrum = this.container.querySelector('#cb-alt-strum');
+        if(cbAltStrum) {
+            cbAltStrum.checked = this.settings.upStrums;
+            cbAltStrum.addEventListener('change', (e) => this.settings.upStrums = e.target.checked);
+        }
+
         const bindSound = (id, settingKey) => {
             this.container.querySelector(id).addEventListener('change', (e) => this.settings[settingKey] = e.target.value);
         };
@@ -313,6 +375,7 @@ export class Sequencer {
         bindSound('#sel-bass-instrument', 'bassInstrument');
         bindSound('#sel-lead-instrument', 'leadInstrument');
         bindSound('#sel-samples-instrument', 'samplesInstrument');
+
         this.container.querySelector('#btn-save-preset').addEventListener('click', () => this.savePreset());
         const presetSel = this.container.querySelector('#sel-presets');
         const presetDel = this.container.querySelector('#btn-del-preset');
@@ -321,6 +384,7 @@ export class Sequencer {
             else { presetDel.style.display = 'none'; }
         });
         presetDel.addEventListener('click', () => this.deletePreset());
+
         this.container.querySelector('#cb-metronome').addEventListener('change', (e) => this.settings.metronome = e.target.checked);
         const cbShuffle = this.container.querySelector('#cb-shuffle');
         const lblShuffle = this.container.querySelector('#lbl-shuffle');
@@ -331,11 +395,8 @@ export class Sequencer {
         this.container.querySelector('#sel-metronome-sub').addEventListener('change', (e) => this.settings.metronomeSubdivision = parseInt(e.target.value));
     }
 
-    // ... (Keep populateDropdowns, updateDeleteButtonVisibility, updatePatternDeleteVisibility, deleteCustomPattern, injectModals, openPatternEditor, closeModal, togglePatternPreview, previewScheduler, playPreviewStep, renderDrumGrid, renderToggleGrid, renderCycleGrid, saveCustomPattern, openProgressionModal, addProgStep, saveCustomProgression, deleteCurrentProgression, savePreset, loadPreset, refreshPresetList, deletePreset unchanged) ...
-    // Note: I'm skipping these methods in text to focus on the FIX below, but ensure they are in your file.
-    
+    // ... (Standard methods unchanged: populateDropdowns ... savePreset) ...
     populateDropdowns() {
-        // ... same as before ...
         const populate = (id, lib) => { const sel = this.container.querySelector(id); sel.innerHTML = ''; Object.keys(lib).forEach(k => sel.add(new Option(k, k))); };
         const insts = Object.keys(INSTRUMENTS);
         ['#sel-instrument', '#sel-bass-instrument', '#sel-lead-instrument', '#sel-samples-instrument'].forEach(id => { const sel = this.container.querySelector(id); insts.forEach(k => sel.add(new Option(k, k))); });
@@ -363,7 +424,7 @@ export class Sequencer {
         this.updatePatternDeleteVisibility('drums', this.state.drumName);
     }
     updateDeleteButtonVisibility(name) { const btn = this.container.querySelector('#btn-delete-prog'); btn.style.display = this.customData.progressions[name] ? 'inline-block' : 'none'; }
-    updatePatternDeleteVisibility(type, name) { const btn = this.container.querySelector(`#btn-del-${type}`); if (btn) btn.style.display = (this.customData[type] && this.customData[type][name]) ? 'inline-block' : 'none'; }
+    updatePatternDeleteVisibility(type, name) { const btn = this.container.querySelector(`#btn-del-${type}`); if(btn) btn.style.display = (this.customData[type] && this.customData[type][name]) ? 'inline-block' : 'none'; }
     deleteCustomPattern(type) {
         let name;
         if(type==='rhythm') name=this.state.rhythmName; else if(type==='bass') name=this.state.bassName; else if(type==='lead') name=this.state.leadName; else if(type==='samples') name=this.state.samplesName; else if(type==='drums') name=this.state.drumName;
@@ -375,7 +436,6 @@ export class Sequencer {
         }
     }
     injectModals() {
-        // ... same modal HTML ...
         const modalHtml = `<div id="prog-modal" class="modal-overlay"><div class="modal-content" style="max-width:500px;"><h3 class="modal-title">Edit Progression</h3><input type="text" id="new-prog-name" placeholder="Name" style="width:100%; margin-bottom:10px; padding:5px;"><div id="chord-selectors-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:15px;"></div><button id="btn-add-step" class="btn-new" style="margin-bottom:10px;">+ Step</button><div class="modal-actions"><button onclick="document.getElementById('prog-modal').style.display='none'" class="btn-cancel">Cancel</button><button id="btn-save-prog" class="btn-save">Save</button></div></div></div><div id="pattern-modal" class="modal-overlay"><div class="modal-content" style="max-width:600px;"><h3 class="modal-title" id="pat-modal-title">Edit Pattern</h3><input type="text" id="new-pat-name" placeholder="Pattern Name" style="width:100%; margin-bottom:15px; padding:8px; background:#222; border:1px solid #555; color:white;"><div id="pattern-editor-grid" class="pattern-editor-container"></div><div class="modal-actions"><div style="display:flex; gap:10px;"><button id="btn-preview-pat" class="btn-new" style="background:#444; border:1px solid #666; font-size:0.8rem; padding:8px 12px;">▶ Preview</button><button onclick="document.getElementById('pattern-modal').style.display='none'" class="btn-cancel">Cancel</button></div><button id="btn-save-pat" class="btn-save">Save Pattern</button></div></div></div>`;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         document.getElementById('btn-add-step').addEventListener('click', () => this.addProgStep());
@@ -408,7 +468,7 @@ export class Sequencer {
         }
         this.timerID = window.setTimeout(() => this.previewScheduler(), this.lookahead);
     }
-    playPreviewStep(step, time) { /* ... same as before ... */ 
+    playPreviewStep(step, time) {
         const type = document.getElementById('pat-modal-title').dataset.type;
         const grid = document.getElementById('pattern-editor-grid');
         requestAnimationFrame(() => { grid.querySelectorAll('.step-cell').forEach(c => c.style.borderColor = "#444"); if(type === 'drums') grid.querySelectorAll(`.step-cell[data-step="${step}"]`).forEach(c => c.style.borderColor = "#fff"); else { const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); if(cell) cell.style.borderColor = "#fff"; } });
@@ -422,21 +482,44 @@ export class Sequencer {
             const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); const val = cell ? cell.textContent : '-';
             if(val !== '-' && val !== '') {
                 let noteName = 'C', oct = 0; if(val === '3') noteName = 'E'; else if(val === '5') noteName = 'G'; else if(val === '7') noteName = 'B'; else if(val === 'O') { noteName = 'C'; oct=1; }
-                const freq = (type==='bass') ? this.getBassFrequency(noteName, oct) : this.getMelodyFrequency(noteName, oct);
+                const freq = (type==='bass') ? this.getBassFrequency(noteName, oct, 0) : this.getMelodyFrequency(noteName, oct, 0);
                 startNote(freq, -1, (type==='bass'?this.settings.bassInstrument:this.settings.leadInstrument), time, 0.2, type);
             }
         }
     }
-    renderDrumGrid(container) { /* ... */ ['kick', 'snare', 'hihat'].forEach(part => { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${part.toUpperCase()}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.part = part; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-drum', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }); }
-    renderToggleGrid(container, label) { /* ... */ const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${label}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-note', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }
-    renderCycleGrid(container, options) { /* ... */ const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">Note</div>`; const cycle = [null, ...options]; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.textContent = '-'; cell.dataset.idx = 0; cell.dataset.step = i; cell.addEventListener('click', () => { let idx = parseInt(cell.dataset.idx); idx = (idx + 1) % cycle.length; cell.dataset.idx = idx; const val = cycle[idx]; cell.textContent = val || '-'; cell.classList.toggle('active-note', val !== null); }); row.appendChild(cell); } container.appendChild(row); }
-    saveCustomPattern() { /* ... same as before ... */ const modal = document.getElementById('pattern-modal'); const type = document.getElementById('pat-modal-title').dataset.type; const name = document.getElementById('new-pat-name').value.trim() || `My ${type}`; const grid = document.getElementById('pattern-editor-grid'); let data; if (type === 'drums') { data = { kick: [], snare: [], hihat: [] }; grid.querySelectorAll('.step-cell').forEach(cell => { data[cell.dataset.part][cell.dataset.step] = parseInt(cell.dataset.val); }); } else if (type === 'rhythm') { data = []; grid.querySelectorAll('.step-cell').forEach(cell => data.push(parseInt(cell.dataset.val))); } else { const options = type === 'bass' ? [null,'R','3','5','O'] : [null,'R','3','5','7','O']; data = []; grid.querySelectorAll('.step-cell').forEach(cell => { const idx = parseInt(cell.dataset.idx); data.push(options[idx]); }); } this.customData[type][name] = data; this.libraries[type][name] = data; let key = (type==='rhythm') ? 'custom_rhythms' : `custom_${type}`; localStorage.setItem(key, JSON.stringify(this.customData[type])); this.populateDropdowns(); if(type==='drums') { this.state.drumName = name; this.container.querySelector('#sel-drums').value = name; } else if(type==='rhythm') { this.state.rhythmName = name; this.container.querySelector('#sel-rhythm').value = name; } else if(type==='bass') { this.state.bassName = name; this.container.querySelector('#sel-bass-pattern').value = name; } else if(type==='lead') { this.state.leadName = name; this.container.querySelector('#sel-lead-pattern').value = name; } else if(type==='samples') { this.state.samplesName = name; this.container.querySelector('#sel-samples-pattern').value = name; } modal.style.display = 'none'; }
+    renderDrumGrid(container) { ['kick', 'snare', 'hihat'].forEach(part => { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${part.toUpperCase()}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.part = part; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-drum', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }); }
+    renderToggleGrid(container, label) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${label}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-note', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }
+    renderCycleGrid(container, options) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">Note</div>`; const cycle = [null, ...options]; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.textContent = '-'; cell.dataset.idx = 0; cell.dataset.step = i; cell.addEventListener('click', () => { let idx = parseInt(cell.dataset.idx); idx = (idx + 1) % cycle.length; cell.dataset.idx = idx; const val = cycle[idx]; cell.textContent = val || '-'; cell.classList.toggle('active-note', val !== null); }); row.appendChild(cell); } container.appendChild(row); }
+    saveCustomPattern() { const modal = document.getElementById('pattern-modal'); const type = document.getElementById('pat-modal-title').dataset.type; const name = document.getElementById('new-pat-name').value.trim() || `My ${type}`; const grid = document.getElementById('pattern-editor-grid'); let data; if (type === 'drums') { data = { kick: [], snare: [], hihat: [] }; grid.querySelectorAll('.step-cell').forEach(cell => { data[cell.dataset.part][cell.dataset.step] = parseInt(cell.dataset.val); }); } else if (type === 'rhythm') { data = []; grid.querySelectorAll('.step-cell').forEach(cell => data.push(parseInt(cell.dataset.val))); } else { const options = type === 'bass' ? [null,'R','3','5','O'] : [null,'R','3','5','7','O']; data = []; grid.querySelectorAll('.step-cell').forEach(cell => { const idx = parseInt(cell.dataset.idx); data.push(options[idx]); }); } this.customData[type][name] = data; this.libraries[type][name] = data; let key = (type==='rhythm') ? 'custom_rhythms' : `custom_${type}`; localStorage.setItem(key, JSON.stringify(this.customData[type])); this.populateDropdowns(); if(type==='drums') { this.state.drumName = name; this.container.querySelector('#sel-drums').value = name; } else if(type==='rhythm') { this.state.rhythmName = name; this.container.querySelector('#sel-rhythm').value = name; } else if(type==='bass') { this.state.bassName = name; this.container.querySelector('#sel-bass-pattern').value = name; } else if(type==='lead') { this.state.leadName = name; this.container.querySelector('#sel-lead-pattern').value = name; } else if(type==='samples') { this.state.samplesName = name; this.container.querySelector('#sel-samples-pattern').value = name; } modal.style.display = 'none'; }
     openProgressionModal() { document.getElementById('prog-modal').style.display = 'flex'; document.getElementById('new-prog-name').value = ''; document.getElementById('chord-selectors-container').innerHTML = ''; for(let i=0; i<4; i++) this.addProgStep(); }
     addProgStep() { const cont = document.getElementById('chord-selectors-container'); const sel = document.createElement('select'); sel.className = 'prog-step-select'; sel.style.width = '50px'; sel.style.margin='2px'; ROMAN_NUMERALS.forEach((r, i) => sel.add(new Option(r, i))); cont.appendChild(sel); }
     saveCustomProgression() { const name = document.getElementById('new-prog-name').value.trim() || "My Prog"; const sels = document.querySelectorAll('.prog-step-select'); const indices = Array.from(sels).map(s => parseInt(s.value)); this.customData.progressions[name] = indices; this.libraries.progression[name] = indices; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); this.container.querySelector('#sel-progression').value = name; this.state.progressionName = name; document.getElementById('prog-modal').style.display = 'none'; }
     deleteCurrentProgression() { if(confirm(`Delete ${this.state.progressionName}?`)) { delete this.customData.progressions[this.state.progressionName]; delete this.libraries.progression[this.state.progressionName]; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); } }
     savePreset() { const name = prompt("Preset Name:", "My Track"); if(!name) return; const ks = this.getScaleData(); const preset = { name, bpm: this.bpm, key: ks.key, scale: ks.scale, settings: this.settings, state: this.state }; this.savedPresets[name] = preset; localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); this.refreshPresetList(); this.container.querySelector('#sel-presets').value = name; this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; }
-    loadPreset(name) { /* ... standard load logic ... */ const p = this.savedPresets[name]; if(!p) return; this.bpm = p.bpm; this.settings = p.settings; this.state = p.state; this.container.querySelector('#bpm-slider').value = this.bpm; this.container.querySelector('#bpm-val').textContent = this.bpm; this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; const setVal = (id, val) => { const el = this.container.querySelector(id); if(el) el.value = val; }; setVal('#sel-instrument', this.settings.instrument); setVal('#sel-bass-instrument', this.settings.bassInstrument); setVal('#sel-lead-instrument', this.settings.leadInstrument); setVal('#sel-samples-instrument', this.settings.samplesInstrument); setVal('#sel-rhythm', this.state.rhythmName); setVal('#sel-bass-pattern', this.state.bassName); setVal('#sel-lead-pattern', this.state.leadName); setVal('#sel-samples-pattern', this.state.samplesName); setVal('#sel-drums', this.state.drumName); setVal('#sel-progression', this.state.progressionName); const applyMix = (t) => { setVal(`#vol-${t}`, this.settings.volumes[t]); setVal(`#filt-${t}`, this.settings.filters[t]); if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); setTrackVolume(t, this.settings.volumes[t]); setTrackFilter(t, this.settings.filters[t]); if(t!=='drums') setTrackReverb(t, this.settings.reverbs[t]); }; ['chords','bass','lead','samples','drums'].forEach(applyMix); this.populateDropdowns(); if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale}); }
+    
+    // UPDATED LOAD PRESET TO RESTORE ALT STRUM
+    loadPreset(name) { 
+        const p = this.savedPresets[name]; if(!p) return; this.bpm = p.bpm; this.settings = p.settings; this.state = p.state; 
+        this.container.querySelector('#bpm-slider').value = this.bpm; this.container.querySelector('#bpm-val').textContent = this.bpm; this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; 
+        const setVal = (id, val) => { const el = this.container.querySelector(id); if(el) el.value = val; }; 
+        setVal('#sel-instrument', this.settings.instrument); setVal('#sel-bass-instrument', this.settings.bassInstrument); setVal('#sel-lead-instrument', this.settings.leadInstrument); setVal('#sel-samples-instrument', this.settings.samplesInstrument); setVal('#sel-rhythm', this.state.rhythmName); setVal('#sel-bass-pattern', this.state.bassName); setVal('#sel-lead-pattern', this.state.leadName); setVal('#sel-samples-pattern', this.state.samplesName); setVal('#sel-drums', this.state.drumName); setVal('#sel-progression', this.state.progressionName); 
+        
+        // Restore Octave, Drop & Alt Strum UI
+        if(this.settings.octaves) {
+            ['chords','bass','lead','samples'].forEach(t => {
+                const elOct = this.container.querySelector(`#sel-oct-${t}`);
+                const elDrop = this.container.querySelector(`#cb-drop-${t}`);
+                if(elOct) elOct.value = this.settings.octaves[t] || 0;
+                if(elDrop) elDrop.checked = this.settings.drops[t] || false;
+            });
+        }
+        
+        // Restore Alt Strum checkbox
+        const elAlt = this.container.querySelector('#cb-alt-strum');
+        if(elAlt) elAlt.checked = (this.settings.upStrums !== false); // default true if undefined
+
+        const applyMix = (t) => { setVal(`#vol-${t}`, this.settings.volumes[t]); setVal(`#filt-${t}`, this.settings.filters[t]); if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); setTrackVolume(t, this.settings.volumes[t]); setTrackFilter(t, this.settings.filters[t]); if(t!=='drums') setTrackReverb(t, this.settings.reverbs[t]); }; ['chords','bass','lead','samples','drums'].forEach(applyMix); this.populateDropdowns(); if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale}); 
+    }
     refreshPresetList() { const sel = this.container.querySelector('#sel-presets'); sel.innerHTML = '<option value="">Load...</option>'; Object.keys(this.savedPresets).forEach(k => sel.add(new Option(k, k))); }
     deletePreset() { const name = this.container.querySelector('#sel-presets').value; if(name && confirm('Delete?')) { delete this.savedPresets[name]; localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); this.refreshPresetList(); this.container.querySelector('#btn-del-preset').style.display = 'none'; } }
 
@@ -504,7 +587,6 @@ export class Sequencer {
             }
         }
 
-        // --- FIX: VISUALS SEPARATED FROM AUDIO CALLBACK ---
         requestAnimationFrame(() => {
             this.updateVisualTracker(stepNumber);
             if (stepNumber === 0 && this.onChordChange && prog) {
@@ -512,12 +594,9 @@ export class Sequencer {
             }
         });
 
-        // --- FIX: AUDIO CALLBACK CALLED SYNCHRONOUSLY ---
         if (this.onStepCallback) {
-            // Pass the SCHEDULED TIME (time), not 'now'
             this.onStepCallback(stepNumber, this.settings.progressionIndex, prog.length, this.progressionCycles, time);
         }
-        // ------------------------------------------------
 
         if (this.settings.metronome && (stepNumber % this.settings.metronomeSubdivision === 0)) playDrum('metronome', time);
         
@@ -537,13 +616,30 @@ export class Sequencer {
         const chord = chords[chordIndex];
 
         if (chord) {
+            // APPLY OCTAVE + DROP
+            const chordOct = this.settings.octaves.chords || 0;
+            const bassOct = this.settings.octaves.bass || 0;
+            const leadOct = this.settings.octaves.lead || 0;
+            const sampOct = this.settings.octaves.samples || 0;
+
+            const chordDrop = this.settings.drops.chords || false;
+            const bassDrop = this.settings.drops.bass || false;
+            const leadDrop = this.settings.drops.lead || false;
+            const sampDrop = this.settings.drops.samples || false;
+
             const rhythmPat = this.libraries.rhythm[this.state.rhythmName];
             if (rhythmPat && rhythmPat[stepNumber]) {
                 const isBassStr = this.settings.instrument === 'Bass Guitar';
                 const octaveOffset = isBassStr ? -1 : 0; 
                 if (chord.notes) {
-                    const frequencies = chord.notes.map(note => this.getFrequencyForChord(note, key, chord.root, octaveOffset));
-                    playStrum(frequencies, time, this.settings.instrument, stepNumber);
+                    const frequencies = chord.notes.map(note => 
+                        this.getFrequencyForChord(note, key, chord.root, octaveOffset + chordOct, chordDrop)
+                    );
+                    
+                    // FIX: Check "Alt Strum" setting. 
+                    // If true, pass stepNumber (0,1,2...). If false, pass 0 (always down).
+                    const strumStep = this.settings.upStrums ? stepNumber : 0;
+                    playStrum(frequencies, time, this.settings.instrument, strumStep);
                 }
             }
 
@@ -555,7 +651,7 @@ export class Sequencer {
                 if (bassInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
                 if (bassInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
                 if (bassInstruction === 'O') octaveShift = 1;
-                const bassFreq = this.getBassFrequency(noteToPlay, octaveShift);
+                const bassFreq = this.getBassFrequency(noteToPlay, octaveShift, bassOct, key, chord.root, bassDrop);
                 startNote(bassFreq, -1, this.settings.bassInstrument, time, 0.4, 'bass');
             }
 
@@ -566,7 +662,7 @@ export class Sequencer {
                 if (melodyInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
                 if (melodyInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
                 if (melodyInstruction === 'O' || melodyInstruction === '7') noteToPlay = chord.notes[0]; 
-                const leadFreq = this.getMelodyFrequency(noteToPlay, melodyInstruction === 'O' ? 1 : 0);
+                const leadFreq = this.getMelodyFrequency(noteToPlay, melodyInstruction === 'O' ? 1 : 0, leadOct, key, chord.root, leadDrop);
                 startNote(leadFreq, -1, this.settings.leadInstrument, time, 0.2, 'lead');
             }
 
@@ -577,16 +673,59 @@ export class Sequencer {
                 if (samplesInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
                 if (samplesInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
                 if (samplesInstruction === 'O' || samplesInstruction === '7') noteToPlay = chord.notes[0]; 
-                const sampleFreq = this.getMelodyFrequency(noteToPlay, samplesInstruction === 'O' ? 1 : 0);
+                const sampleFreq = this.getMelodyFrequency(noteToPlay, samplesInstruction === 'O' ? 1 : 0, sampOct, key, chord.root, sampDrop);
                 startNote(sampleFreq, -1, this.settings.samplesInstrument, time, 0.2, 'samples');
             }
         }
     }
     
-    // ... (Keep getFrequencyForChord, getBassFrequency, getMelodyFrequency, updateVisualTracker, resetVisuals) ...
-    getFrequencyForChord(n, k, r, o=0) { const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; const ni=SHARPS.indexOf(n); const ki=SHARPS.indexOf(k); const ri=SHARPS.indexOf(r); let bo=3+o; if(ri<ki) bo++; let no=bo; if(ni<ri) no++; return 440*Math.pow(2,((ni-9)+(no-4)*12)/12); }
-    getBassFrequency(n, o=0) { const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; return 440*Math.pow(2,((SHARPS.indexOf(n)-9)+(2+o-4)*12)/12); }
-    getMelodyFrequency(n, o=0) { const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; return 440*Math.pow(2,((SHARPS.indexOf(n)-9)+(4+o-4)*12)/12); }
+    // UPDATED CALCULATORS with Drop Logic
+    // If drop=true AND note index > key index, shift down 1 octave
+    getFrequencyForChord(n, k, r, o=0, drop=false) { 
+        const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; 
+        const ni=SHARPS.indexOf(n); const ki=SHARPS.indexOf(k); const ri=SHARPS.indexOf(r); 
+        let bo=3+o; 
+        
+        // Original logic: bump if root < key (to stay above)
+        if(ri < ki) bo++; 
+        
+        // NEW Logic: If drop is requested and we are "above" based on simple index comparison, force down
+        // Simplest way: if this note's index > key index, subtract octave
+        if(drop && ni > ki) bo--;
+
+        let no=bo; if(ni<ri) no++; 
+        return 440*Math.pow(2,((ni-9)+(no-4)*12)/12); 
+    }
+    
+    // Bass Base Octave = 2
+    getBassFrequency(n, o=0, oTrack=0, k=null, r=null, drop=false) { 
+        const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; 
+        let base = 2 + o + oTrack;
+        const ni = SHARPS.indexOf(n);
+        
+        // If drop is enabled and key context is provided
+        if (drop && k) {
+            const ki = SHARPS.indexOf(k);
+            if (ni > ki) base--;
+        }
+        
+        return 440*Math.pow(2,((ni-9)+(base-4)*12)/12); 
+    }
+    
+    // Melody Base Octave = 4
+    getMelodyFrequency(n, o=0, oTrack=0, k=null, r=null, drop=false) { 
+        const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; 
+        let base = 4 + o + oTrack;
+        const ni = SHARPS.indexOf(n);
+        
+        if (drop && k) {
+            const ki = SHARPS.indexOf(k);
+            if (ni > ki) base--;
+        }
+
+        return 440*Math.pow(2,((ni-9)+(base-4)*12)/12); 
+    }
+
     updateVisualTracker(s) { this.container.querySelectorAll('.step-dot').forEach((d,i) => { d.style.background=(i===s)?'#00e5ff':'#333'; d.style.boxShadow=(i===s)?'0 0 10px #00e5ff':'none'; }); }
     resetVisuals() { this.container.querySelectorAll('.step-dot').forEach(d => {d.style.background='#333'; d.style.boxShadow='none';}); }
 }
