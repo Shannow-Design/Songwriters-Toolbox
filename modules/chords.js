@@ -92,7 +92,11 @@ export class ChordRenderer {
             
             card.addEventListener('click', () => {
                 const frequencies = this.getFrequencies(chord, keyRoot, tuning);
-                playStrum(frequencies); 
+                
+                // FIX: Now explicitly passing 'null' for time (play now) 
+                // and 'Acoustic Guitar' so audio.js doesn't crash.
+                playStrum(frequencies, null, 'Acoustic Guitar'); 
+                
                 if (onChordClick) onChordClick(chord.notes);
             });
             
@@ -100,7 +104,7 @@ export class ChordRenderer {
         });
     }
 
-    // NEW: Smart Roman Numeral Generator
+    // Smart Roman Numeral Generator
     getRomanNumeral(index, chordName) {
         let base = ROMAN_BASE[index];
         

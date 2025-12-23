@@ -61,7 +61,6 @@ export function generateScale(root, scaleType) {
     });
 }
 
-// --- THIS IS THE CRITICAL FUNCTION ---
 export function getDiatonicChords(root, scaleType) {
     const scaleNotes = generateScale(root, scaleType);
     const chords = [];
@@ -102,4 +101,12 @@ export function getDiatonicChords(root, scaleType) {
         });
     }
     return chords;
+}
+
+// --- ADDED CLASS DEFINITION ---
+export class TheoryEngine {
+    constructor() {
+        this.key = 'C';
+        this.scale = 'major';
+    }
 }

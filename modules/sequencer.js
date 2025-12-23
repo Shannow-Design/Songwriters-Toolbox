@@ -1,47 +1,19 @@
 // modules/sequencer.js
-import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS } from './audio.js';
+import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb } from './audio.js';
 import { getDiatonicChords } from './theory.js';
 
-// --- DATA: DRUM PATTERNS ---
+// ... (KEEP ALL DATA CONSTANTS: DRUM_PATTERNS, BASS_PATTERNS, etc. unchanged) ...
+// For brevity, assuming the constants (DRUM_PATTERNS to ROMAN_NUMERALS) are here as before.
 const DRUM_PATTERNS = {
-    'Basic Rock': {
-        kick:  [1, 0, 0, 0,  0, 0, 1, 0,  1, 0, 0, 0,  0, 0, 0, 0],
-        snare: [0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0],
-        hihat: [1, 0, 1, 0,  1, 0, 1, 0,  1, 0, 1, 0,  1, 0, 1, 0]
-    },
-    'Four on Floor (Disco)': {
-        kick:  [1, 0, 0, 0,  1, 0, 0, 0,  1, 0, 0, 0,  1, 0, 0, 0],
-        snare: [0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0],
-        hihat: [0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0]
-    },
-    'Hip Hop / Trap': {
-        kick:  [1, 0, 0, 0,  0, 0, 1, 0,  0, 0, 0, 0,  0, 1, 0, 0],
-        snare: [0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0],
-        hihat: [1, 0, 1, 0,  1, 1, 1, 0,  1, 0, 1, 0,  1, 0, 1, 1]
-    },
-    'Funk Break': {
-        kick:  [1, 0, 0, 1,  0, 0, 1, 0,  0, 0, 0, 1,  0, 1, 0, 0],
-        snare: [0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 1, 0,  1, 0, 0, 0],
-        hihat: [1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1]
-    },
-    'Reggae (One Drop)': {
-        kick:  [0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0],
-        snare: [0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0],
-        hihat: [0, 1, 1, 1,  0, 1, 1, 1,  0, 1, 1, 1,  0, 1, 1, 1]
-    },
-    'Driving Punk': {
-        kick:  [1, 0, 0, 1,  0, 1, 0, 0,  1, 0, 0, 1,  0, 1, 0, 0],
-        snare: [0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0],
-        hihat: [1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1,  1, 1, 1, 1]
-    },
-    'Empty': { 
-        kick:  [0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0],
-        snare: [0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0],
-        hihat: [0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0]
-    }
+    'Basic Rock': { kick: [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0] },
+    'Four on Floor': { kick: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0] },
+    'Hip Hop': { kick: [1,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat: [1,0,1,0, 1,1,1,0, 1,0,1,0, 1,0,1,1] },
+    'Funk Break': { kick: [1,0,0,1, 0,0,1,0, 0,0,0,1, 0,1,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0], hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1] },
+    'Reggae': { kick: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat: [0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1] },
+    'Punk': { kick: [1,0,0,1, 0,1,0,0, 1,0,0,1, 0,1,0,0], snare: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1] },
+    'Empty': { kick: Array(16).fill(0), snare: Array(16).fill(0), hihat: Array(16).fill(0) }
 };
 
-// --- DATA: BASS PATTERNS ---
 const BASS_PATTERNS = {
     'Root Notes':    ['R',null,null,null, 'R',null,null,null, 'R',null,null,null, 'R',null,null,null],
     'Root & Fifth':  ['R',null,null,null, '5',null,null,null, 'R',null,null,null, '5',null,null,null],
@@ -49,22 +21,30 @@ const BASS_PATTERNS = {
     'Disco Octaves': ['R',null,'O',null, 'R',null,'O',null, 'R',null,'O',null, 'R',null,'O',null],
     'Offbeat Pump':  [null,'R',null,'R', null,'R',null,'R', null,'R',null,'R', null,'R',null,'R'],
     'Running 8ths':  ['R',null,'R',null, 'R',null,'R',null, 'R',null,'R',null, 'R',null,'R',null],
-    'Empty':         [null,null,null,null, null,null,null,null, null,null,null,null, null,null,null,null]
+    'Empty':         Array(16).fill(null)
 };
 
-// --- DATA: MELODY / LEAD PATTERNS ---
-// R=Root, 3=Third, 5=Fifth, 7=Seventh, O=Octave
 const MELODY_PATTERNS = {
     'Arp Up (8ths)':     ['R',null,'3',null, '5',null,'O',null, 'R',null,'3',null, '5',null,'O',null],
     'Arp Down (8ths)':   ['O',null,'5',null, '3',null,'R',null, 'O',null,'5',null, '3',null,'R',null],
     'Fast Arp (16ths)':  ['R','3','5','O', '5','3','R','3', '5','O','R','3', '5','O','5','3'],
-    'Alberti (Low-Hi-Mid-Hi)': ['R',null,'5',null, '3',null,'5',null, 'R',null,'5',null, '3',null,'5',null],
+    'Alberti':           ['R',null,'5',null, '3',null,'5',null, 'R',null,'5',null, '3',null,'5',null],
     'Staircase':         ['R',null,'3',null, 'R',null,'5',null, 'R',null,'O',null, 'R',null,'5',null],
-    'Pedal Point (High)':['O',null,'3',null, 'O',null,'5',null, 'O',null,'R',null, 'O',null,'5',null],
-    'Empty':             [null,null,null,null, null,null,null,null, null,null,null,null, null,null,null,null]
+    'Pedal Point':       ['O',null,'3',null, 'O',null,'5',null, 'O',null,'R',null, 'O',null,'5',null],
+    'Empty':             Array(16).fill(null)
 };
 
-// --- DATA: DEFAULT CHORD PROGRESSIONS ---
+const SAMPLES_PATTERNS = {
+    'Whole Note (Drone)': ['R',null,null,null, null,null,null,null, null,null,null,null, null,null,null,null],
+    'Half Notes (1 & 3)': ['R',null,null,null, null,null,null,null, 'R',null,null,null, null,null,null,null],
+    'Backbeat Stab':      [null,null,null,null, 'R',null,null,null, null,null,null,null, 'R',null,null,null],
+    'Dotted Quarter':     ['R',null,null,null, null,null,'R',null, null,null,null,null, 'R',null,null,null],
+    'Offbeat 8ths':       [null,null,'R',null, null,null,'R',null, null,null,'R',null, null,null,'R',null],
+    'Slow Arp (Halves)':  ['R',null,null,null, null,null,null,null, '5',null,null,null, null,null,null,null],
+    'Charleston':         ['R',null,null,null, null,null,'R',null, null,null,null,null, null,null,null,null],
+    'Empty':              Array(16).fill(null)
+};
+
 const DEFAULT_PROGRESSIONS = {
     'Pop Hit (I-V-vi-IV)': [0, 4, 5, 3],
     'Doo Wop (I-vi-IV-V)': [0, 5, 3, 4],
@@ -72,32 +52,38 @@ const DEFAULT_PROGRESSIONS = {
     'Jazz ii-V-I':         [1, 4, 0, 0],
     'Minor Sad (vi-IV-I-V)': [5, 3, 0, 4],
     'Canon (Pachelbel)':   [0, 4, 5, 2, 3, 0, 3, 4],
-    'Andalusian (vi-V-IV-III)': [5, 4, 3, 2],
-    'Royal Road (IV-V-iii-vi)': [3, 4, 2, 5],
+    'Andalusian':          [5, 4, 3, 2],
+    'Royal Road':          [3, 4, 2, 5],
     'Circle of 5ths':      [0, 3, 6, 2, 5, 1, 4, 0]
 };
 
 const RHYTHM_PATTERNS = {
-    'Whole Notes':     [1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0],
-    'Quarter Strum':   [1, 0, 0, 0,  1, 0, 0, 0,  1, 0, 0, 0,  1, 0, 0, 0],
-    'Driving 8ths':    [1, 0, 1, 0,  1, 0, 1, 0,  1, 0, 1, 0,  1, 0, 1, 0],
-    'Syncopated':      [1, 0, 0, 1,  0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 0, 0],
-    'Reggae Skank':    [0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0,  0, 0, 1, 0],
-    'Gallop':          [1, 0, 0, 1,  1, 0, 0, 1,  1, 0, 0, 1,  1, 0, 0, 1],
-    'Charleston':      [1, 0, 0, 1,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0] 
+    'Whole Notes':     [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
+    'Quarter Strum':   [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+    'Driving 8ths':    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+    'Syncopated':      [1,0,0,1, 0,0,1,0, 0,0,1,0, 0,0,0,0],
+    'Reggae Skank':    [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0],
+    'Gallop':          [1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1],
+    'Charleston':      [1,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0] 
 };
 
-// Roman Numeral Display Helper
 const ROMAN_NUMERALS = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
 
+// --- SEQUENCER CLASS ---
+
 export class Sequencer {
-    constructor(containerId, getScaleDataCallback, onChordChangeCallback) {
+    constructor(containerId, getScaleDataCallback, onChordChangeCallback, onPresetLoadCallback, onStepCallback, onStopCallback) {
         this.container = document.getElementById(containerId);
         this.getScaleData = getScaleDataCallback; 
         this.onChordChange = onChordChangeCallback; 
+        this.onPresetLoad = onPresetLoadCallback;
+        this.onStepCallback = onStepCallback; 
+        this.onStopCallback = onStopCallback; 
 
-        // State
+        // Main State
         this.isPlaying = false;
+        this.isPreviewing = false; 
+        this.previewStep = 0;      
         this.bpm = 100;
         this.currentStep = 0;
         this.nextNoteTime = 0;
@@ -105,320 +91,363 @@ export class Sequencer {
         this.lookahead = 25.0; 
         this.scheduleAheadTime = 0.1; 
         
-        // Load Saved Custom Progressions
-        this.customProgressions = JSON.parse(localStorage.getItem('custom_progressions')) || {};
-        
-        // Combine Defaults + Custom
-        this.allProgressions = { ...DEFAULT_PROGRESSIONS, ...this.customProgressions };
+        this.progressionCycles = 0; 
 
-        // Defaults
-        this.progression = DEFAULT_PROGRESSIONS['Pop Hit (I-V-vi-IV)'];
-        this.rhythm = RHYTHM_PATTERNS['Whole Notes'];
-        this.drumPattern = DRUM_PATTERNS['Basic Rock'];
-        this.bassPattern = BASS_PATTERNS['Root & Fifth']; 
-        this.melodyPattern = MELODY_PATTERNS['Empty']; // Default to OFF
+        // Load Data
+        this.customData = {
+            progressions: JSON.parse(localStorage.getItem('custom_progressions')) || {},
+            rhythm:       JSON.parse(localStorage.getItem('custom_rhythms')) || {}, 
+            bass:         JSON.parse(localStorage.getItem('custom_bass')) || {},
+            lead:         JSON.parse(localStorage.getItem('custom_lead')) || {},
+            samples:      JSON.parse(localStorage.getItem('custom_samples')) || {},
+            drums:        JSON.parse(localStorage.getItem('custom_drums')) || {}
+        };
+
+        this.libraries = {
+            progression: { ...DEFAULT_PROGRESSIONS, ...this.customData.progressions },
+            rhythm:      { ...RHYTHM_PATTERNS, ...this.customData.rhythm }, 
+            bass:        { ...BASS_PATTERNS, ...this.customData.bass },
+            lead:        { ...MELODY_PATTERNS, ...this.customData.lead },
+            samples:     { ...SAMPLES_PATTERNS, ...this.customData.samples },
+            drums:       { ...DRUM_PATTERNS, ...this.customData.drums }
+        };
+
+        this.savedPresets = JSON.parse(localStorage.getItem('sequencer_presets')) || {};
+
+        this.state = {
+            progressionName: 'Pop Hit (I-V-vi-IV)',
+            rhythmName: 'Whole Notes',
+            drumName: 'Basic Rock',
+            bassName: 'Root & Fifth',
+            leadName: 'Empty',
+            samplesName: 'Whole Note (Drone)'
+        };
         
         this.settings = {
             metronome: false,
             metronomeSubdivision: 4, 
-            drumKit: 'synth', 
-            progressionIndex: 0,
+            shuffle: false,
             instrument: 'Acoustic Guitar',
             bassInstrument: 'Bass Guitar',
-            leadInstrument: 'Piano'
+            leadInstrument: 'Piano',
+            samplesInstrument: 'Sampler 1',
+            volumes: { chords:0.8, bass:0.8, lead:0.8, samples:0.8, drums:0.8 },
+            filters: { chords:1.0, bass:1.0, lead:1.0, samples:1.0, drums:1.0 },
+            reverbs: { chords:0.1, bass:0.1, lead:0.1, samples:0.1 },
+            progressionIndex: 0 
         };
 
         this.renderUI();
-        this.injectModal(); 
+        this.injectModals(); 
     }
 
+    // ... (Keep renderUI, bindEvents, populateDropdowns, all helpers... NO CHANGES here) ...
+    // Note: I am not pasting the entire UI code again to save space, but please ensure 
+    // renderUI, bindEvents, populateDropdowns, injectModals, openPatternEditor etc. remain exactly as they were.
+    // The critical changes are in `scheduleNote` below.
+
     renderUI() {
+        // ... (Existing renderUI code) ...
+        const createSliderGroup = (idPrefix, label, val) => `
+            <div style="display:flex; flex-direction:column; margin-bottom:5px;">
+                <label style="font-size:0.65rem; color:#888;">${label}</label>
+                <input type="range" class="vol-slider" id="${idPrefix}" min="0" max="1" step="0.1" value="${val}" style="width:100%; accent-color:var(--primary-cyan);">
+            </div>
+        `;
+        const createHeader = (title, type) => `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label>${title}</label>
+                <div>
+                    <button id="btn-del-${type}" class="btn-delete-custom" style="display:none; font-size:0.6rem; padding:2px 5px; margin-right:5px;">DEL</button>
+                    <button class="btn-new" data-type="${type}" style="font-size:0.6rem;">+ NEW</button>
+                </div>
+            </div>
+        `;
         this.container.innerHTML = `
             <div class="sequencer-controls">
-                
                 <div class="seq-row">
                     <button id="btn-seq-play" class="play-btn">▶ PLAY TRACK</button>
                     <div class="bpm-control">
                         <label>BPM: <span id="bpm-val">100</span></label>
                         <input type="range" id="bpm-slider" min="40" max="200" value="100">
                     </div>
-                    
-                    <div style="display: flex; gap: 10px; align-items: center; border-left: 1px solid #444; padding-left: 15px;">
-                        <div class="checkbox-group" style="margin-bottom:0;">
-                            <input type="checkbox" id="cb-metronome"> <label for="cb-metronome">Click</label>
+                    <div style="display: flex; gap: 15px; align-items: center; border-left: 1px solid #444; padding-left: 15px;">
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <input type="checkbox" id="cb-metronome" style="accent-color: #00e5ff; width:16px; height:16px; cursor:pointer;">
+                            <label for="cb-metronome" style="cursor:pointer; font-size:0.8rem;">Click</label>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <input type="checkbox" id="cb-shuffle" style="accent-color: #00e5ff; width:16px; height:16px; cursor:pointer;"> 
+                            <label id="lbl-shuffle" for="cb-shuffle" style="cursor:pointer; font-size:0.8rem; transition: color 0.2s;">Shuffle</label>
                         </div>
                         <select id="sel-metronome-sub" style="font-size: 0.8rem; padding: 2px;">
-                            <option value="16">Whole (1/1)</option>
-                            <option value="8">Half (1/2)</option>
-                            <option value="4" selected>Quarter (1/4)</option>
-                            <option value="2">Eighth (1/8)</option>
+                            <option value="4" selected>1/4</option>
+                            <option value="2">1/8</option>
                         </select>
                     </div>
+                    <div style="margin-left:auto; display:flex; gap:5px; align-items:center;">
+                        <select id="sel-presets" style="font-size:0.8rem; width:120px;"><option value="">Load Preset...</option></select>
+                        <button id="btn-save-preset" class="btn-new" style="background:#444;">SAVE</button>
+                        <button id="btn-del-preset" class="btn-delete-custom" style="display:none;">X</button>
+                    </div>
                 </div>
-
                 <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
-                    <strong style="color:#00e5ff; font-size:0.8rem; margin-right:10px; min-width:60px;">CHORDS:</strong>
-                    <div class="control-group">
-                        <label>Sound</label>
-                        <select id="sel-instrument"></select>
+                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
+                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">CHORDS</strong>
+                        ${createSliderGroup('vol-chords', 'Vol', this.settings.volumes.chords)}
+                        ${createSliderGroup('filt-chords', 'Bright', this.settings.filters.chords)}
+                        ${createSliderGroup('verb-chords', 'Space', this.settings.reverbs.chords)}
                     </div>
-                    <div class="control-group">
-                        <label>Rhythm</label>
-                        <select id="sel-rhythm"></select>
-                    </div>
+                    <div class="control-group"><label>Sound</label><select id="sel-instrument"></select></div>
+                    <div class="control-group">${createHeader('Rhythm', 'rhythm')}<select id="sel-rhythm"></select></div>
                 </div>
-
                 <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
-                    <strong style="color:#00e5ff; font-size:0.8rem; margin-right:10px; min-width:60px;">BASS:</strong>
-                    <div class="control-group">
-                        <label>Sound</label>
-                        <select id="sel-bass-instrument"></select>
+                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
+                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">BASS</strong>
+                        ${createSliderGroup('vol-bass', 'Vol', this.settings.volumes.bass)}
+                        ${createSliderGroup('filt-bass', 'Bright', this.settings.filters.bass)}
+                        ${createSliderGroup('verb-bass', 'Space', this.settings.reverbs.bass)}
                     </div>
-                    <div class="control-group">
-                        <label>Pattern</label>
-                        <select id="sel-bass-pattern"></select>
-                    </div>
+                    <div class="control-group"><label>Sound</label><select id="sel-bass-instrument"></select></div>
+                    <div class="control-group">${createHeader('Pattern', 'bass')}<select id="sel-bass-pattern"></select></div>
                 </div>
-
                 <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
-                    <strong style="color:#00e5ff; font-size:0.8rem; margin-right:10px; min-width:60px;">LEAD:</strong>
-                    <div class="control-group">
-                        <label>Sound</label>
-                        <select id="sel-lead-instrument"></select>
+                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
+                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">LEAD</strong>
+                        ${createSliderGroup('vol-lead', 'Vol', this.settings.volumes.lead)}
+                        ${createSliderGroup('filt-lead', 'Bright', this.settings.filters.lead)}
+                        ${createSliderGroup('verb-lead', 'Space', this.settings.reverbs.lead)}
                     </div>
-                    <div class="control-group">
-                        <label>Pattern</label>
-                        <select id="sel-lead-pattern"></select>
-                    </div>
+                    <div class="control-group"><label>Sound</label><select id="sel-lead-instrument"></select></div>
+                    <div class="control-group">${createHeader('Pattern', 'lead')}<select id="sel-lead-pattern"></select></div>
                 </div>
-
+                <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
+                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
+                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">SAMPLES</strong>
+                        ${createSliderGroup('vol-samples', 'Vol', this.settings.volumes.samples)}
+                        ${createSliderGroup('filt-samples', 'Bright', this.settings.filters.samples)}
+                        ${createSliderGroup('verb-samples', 'Space', this.settings.reverbs.samples)}
+                    </div>
+                    <div class="control-group"><label>Sampler</label><select id="sel-samples-instrument"></select></div>
+                    <div class="control-group">${createHeader('Pattern', 'samples')}<select id="sel-samples-pattern"></select></div>
+                </div>
                 <div class="seq-row">
                     <div class="control-group" style="flex:2;">
                         <label style="display:flex; justify-content:space-between;">
                             Chord Progression 
                             <div>
                                 <button id="btn-delete-prog" class="btn-delete-custom" style="display:none;">DEL</button>
-                                <button id="btn-new-prog" class="btn-new">+ NEW</button>
+                                <button class="btn-new" data-type="progression">+ NEW</button>
                             </div>
                         </label>
                         <select id="sel-progression"></select>
                     </div>
                     <div class="control-group" style="flex:1;">
-                        <label>Drum Pattern</label>
+                         <div style="display:flex; align-items:center; justify-content:space-between;">
+                             ${createHeader('Drums', 'drums')}
+                            <div style="display:flex; gap:5px;"><input type="range" id="vol-drums" min="0" max="1" step="0.1" value="${this.settings.volumes.drums}" style="width:50px;" title="Vol"><input type="range" id="filt-drums" min="0" max="1" step="0.1" value="${this.settings.filters.drums}" style="width:50px;" title="Filter"></div>
+                        </div>
                         <select id="sel-drums"></select>
                     </div>
                 </div>
-
                 <div class="step-tracker">
                     ${Array(16).fill(0).map((_, i) => `<div class="step-dot" id="step-${i}"></div>`).join('')}
                 </div>
             </div>
         `;
-
         this.populateDropdowns();
+        this.refreshPresetList();
+        this.bindEvents();
+    }
 
-        // Event Listeners
+    bindEvents() {
+        // ... (Standard event binding code) ...
         this.container.querySelector('#btn-seq-play').addEventListener('click', () => this.togglePlay());
-        
-        const bpmSlider = this.container.querySelector('#bpm-slider');
-        bpmSlider.addEventListener('input', (e) => {
+        this.container.querySelector('#bpm-slider').addEventListener('input', (e) => {
             this.bpm = parseInt(e.target.value);
             this.container.querySelector('#bpm-val').textContent = this.bpm;
         });
-
+        this.container.querySelectorAll('.btn-new').forEach(btn => {
+            if(btn.id === 'btn-save-preset') return;
+            btn.addEventListener('click', (e) => {
+                const type = e.target.dataset.type;
+                if(type === 'progression') this.openProgressionModal();
+                else this.openPatternEditor(type);
+            });
+        });
+        ['rhythm', 'bass', 'lead', 'samples', 'drums'].forEach(type => {
+            const btn = this.container.querySelector(`#btn-del-${type}`);
+            if (btn) btn.addEventListener('click', () => this.deleteCustomPattern(type));
+        });
+        const bindSelect = (id, stateKey, typeKey) => {
+            this.container.querySelector(id).addEventListener('change', (e) => {
+                this.state[stateKey] = e.target.value;
+                if(typeKey === 'progression') this.updateDeleteButtonVisibility(e.target.value);
+                else this.updatePatternDeleteVisibility(typeKey, e.target.value);
+            });
+        };
+        bindSelect('#sel-rhythm', 'rhythmName', 'rhythm');
+        bindSelect('#sel-bass-pattern', 'bassName', 'bass');
+        bindSelect('#sel-lead-pattern', 'leadName', 'lead');
+        bindSelect('#sel-samples-pattern', 'samplesName', 'samples'); 
+        bindSelect('#sel-drums', 'drumName', 'drums');
+        bindSelect('#sel-progression', 'progressionName', 'progression');
+        const bindMixer = (id, type, track) => {
+            this.container.querySelector(id).addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                this.settings[type][track] = val;
+                if(type === 'volumes') setTrackVolume(track, val);
+                if(type === 'filters') setTrackFilter(track, val);
+                if(type === 'reverbs') setTrackReverb(track, val);
+            });
+        };
+        ['chords','bass','lead','samples','drums'].forEach(t => {
+            bindMixer(`#vol-${t}`, 'volumes', t);
+            bindMixer(`#filt-${t}`, 'filters', t);
+            if(t!=='drums') bindMixer(`#verb-${t}`, 'reverbs', t);
+        });
+        const bindSound = (id, settingKey) => {
+            this.container.querySelector(id).addEventListener('change', (e) => this.settings[settingKey] = e.target.value);
+        };
+        bindSound('#sel-instrument', 'instrument');
+        bindSound('#sel-bass-instrument', 'bassInstrument');
+        bindSound('#sel-lead-instrument', 'leadInstrument');
+        bindSound('#sel-samples-instrument', 'samplesInstrument');
+        this.container.querySelector('#btn-save-preset').addEventListener('click', () => this.savePreset());
+        const presetSel = this.container.querySelector('#sel-presets');
+        const presetDel = this.container.querySelector('#btn-del-preset');
+        presetSel.addEventListener('change', (e) => { 
+            if(e.target.value) { this.loadPreset(e.target.value); presetDel.style.display = 'inline-block'; } 
+            else { presetDel.style.display = 'none'; }
+        });
+        presetDel.addEventListener('click', () => this.deletePreset());
         this.container.querySelector('#cb-metronome').addEventListener('change', (e) => this.settings.metronome = e.target.checked);
+        const cbShuffle = this.container.querySelector('#cb-shuffle');
+        const lblShuffle = this.container.querySelector('#lbl-shuffle');
+        cbShuffle.addEventListener('change', (e) => {
+            this.settings.shuffle = e.target.checked;
+            lblShuffle.style.color = e.target.checked ? '#00e5ff' : 'inherit'; 
+        });
         this.container.querySelector('#sel-metronome-sub').addEventListener('change', (e) => this.settings.metronomeSubdivision = parseInt(e.target.value));
-
-        // Track 1
-        this.container.querySelector('#sel-instrument').addEventListener('change', (e) => this.settings.instrument = e.target.value);
-        this.container.querySelector('#sel-rhythm').addEventListener('change', (e) => this.rhythm = RHYTHM_PATTERNS[e.target.value]);
-        
-        // Track 2
-        this.container.querySelector('#sel-bass-instrument').addEventListener('change', (e) => this.settings.bassInstrument = e.target.value);
-        this.container.querySelector('#sel-bass-pattern').addEventListener('change', (e) => this.bassPattern = BASS_PATTERNS[e.target.value]);
-
-        // Track 3 (Lead)
-        this.container.querySelector('#sel-lead-instrument').addEventListener('change', (e) => this.settings.leadInstrument = e.target.value);
-        this.container.querySelector('#sel-lead-pattern').addEventListener('change', (e) => this.melodyPattern = MELODY_PATTERNS[e.target.value]);
-
-        // Drums & Progression
-        this.container.querySelector('#sel-drums').addEventListener('change', (e) => this.drumPattern = DRUM_PATTERNS[e.target.value]);
-
-        const progSel = this.container.querySelector('#sel-progression');
-        progSel.addEventListener('change', (e) => {
-            this.progression = this.allProgressions[e.target.value];
-            this.updateDeleteButtonVisibility(e.target.value);
-        });
-
-        // Modal Buttons
-        this.container.querySelector('#btn-new-prog').addEventListener('click', () => this.openModal());
-        this.container.querySelector('#btn-delete-prog').addEventListener('click', () => this.deleteCurrentProgression());
     }
 
+    // ... (Keep populateDropdowns, updateDeleteButtonVisibility, updatePatternDeleteVisibility, deleteCustomPattern, injectModals, openPatternEditor, closeModal, togglePatternPreview, previewScheduler, playPreviewStep, renderDrumGrid, renderToggleGrid, renderCycleGrid, saveCustomPattern, openProgressionModal, addProgStep, saveCustomProgression, deleteCurrentProgression, savePreset, loadPreset, refreshPresetList, deletePreset unchanged) ...
+    // Note: I'm skipping these methods in text to focus on the FIX below, but ensure they are in your file.
+    
     populateDropdowns() {
-        const instSel = this.container.querySelector('#sel-instrument');
-        const bassInstSel = this.container.querySelector('#sel-bass-instrument');
-        const leadInstSel = this.container.querySelector('#sel-lead-instrument');
-        
-        Object.keys(INSTRUMENTS).forEach(k => {
-            instSel.add(new Option(k, k));
-            bassInstSel.add(new Option(k, k));
-            leadInstSel.add(new Option(k, k));
-        });
-        instSel.value = 'Acoustic Guitar'; 
-        bassInstSel.value = 'Bass Guitar';
-        leadInstSel.value = 'Piano';
-
-        const rhythmSel = this.container.querySelector('#sel-rhythm');
-        Object.keys(RHYTHM_PATTERNS).forEach(k => rhythmSel.add(new Option(k, k)));
-
-        const bassPatSel = this.container.querySelector('#sel-bass-pattern');
-        Object.keys(BASS_PATTERNS).forEach(k => bassPatSel.add(new Option(k, k)));
-        bassPatSel.value = 'Root & Fifth';
-
-        const leadPatSel = this.container.querySelector('#sel-lead-pattern');
-        Object.keys(MELODY_PATTERNS).forEach(k => leadPatSel.add(new Option(k, k)));
-        leadPatSel.value = 'Empty'; // Default Lead to Empty
-
-        const drumSel = this.container.querySelector('#sel-drums');
-        Object.keys(DRUM_PATTERNS).forEach(k => drumSel.add(new Option(k, k)));
-
-        this.refreshProgressionDropdown();
+        // ... same as before ...
+        const populate = (id, lib) => { const sel = this.container.querySelector(id); sel.innerHTML = ''; Object.keys(lib).forEach(k => sel.add(new Option(k, k))); };
+        const insts = Object.keys(INSTRUMENTS);
+        ['#sel-instrument', '#sel-bass-instrument', '#sel-lead-instrument', '#sel-samples-instrument'].forEach(id => { const sel = this.container.querySelector(id); insts.forEach(k => sel.add(new Option(k, k))); });
+        this.container.querySelector('#sel-instrument').value = this.settings.instrument;
+        this.container.querySelector('#sel-bass-instrument').value = this.settings.bassInstrument;
+        this.container.querySelector('#sel-lead-instrument').value = this.settings.leadInstrument;
+        this.container.querySelector('#sel-samples-instrument').value = this.settings.samplesInstrument;
+        populate('#sel-rhythm', this.libraries.rhythm);
+        populate('#sel-bass-pattern', this.libraries.bass);
+        populate('#sel-lead-pattern', this.libraries.lead);
+        populate('#sel-samples-pattern', this.libraries.samples);
+        populate('#sel-drums', this.libraries.drums);
+        populate('#sel-progression', this.libraries.progression);
+        this.container.querySelector('#sel-rhythm').value = this.state.rhythmName;
+        this.container.querySelector('#sel-bass-pattern').value = this.state.bassName;
+        this.container.querySelector('#sel-lead-pattern').value = this.state.leadName;
+        this.container.querySelector('#sel-samples-pattern').value = this.state.samplesName;
+        this.container.querySelector('#sel-drums').value = this.state.drumName;
+        this.container.querySelector('#sel-progression').value = this.state.progressionName;
+        this.updateDeleteButtonVisibility(this.state.progressionName);
+        this.updatePatternDeleteVisibility('rhythm', this.state.rhythmName);
+        this.updatePatternDeleteVisibility('bass', this.state.bassName);
+        this.updatePatternDeleteVisibility('lead', this.state.leadName);
+        this.updatePatternDeleteVisibility('samples', this.state.samplesName);
+        this.updatePatternDeleteVisibility('drums', this.state.drumName);
     }
-
-    refreshProgressionDropdown(selectValue = null) {
-        const progSel = this.container.querySelector('#sel-progression');
-        progSel.innerHTML = '';
-        
-        const defaultsGroup = document.createElement('optgroup');
-        defaultsGroup.label = "Standard Progressions";
-        Object.keys(DEFAULT_PROGRESSIONS).forEach(k => defaultsGroup.appendChild(new Option(k, k)));
-        progSel.appendChild(defaultsGroup);
-
-        if (Object.keys(this.customProgressions).length > 0) {
-            const customGroup = document.createElement('optgroup');
-            customGroup.label = "My Custom Progressions";
-            Object.keys(this.customProgressions).forEach(k => customGroup.appendChild(new Option(k, k)));
-            progSel.appendChild(customGroup);
-        }
-
-        if (selectValue && this.allProgressions[selectValue]) {
-            progSel.value = selectValue;
-        } else {
-            progSel.value = 'Pop Hit (I-V-vi-IV)';
-        }
-        
-        this.updateDeleteButtonVisibility(progSel.value);
-    }
-
-    updateDeleteButtonVisibility(progName) {
-        const btn = this.container.querySelector('#btn-delete-prog');
-        if (this.customProgressions[progName]) {
-            btn.style.display = 'inline-block';
-        } else {
-            btn.style.display = 'none';
+    updateDeleteButtonVisibility(name) { const btn = this.container.querySelector('#btn-delete-prog'); btn.style.display = this.customData.progressions[name] ? 'inline-block' : 'none'; }
+    updatePatternDeleteVisibility(type, name) { const btn = this.container.querySelector(`#btn-del-${type}`); if (btn) btn.style.display = (this.customData[type] && this.customData[type][name]) ? 'inline-block' : 'none'; }
+    deleteCustomPattern(type) {
+        let name;
+        if(type==='rhythm') name=this.state.rhythmName; else if(type==='bass') name=this.state.bassName; else if(type==='lead') name=this.state.leadName; else if(type==='samples') name=this.state.samplesName; else if(type==='drums') name=this.state.drumName;
+        if (confirm(`Delete custom pattern "${name}"?`)) {
+            delete this.customData[type][name]; delete this.libraries[type][name];
+            let key = (type==='rhythm') ? 'custom_rhythms' : `custom_${type}`;
+            localStorage.setItem(key, JSON.stringify(this.customData[type]));
+            this.populateDropdowns();
         }
     }
-
-    // --- MODAL LOGIC ---
-    injectModal() {
-        const modalHtml = `
-            <div id="custom-prog-modal" class="modal-overlay">
-                <div class="modal-content" style="max-width: 500px;">
-                    <h3 class="modal-title">Create Chord Progression</h3>
-                    <div style="margin-bottom:15px;">
-                        <input type="text" id="new-prog-name" placeholder="Progression Name" style="width:100%; padding:10px; background:#222; border:1px solid #555; color:white; border-radius:4px;">
-                    </div>
-                    <div style="margin-bottom:10px; text-align:right;">
-                        <button id="btn-add-chord" class="btn-new" style="background:#444; color:#fff; border:1px solid #666;">+ Add Step</button>
-                        <button id="btn-remove-chord" class="btn-new" style="background:#444; color:#fff; border:1px solid #666;">- Remove</button>
-                    </div>
-                    <div id="chord-selectors-container" class="chord-selectors" style="flex-wrap:wrap; justify-content:center;"></div>
-                    <div class="modal-actions">
-                        <button id="btn-modal-cancel" class="btn-cancel">Cancel</button>
-                        <button id="btn-modal-save" class="btn-save">Save & Select</button>
-                    </div>
-                </div>
-            </div>
-        `;
+    injectModals() {
+        // ... same modal HTML ...
+        const modalHtml = `<div id="prog-modal" class="modal-overlay"><div class="modal-content" style="max-width:500px;"><h3 class="modal-title">Edit Progression</h3><input type="text" id="new-prog-name" placeholder="Name" style="width:100%; margin-bottom:10px; padding:5px;"><div id="chord-selectors-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:15px;"></div><button id="btn-add-step" class="btn-new" style="margin-bottom:10px;">+ Step</button><div class="modal-actions"><button onclick="document.getElementById('prog-modal').style.display='none'" class="btn-cancel">Cancel</button><button id="btn-save-prog" class="btn-save">Save</button></div></div></div><div id="pattern-modal" class="modal-overlay"><div class="modal-content" style="max-width:600px;"><h3 class="modal-title" id="pat-modal-title">Edit Pattern</h3><input type="text" id="new-pat-name" placeholder="Pattern Name" style="width:100%; margin-bottom:15px; padding:8px; background:#222; border:1px solid #555; color:white;"><div id="pattern-editor-grid" class="pattern-editor-container"></div><div class="modal-actions"><div style="display:flex; gap:10px;"><button id="btn-preview-pat" class="btn-new" style="background:#444; border:1px solid #666; font-size:0.8rem; padding:8px 12px;">▶ Preview</button><button onclick="document.getElementById('pattern-modal').style.display='none'" class="btn-cancel">Cancel</button></div><button id="btn-save-pat" class="btn-save">Save Pattern</button></div></div></div>`;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        document.getElementById('btn-modal-cancel').addEventListener('click', () => this.closeModal());
-        document.getElementById('btn-modal-save').addEventListener('click', () => this.saveCustomProgression());
-        document.getElementById('btn-add-chord').addEventListener('click', () => this.addChordSelector());
-        document.getElementById('btn-remove-chord').addEventListener('click', () => this.removeChordSelector());
+        document.getElementById('btn-add-step').addEventListener('click', () => this.addProgStep());
+        document.getElementById('btn-save-prog').addEventListener('click', () => this.saveCustomProgression());
+        document.getElementById('btn-save-pat').addEventListener('click', () => this.saveCustomPattern());
+        document.getElementById('btn-preview-pat').addEventListener('click', () => this.togglePatternPreview());
     }
-
-    openModal() {
-        document.getElementById('custom-prog-modal').style.display = 'flex';
-        document.getElementById('new-prog-name').value = '';
-        const container = document.getElementById('chord-selectors-container');
-        container.innerHTML = '';
-        for(let i=0; i<4; i++) this.addChordSelector();
+    openPatternEditor(type) {
+        const modal = document.getElementById('pattern-modal'); const grid = document.getElementById('pattern-editor-grid'); const title = document.getElementById('pat-modal-title'); const nameInput = document.getElementById('new-pat-name');
+        modal.style.display = 'flex'; title.textContent = `Edit ${type.toUpperCase()} Pattern`; title.dataset.type = type; nameInput.value = ''; grid.innerHTML = '';
+        if(this.isPlaying) this.togglePlay();
+        if (type === 'drums') this.renderDrumGrid(grid); else if (type === 'rhythm') this.renderToggleGrid(grid, 'Strum'); else this.renderCycleGrid(grid, type==='bass' ? ['R','3','5','O'] : ['R','3','5','7','O']); 
     }
-
-    closeModal() {
-        document.getElementById('custom-prog-modal').style.display = 'none';
+    closeModal() { document.getElementById('pattern-modal').style.display = 'none'; document.getElementById('prog-modal').style.display = 'none'; if(this.isPreviewing) this.togglePatternPreview(); }
+    togglePatternPreview() {
+        this.isPreviewing = !this.isPreviewing; const btn = document.getElementById('btn-preview-pat');
+        if(this.isPreviewing) { if (ctx.state === 'suspended') ctx.resume(); this.previewStep = 0; this.nextNoteTime = ctx.currentTime; btn.textContent = "⏹ Stop"; btn.style.background = "#ff0055"; this.previewScheduler(); } 
+        else { clearTimeout(this.timerID); btn.textContent = "▶ Preview"; btn.style.background = "#444"; stopAllSounds(); document.querySelectorAll('.step-cell').forEach(c => c.style.borderColor = "#444"); }
     }
-    
-    addChordSelector() {
-        const container = document.getElementById('chord-selectors-container');
-        const count = container.children.length + 1;
-        const div = document.createElement('div');
-        div.className = 'chord-select-group';
-        div.style.margin = "5px"; 
-        div.innerHTML = `
-            <label style="font-size:0.7rem; color:#888;">Step ${count}</label>
-            <select class="custom-chord-select" style="background:#333; color:white; border:1px solid #555; width:60px;">
-                ${ROMAN_NUMERALS.map((rom, idx) => `<option value="${idx}">${rom}</option>`).join('')}
-            </select>
-        `;
-        container.appendChild(div);
+    previewScheduler() {
+        if(!this.isPreviewing) return;
+        if (this.nextNoteTime < ctx.currentTime - 0.2) this.nextNoteTime = ctx.currentTime;
+        while (this.nextNoteTime < ctx.currentTime + this.scheduleAheadTime) {
+            this.playPreviewStep(this.previewStep, this.nextNoteTime);
+            const secondsPerBeat = 60.0 / this.bpm;
+            let noteDuration = 0.25 * secondsPerBeat;
+            if (this.settings.shuffle) { noteDuration = (this.previewStep % 2 === 0) ? noteDuration * 1.33 : noteDuration * 0.67; }
+            this.nextNoteTime += noteDuration;
+            this.previewStep = (this.previewStep + 1) % 16;
+        }
+        this.timerID = window.setTimeout(() => this.previewScheduler(), this.lookahead);
     }
-    
-    removeChordSelector() {
-        const container = document.getElementById('chord-selectors-container');
-        if (container.children.length > 1) {
-            container.removeChild(container.lastChild);
+    playPreviewStep(step, time) { /* ... same as before ... */ 
+        const type = document.getElementById('pat-modal-title').dataset.type;
+        const grid = document.getElementById('pattern-editor-grid');
+        requestAnimationFrame(() => { grid.querySelectorAll('.step-cell').forEach(c => c.style.borderColor = "#444"); if(type === 'drums') grid.querySelectorAll(`.step-cell[data-step="${step}"]`).forEach(c => c.style.borderColor = "#fff"); else { const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); if(cell) cell.style.borderColor = "#fff"; } });
+        const C_MAJ = { root:'C', notes:['C','E','G'], freqs: [130.81, 164.81, 196.00] };
+        if (type === 'drums') {
+             const getVal = (part) => { const cell = grid.querySelector(`.step-cell[data-part="${part}"][data-step="${step}"]`); return cell && parseInt(cell.dataset.val) === 1; };
+             if(getVal('kick')) playDrum('kick', time); if(getVal('snare')) playDrum('snare', time); if(getVal('hihat')) playDrum('hihat', time);
+        } else if (type === 'rhythm') {
+            const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); if(cell && parseInt(cell.dataset.val) === 1) playStrum(C_MAJ.freqs, time, this.settings.instrument);
+        } else { 
+            const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); const val = cell ? cell.textContent : '-';
+            if(val !== '-' && val !== '') {
+                let noteName = 'C', oct = 0; if(val === '3') noteName = 'E'; else if(val === '5') noteName = 'G'; else if(val === '7') noteName = 'B'; else if(val === 'O') { noteName = 'C'; oct=1; }
+                const freq = (type==='bass') ? this.getBassFrequency(noteName, oct) : this.getMelodyFrequency(noteName, oct);
+                startNote(freq, -1, (type==='bass'?this.settings.bassInstrument:this.settings.leadInstrument), time, 0.2, type);
+            }
         }
     }
+    renderDrumGrid(container) { /* ... */ ['kick', 'snare', 'hihat'].forEach(part => { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${part.toUpperCase()}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.part = part; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-drum', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }); }
+    renderToggleGrid(container, label) { /* ... */ const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${label}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-note', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }
+    renderCycleGrid(container, options) { /* ... */ const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">Note</div>`; const cycle = [null, ...options]; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.textContent = '-'; cell.dataset.idx = 0; cell.dataset.step = i; cell.addEventListener('click', () => { let idx = parseInt(cell.dataset.idx); idx = (idx + 1) % cycle.length; cell.dataset.idx = idx; const val = cycle[idx]; cell.textContent = val || '-'; cell.classList.toggle('active-note', val !== null); }); row.appendChild(cell); } container.appendChild(row); }
+    saveCustomPattern() { /* ... same as before ... */ const modal = document.getElementById('pattern-modal'); const type = document.getElementById('pat-modal-title').dataset.type; const name = document.getElementById('new-pat-name').value.trim() || `My ${type}`; const grid = document.getElementById('pattern-editor-grid'); let data; if (type === 'drums') { data = { kick: [], snare: [], hihat: [] }; grid.querySelectorAll('.step-cell').forEach(cell => { data[cell.dataset.part][cell.dataset.step] = parseInt(cell.dataset.val); }); } else if (type === 'rhythm') { data = []; grid.querySelectorAll('.step-cell').forEach(cell => data.push(parseInt(cell.dataset.val))); } else { const options = type === 'bass' ? [null,'R','3','5','O'] : [null,'R','3','5','7','O']; data = []; grid.querySelectorAll('.step-cell').forEach(cell => { const idx = parseInt(cell.dataset.idx); data.push(options[idx]); }); } this.customData[type][name] = data; this.libraries[type][name] = data; let key = (type==='rhythm') ? 'custom_rhythms' : `custom_${type}`; localStorage.setItem(key, JSON.stringify(this.customData[type])); this.populateDropdowns(); if(type==='drums') { this.state.drumName = name; this.container.querySelector('#sel-drums').value = name; } else if(type==='rhythm') { this.state.rhythmName = name; this.container.querySelector('#sel-rhythm').value = name; } else if(type==='bass') { this.state.bassName = name; this.container.querySelector('#sel-bass-pattern').value = name; } else if(type==='lead') { this.state.leadName = name; this.container.querySelector('#sel-lead-pattern').value = name; } else if(type==='samples') { this.state.samplesName = name; this.container.querySelector('#sel-samples-pattern').value = name; } modal.style.display = 'none'; }
+    openProgressionModal() { document.getElementById('prog-modal').style.display = 'flex'; document.getElementById('new-prog-name').value = ''; document.getElementById('chord-selectors-container').innerHTML = ''; for(let i=0; i<4; i++) this.addProgStep(); }
+    addProgStep() { const cont = document.getElementById('chord-selectors-container'); const sel = document.createElement('select'); sel.className = 'prog-step-select'; sel.style.width = '50px'; sel.style.margin='2px'; ROMAN_NUMERALS.forEach((r, i) => sel.add(new Option(r, i))); cont.appendChild(sel); }
+    saveCustomProgression() { const name = document.getElementById('new-prog-name').value.trim() || "My Prog"; const sels = document.querySelectorAll('.prog-step-select'); const indices = Array.from(sels).map(s => parseInt(s.value)); this.customData.progressions[name] = indices; this.libraries.progression[name] = indices; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); this.container.querySelector('#sel-progression').value = name; this.state.progressionName = name; document.getElementById('prog-modal').style.display = 'none'; }
+    deleteCurrentProgression() { if(confirm(`Delete ${this.state.progressionName}?`)) { delete this.customData.progressions[this.state.progressionName]; delete this.libraries.progression[this.state.progressionName]; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); } }
+    savePreset() { const name = prompt("Preset Name:", "My Track"); if(!name) return; const ks = this.getScaleData(); const preset = { name, bpm: this.bpm, key: ks.key, scale: ks.scale, settings: this.settings, state: this.state }; this.savedPresets[name] = preset; localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); this.refreshPresetList(); this.container.querySelector('#sel-presets').value = name; this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; }
+    loadPreset(name) { /* ... standard load logic ... */ const p = this.savedPresets[name]; if(!p) return; this.bpm = p.bpm; this.settings = p.settings; this.state = p.state; this.container.querySelector('#bpm-slider').value = this.bpm; this.container.querySelector('#bpm-val').textContent = this.bpm; this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; const setVal = (id, val) => { const el = this.container.querySelector(id); if(el) el.value = val; }; setVal('#sel-instrument', this.settings.instrument); setVal('#sel-bass-instrument', this.settings.bassInstrument); setVal('#sel-lead-instrument', this.settings.leadInstrument); setVal('#sel-samples-instrument', this.settings.samplesInstrument); setVal('#sel-rhythm', this.state.rhythmName); setVal('#sel-bass-pattern', this.state.bassName); setVal('#sel-lead-pattern', this.state.leadName); setVal('#sel-samples-pattern', this.state.samplesName); setVal('#sel-drums', this.state.drumName); setVal('#sel-progression', this.state.progressionName); const applyMix = (t) => { setVal(`#vol-${t}`, this.settings.volumes[t]); setVal(`#filt-${t}`, this.settings.filters[t]); if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); setTrackVolume(t, this.settings.volumes[t]); setTrackFilter(t, this.settings.filters[t]); if(t!=='drums') setTrackReverb(t, this.settings.reverbs[t]); }; ['chords','bass','lead','samples','drums'].forEach(applyMix); this.populateDropdowns(); if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale}); }
+    refreshPresetList() { const sel = this.container.querySelector('#sel-presets'); sel.innerHTML = '<option value="">Load...</option>'; Object.keys(this.savedPresets).forEach(k => sel.add(new Option(k, k))); }
+    deletePreset() { const name = this.container.querySelector('#sel-presets').value; if(name && confirm('Delete?')) { delete this.savedPresets[name]; localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); this.refreshPresetList(); this.container.querySelector('#btn-del-preset').style.display = 'none'; } }
 
-    saveCustomProgression() {
-        const nameInput = document.getElementById('new-prog-name');
-        const name = nameInput.value.trim() || "Untitled Progression";
-        const selects = document.querySelectorAll('.custom-chord-select');
-        const indices = Array.from(selects).map(sel => parseInt(sel.value));
-
-        this.customProgressions[name] = indices;
-        this.allProgressions = { ...DEFAULT_PROGRESSIONS, ...this.customProgressions };
-        localStorage.setItem('custom_progressions', JSON.stringify(this.customProgressions));
-
-        this.refreshProgressionDropdown(name);
-        this.progression = this.allProgressions[name];
-        this.closeModal();
-    }
-
-    deleteCurrentProgression() {
-        const currentName = this.container.querySelector('#sel-progression').value;
-        if (confirm(`Delete "${currentName}"?`)) {
-            delete this.customProgressions[currentName];
-            this.allProgressions = { ...DEFAULT_PROGRESSIONS, ...this.customProgressions };
-            localStorage.setItem('custom_progressions', JSON.stringify(this.customProgressions));
-            
-            this.refreshProgressionDropdown('Pop Hit (I-V-vi-IV)');
-            this.progression = DEFAULT_PROGRESSIONS['Pop Hit (I-V-vi-IV)'];
-        }
-    }
-
-    // --- PLAYBACK ENGINE ---
     togglePlay() {
         this.isPlaying = !this.isPlaying;
         const btn = this.container.querySelector('#btn-seq-play');
-        
         if (this.isPlaying) {
             if (ctx.state === 'suspended') ctx.resume();
             this.currentStep = 0;
-            this.settings.progressionIndex = -1;
+            this.settings.progressionIndex = -1; 
+            this.progressionCycles = 0; 
             this.nextNoteTime = ctx.currentTime;
             this.scheduler(); 
             btn.textContent = "⏹ STOP";
@@ -430,154 +459,134 @@ export class Sequencer {
             this.resetVisuals();
             stopAllSounds();
             if(this.onChordChange) this.onChordChange(-1); 
+            if(this.onStopCallback) this.onStopCallback();
         }
     }
 
     scheduler() {
-        if (this.nextNoteTime < ctx.currentTime - 0.2) {
-             this.nextNoteTime = ctx.currentTime;
-        }
-
+        if (this.nextNoteTime < ctx.currentTime - 0.2) this.nextNoteTime = ctx.currentTime;
         while (this.nextNoteTime < ctx.currentTime + this.scheduleAheadTime) {
             this.scheduleNote(this.currentStep, this.nextNoteTime);
             this.nextNote();
         }
-        
-        if (this.isPlaying) {
-            this.timerID = window.setTimeout(() => this.scheduler(), this.lookahead);
-        }
+        if (this.isPlaying) this.timerID = window.setTimeout(() => this.scheduler(), this.lookahead);
     }
 
     nextNote() {
         const secondsPerBeat = 60.0 / this.bpm;
-        this.nextNoteTime += 0.25 * secondsPerBeat; 
-        
-        this.currentStep++;
-        if (this.currentStep === 16) {
-            this.currentStep = 0;
+        let noteDuration = 0.25 * secondsPerBeat;
+        if (this.settings.shuffle) {
+            const swing = 0.08; 
+            if ((this.currentStep % 4) < 2) noteDuration += (secondsPerBeat * swing);
+            else noteDuration -= (secondsPerBeat * swing);
         }
+        this.nextNoteTime += noteDuration;
+        this.currentStep++;
+        if (this.currentStep === 16) this.currentStep = 0;
     }
 
     scheduleNote(stepNumber, time) {
-        if (stepNumber === 0) {
-            this.settings.progressionIndex = (this.settings.progressionIndex + 1) % this.progression.length;
+        let prog = this.libraries.progression[this.state.progressionName];
+        if (!prog) {
+            this.state.progressionName = 'Pop Hit (I-V-vi-IV)';
+            prog = this.libraries.progression[this.state.progressionName];
         }
 
+        if (stepNumber === 0) {
+            const nextIndex = (this.settings.progressionIndex + 1) % prog.length;
+            if (nextIndex === 0 && this.settings.progressionIndex !== -1) {
+                this.progressionCycles++;
+            }
+            if (this.settings.progressionIndex === -1) {
+                this.settings.progressionIndex = 0;
+            } else {
+                this.settings.progressionIndex = nextIndex;
+            }
+        }
+
+        // --- FIX: VISUALS SEPARATED FROM AUDIO CALLBACK ---
         requestAnimationFrame(() => {
             this.updateVisualTracker(stepNumber);
-            if (stepNumber === 0 && this.onChordChange) {
-                const degreeIndex = this.progression[this.settings.progressionIndex];
-                this.onChordChange(degreeIndex);
+            if (stepNumber === 0 && this.onChordChange && prog) {
+                this.onChordChange(prog[this.settings.progressionIndex]);
             }
         });
 
-        // 1. Drums / Metronome
-        if (this.settings.metronome && (stepNumber % this.settings.metronomeSubdivision === 0)) {
-            playDrum('metronome', time);
+        // --- FIX: AUDIO CALLBACK CALLED SYNCHRONOUSLY ---
+        if (this.onStepCallback) {
+            // Pass the SCHEDULED TIME (time), not 'now'
+            this.onStepCallback(stepNumber, this.settings.progressionIndex, prog.length, this.progressionCycles, time);
         }
-        if (this.drumPattern?.kick?.[stepNumber]) playDrum('kick', time);
-        if (this.drumPattern?.snare?.[stepNumber]) playDrum('snare', time);
-        if (this.drumPattern?.hihat?.[stepNumber]) playDrum('hihat', time);
+        // ------------------------------------------------
 
-        // 2. Data Prep
+        if (this.settings.metronome && (stepNumber % this.settings.metronomeSubdivision === 0)) playDrum('metronome', time);
+        
+        // Drums
+        const drumPat = this.libraries.drums[this.state.drumName];
+        if (drumPat) {
+            if (drumPat.kick && drumPat.kick[stepNumber]) playDrum('kick', time);
+            if (drumPat.snare && drumPat.snare[stepNumber]) playDrum('snare', time);
+            if (drumPat.hihat && drumPat.hihat[stepNumber]) playDrum('hihat', time);
+        }
+
         const { key, scale } = this.getScaleData();
         const chords = getDiatonicChords(key, scale);
-        const degreeIndex = this.progression[this.settings.progressionIndex];
-        const chord = chords[degreeIndex];
+        
+        if (!prog || !chords) return;
+        const chordIndex = prog[this.settings.progressionIndex];
+        const chord = chords[chordIndex];
 
         if (chord) {
-            // TRACK 1: CHORDS (STRUMS)
-            if (this.rhythm[stepNumber]) {
+            const rhythmPat = this.libraries.rhythm[this.state.rhythmName];
+            if (rhythmPat && rhythmPat[stepNumber]) {
                 const isBassStr = this.settings.instrument === 'Bass Guitar';
                 const octaveOffset = isBassStr ? -1 : 0; 
-                const frequencies = chord.notes.map(note => {
-                    return this.getFrequencyForChord(note, key, chord.root, octaveOffset);
-                });
-                playStrum(frequencies, time, this.settings.instrument);
+                if (chord.notes) {
+                    const frequencies = chord.notes.map(note => this.getFrequencyForChord(note, key, chord.root, octaveOffset));
+                    playStrum(frequencies, time, this.settings.instrument, stepNumber);
+                }
             }
 
-            // TRACK 2: BASS (SINGLE NOTES)
-            const bassInstruction = this.bassPattern[stepNumber];
-            if (bassInstruction) {
+            const bassPat = this.libraries.bass[this.state.bassName];
+            const bassInstruction = bassPat ? bassPat[stepNumber] : null;
+            if (bassInstruction && chord.notes) {
                 let noteToPlay = chord.notes[0];
                 let octaveShift = 0;
                 if (bassInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
                 if (bassInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
                 if (bassInstruction === 'O') octaveShift = 1;
-
                 const bassFreq = this.getBassFrequency(noteToPlay, octaveShift);
-                startNote(bassFreq, -1, this.settings.bassInstrument, time, 0.4);
+                startNote(bassFreq, -1, this.settings.bassInstrument, time, 0.4, 'bass');
             }
 
-            // TRACK 3: LEAD / MELODY (NEW)
-            const melodyInstruction = this.melodyPattern[stepNumber];
-            if (melodyInstruction) {
+            const leadPat = this.libraries.lead[this.state.leadName];
+            const melodyInstruction = leadPat ? leadPat[stepNumber] : null;
+            if (melodyInstruction && chord.notes) {
                 let noteToPlay = chord.notes[0];
-                // Handle 3rds, 5ths, 7ths (if avail)
-                // Diatonic chords in our array only have 3 notes (triads) for now [0,1,2].
-                // We can fake a 7th or just wrap around.
-                
                 if (melodyInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
                 if (melodyInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
-                // For 7th, we don't have it in the chord object yet.
-                // Fallback: Octave of Root
                 if (melodyInstruction === 'O' || melodyInstruction === '7') noteToPlay = chord.notes[0]; 
-
-                // Calculate Frequency (High Octave: 4 or 5)
-                // Use a dedicated helper to ensure it floats above chords
                 const leadFreq = this.getMelodyFrequency(noteToPlay, melodyInstruction === 'O' ? 1 : 0);
-                
-                // Play shorter/staccato for clarity
-                startNote(leadFreq, -1, this.settings.leadInstrument, time, 0.2);
+                startNote(leadFreq, -1, this.settings.leadInstrument, time, 0.2, 'lead');
+            }
+
+            const samplesPat = this.libraries.samples[this.state.samplesName];
+            const samplesInstruction = samplesPat ? samplesPat[stepNumber] : null;
+            if (samplesInstruction && chord.notes) {
+                let noteToPlay = chord.notes[0];
+                if (samplesInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
+                if (samplesInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
+                if (samplesInstruction === 'O' || samplesInstruction === '7') noteToPlay = chord.notes[0]; 
+                const sampleFreq = this.getMelodyFrequency(noteToPlay, samplesInstruction === 'O' ? 1 : 0);
+                startNote(sampleFreq, -1, this.settings.samplesInstrument, time, 0.2, 'samples');
             }
         }
     }
     
-    // Helper: Chord Voicing
-    getFrequencyForChord(noteName, keyRootName, chordRootName, octaveOffset = 0) {
-        const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-        const noteIndex = SHARPS.indexOf(noteName);
-        const keyIndex = SHARPS.indexOf(keyRootName);
-        const chordRootIndex = SHARPS.indexOf(chordRootName);
-
-        let chordBaseOctave = 3 + octaveOffset;
-        if (chordRootIndex < keyIndex) chordBaseOctave += 1;
-
-        let noteOctave = chordBaseOctave;
-        if (noteIndex < chordRootIndex) noteOctave += 1;
-
-        return 440 * Math.pow(2, ((noteIndex - 9) + (noteOctave - 4) * 12) / 12);
-    }
-
-    // Helper: Bass Voicing (Low)
-    getBassFrequency(noteName, extraOctave = 0) {
-        const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-        const noteIndex = SHARPS.indexOf(noteName);
-        const targetOctave = 2 + extraOctave;
-        return 440 * Math.pow(2, ((noteIndex - 9) + (targetOctave - 4) * 12) / 12);
-    }
-
-    // Helper: Lead Voicing (High)
-    getMelodyFrequency(noteName, extraOctave = 0) {
-        const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-        const noteIndex = SHARPS.indexOf(noteName);
-        const targetOctave = 4 + extraOctave; // Starts at Octave 4, can go to 5
-        return 440 * Math.pow(2, ((noteIndex - 9) + (targetOctave - 4) * 12) / 12);
-    }
-
-    updateVisualTracker(step) {
-        const dots = this.container.querySelectorAll('.step-dot');
-        dots.forEach((d, i) => {
-            d.style.background = (i === step) ? '#00e5ff' : '#333';
-            d.style.boxShadow = (i === step) ? '0 0 10px #00e5ff' : 'none';
-        });
-    }
-
-    resetVisuals() {
-        const dots = this.container.querySelectorAll('.step-dot');
-        dots.forEach(d => {
-            d.style.background = '#333';
-            d.style.boxShadow = 'none';
-        });
-    }
+    // ... (Keep getFrequencyForChord, getBassFrequency, getMelodyFrequency, updateVisualTracker, resetVisuals) ...
+    getFrequencyForChord(n, k, r, o=0) { const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; const ni=SHARPS.indexOf(n); const ki=SHARPS.indexOf(k); const ri=SHARPS.indexOf(r); let bo=3+o; if(ri<ki) bo++; let no=bo; if(ni<ri) no++; return 440*Math.pow(2,((ni-9)+(no-4)*12)/12); }
+    getBassFrequency(n, o=0) { const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; return 440*Math.pow(2,((SHARPS.indexOf(n)-9)+(2+o-4)*12)/12); }
+    getMelodyFrequency(n, o=0) { const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; return 440*Math.pow(2,((SHARPS.indexOf(n)-9)+(4+o-4)*12)/12); }
+    updateVisualTracker(s) { this.container.querySelectorAll('.step-dot').forEach((d,i) => { d.style.background=(i===s)?'#00e5ff':'#333'; d.style.boxShadow=(i===s)?'0 0 10px #00e5ff':'none'; }); }
+    resetVisuals() { this.container.querySelectorAll('.step-dot').forEach(d => {d.style.background='#333'; d.style.boxShadow='none';}); }
 }
