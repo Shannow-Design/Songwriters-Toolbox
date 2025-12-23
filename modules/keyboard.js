@@ -1,6 +1,6 @@
 // modules/keyboard.js
 import { getNoteIndex, getNotes } from './theory.js';
-import { startNote, stopNote, INSTRUMENTS } from './audio.js'; // Import INSTRUMENTS
+import { startNote, stopNote, INSTRUMENTS } from './audio.js'; 
 
 const START_MIDI_NOTE = 48; // C3
 const NUM_KEYS = 25;        // C3 to C5
@@ -10,13 +10,13 @@ export class Keyboard {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
         this.display = document.getElementById('keyboard-info'); 
-        this.select = document.getElementById('keyboard-instrument-select'); // Grab Dropdown
+        this.select = document.getElementById('keyboard-instrument-select'); 
 
         this.highlightedIndices = []; 
         this.rootNoteIndex = -1; 
         this.pressedNotes = new Set(); 
         
-        this.instrument = 'Lead Synth'; // Default
+        this.instrument = 'Lead Synth'; 
 
         this.initUI();
         this.render(); 
@@ -24,7 +24,6 @@ export class Keyboard {
     }
 
     initUI() {
-        // Populate Instrument Select
         if (this.select) {
             Object.keys(INSTRUMENTS).forEach(name => {
                 const opt = document.createElement('option');
@@ -34,10 +33,8 @@ export class Keyboard {
             });
             this.select.value = this.instrument;
 
-            // Listener
             this.select.addEventListener('change', (e) => {
                 this.instrument = e.target.value;
-                // Focus container to prevent spacebar triggering dropdown
                 if(this.container) this.container.focus();
             });
         }
@@ -54,7 +51,6 @@ export class Keyboard {
 
         let svg = `<svg width="${svgWidth}" height="${keyHeight}" viewBox="0 0 ${svgWidth} ${keyHeight}">`;
         
-        // --- DRAW WHITE KEYS ---
         let x = 0;
         for (let i = 0; i < NUM_KEYS; i++) {
             const midiNote = START_MIDI_NOTE + i;
@@ -73,7 +69,6 @@ export class Keyboard {
             }
         }
 
-        // --- DRAW BLACK KEYS ---
         let whiteKeyX = 0;
         for (let i = 0; i < NUM_KEYS - 1; i++) {
             const midiNote = START_MIDI_NOTE + i;
@@ -125,11 +120,8 @@ export class Keyboard {
         this.highlightedIndices = noteNames.map(name => getNoteIndex(name));
         this.rootNoteIndex = rootNote ? getNoteIndex(rootNote) : -1;
         
-        if (label) {
-            this.updateDisplay(label);
-        } else {
-            this.updateDisplay(noteNames.join(' '));
-        }
+        if (label) this.updateDisplay(label);
+        else this.updateDisplay(noteNames.join(' '));
         this.render();
     }
     
@@ -141,14 +133,7 @@ export class Keyboard {
 
     updatePressedDisplay() {
         if (this.pressedNotes.size === 0) {
-            // Keep the Scale/Chord name visible if nothing is pressed
-            // or revert to Ready? Let's keep existing display unless empty.
-            // If we want to show keys being pressed, we can override.
-            // For now, let's just use it to show what keys are down.
-            if(this.display.textContent.includes(",")) { 
-                // Only reset if we were showing specific keys
-                this.updateDisplay("Ready");
-            }
+            if(this.display.textContent.includes(",")) this.updateDisplay("Ready");
             return;
         }
         const sortedMidi = Array.from(this.pressedNotes).sort((a,b) => a - b);
@@ -157,8 +142,7 @@ export class Keyboard {
     }
 
     isNoteHighlighted(midiNumber) {
-        const noteIndex = midiNumber % 12;
-        return this.highlightedIndices.includes(noteIndex);
+        return this.highlightedIndices.includes(midiNumber % 12);
     }
     
     clearHighlights() {
@@ -169,8 +153,7 @@ export class Keyboard {
     }
 
     getNoteNameFromMidi(midiNumber) {
-        const noteIndex = midiNumber % 12;
-        return SHARPS[noteIndex];
+        return SHARPS[midiNumber % 12];
     }
     
     getNoteNameWithOctave(midiNumber) {
@@ -195,23 +178,50 @@ export class Keyboard {
         });
     }
 
+    // --- MIDI LOGIC UPDATED ---
     initMIDI() {
         if (navigator.requestMIDIAccess) {
             navigator.requestMIDIAccess().then(
                 (midi) => {
-                    midi.inputs.forEach(input => {
-                        input.onmidimessage = (msg) => this.onMIDIMessage(msg);
-                    });
-                    const status = document.getElementById('midi-status-light');
-                    if(status && midi.inputs.size > 0) status.style.background = '#00ff00';
+                    // 1. Attach Initial Inputs
+                    this.attachInputs(midi);
+
+                    // 2. Listen for "Hot Swapping" (Turning on device after load)
+                    midi.onstatechange = (e) => {
+                        console.log('MIDI State Change:', e.port.name, e.port.state);
+                        this.attachInputs(midi);
+                    };
                 },
-                (err) => console.log('MIDI Failed', err)
+                (err) => console.log('MIDI Init Failed:', err)
             );
         }
     }
 
+    attachInputs(midi) {
+        const status = document.getElementById('midi-status-light');
+        let found = false;
+        
+        midi.inputs.forEach(input => {
+            // Re-bind message handler to ensure we catch it
+            input.onmidimessage = (msg) => this.onMIDIMessage(msg);
+            found = true;
+            console.log("MIDI Device Attached:", input.name);
+        });
+
+        if(status) {
+            status.style.background = found ? '#00ff00' : '#333';
+            status.style.boxShadow = found ? '0 0 10px #00ff00' : 'none';
+        }
+    }
+
     onMIDIMessage(message) {
-        const [command, note, velocity] = message.data;
+        const [status, note, velocity] = message.data;
+        
+        // MASK CHANNEL: 0xF0 ignores the channel number (0-15)
+        // Note On is 0x90-0x9F (144-159)
+        // Note Off is 0x80-0x8F (128-143)
+        const command = status & 0xF0; 
+
         if (command === 144 && velocity > 0) {
             this.handleNoteOn(note);
         } else if (command === 128 || (command === 144 && velocity === 0)) {
@@ -223,7 +233,6 @@ export class Keyboard {
         const key = this.container.querySelector(`#key-${midiNumber}`);
         if (key) key.style.fill = "var(--accent-pink)"; 
         
-        // Pass selected instrument to Audio Engine
         startNote(this.getFrequency(midiNumber), midiNumber, this.instrument);
         
         this.pressedNotes.add(midiNumber);
