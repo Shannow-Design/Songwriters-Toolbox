@@ -1,4 +1,4 @@
-const CACHE_NAME = 'songwriters-toolbox-v5';
+const CACHE_NAME = 'songwriters-toolbox-v7'; // Incremented version to force update
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -9,18 +9,39 @@ const ASSETS_TO_CACHE = [
   './modules/audio.js',
   './modules/chords.js',
   './modules/fretboard.js',
-  './modules/theory.js'
-  './modules/tuner.js'
+  './modules/theory.js',
+  './modules/tuner.js',
   './modules/keyboard.js',
-  './modules/sequencer.js,
+  './modules/sequencer.js',
+  // --- NEW MODULES ADDED BELOW ---
+  './modules/looper.js',
+  './modules/sampler.js',
+  './modules/storage.js'
 ];
 
 // Install Event: Cache files
 self.addEventListener('install', (event) => {
+  self.skipWaiting(); // Forces the new worker to activate immediately
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('Caching app assets...');
       return cache.addAll(ASSETS_TO_CACHE);
+    })
+  );
+});
+
+// Activate Event: Clean up old caches (Critical for updates)
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cache) => {
+          if (cache !== CACHE_NAME) {
+            console.log('Clearing old cache:', cache);
+            return caches.delete(cache);
+          }
+        })
+      );
     })
   );
 });
