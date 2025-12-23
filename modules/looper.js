@@ -10,15 +10,14 @@ export class Looper {
             buffer: null, 
             name: `Loop ${i+1}`,
             state: 'empty', 
-            isMuted: false,
+            isMuted: false, // false = Playing (Green), true = Muted (Grey)
             volume: 1.0,
             recorder: null,
             startTime: 0,
             activeSource: null,
-            gainNode: ctx.createGain() // Create gain node for each bank
+            gainNode: ctx.createGain() 
         }));
         
-        // Connect each bank's gain to the main looper mixer track
         this.banks.forEach(b => {
             b.gainNode.gain.value = 1.0;
             b.gainNode.connect(getTrackInput('looper'));
@@ -35,6 +34,51 @@ export class Looper {
     setBpm(bpm) {
         this.bpm = bpm;
     }
+
+    // --- STATE MANAGEMENT ---
+    getSettings() {
+        // Snapshot current state
+        const settings = this.banks.map(b => ({
+            muted: b.isMuted,
+            volume: b.volume
+        }));
+        console.log("Looper: Settings Captured", settings);
+        return settings;
+    }
+
+    applySettings(settings) {
+        if (!settings || !Array.isArray(settings)) {
+            console.warn("Looper: No settings to apply");
+            return;
+        }
+        
+        console.log("Looper: Applying Settings", settings);
+
+        settings.forEach((s, i) => {
+            const bank = this.banks[i];
+            if (bank) {
+                // 1. Apply Mute
+                const shouldMute = s.muted; 
+                // If we are playing and need to mute, stop audio immediately
+                if (shouldMute && !bank.isMuted && bank.activeSource) {
+                    try { bank.activeSource.stop(); } catch(e) {}
+                    bank.activeSource = null;
+                }
+                bank.isMuted = shouldMute;
+
+                // 2. Apply Volume
+                const newVol = (typeof s.volume === 'number') ? s.volume : 1.0;
+                this.updateVolume(i, newVol);
+                
+                // 3. Force UI Update
+                const slider = this.container.querySelector(`.loop-vol-slider[data-index="${i}"]`);
+                if(slider) slider.value = newVol;
+                
+                this.updateBankUI(i);
+            }
+        });
+    }
+    // ------------------------
 
     async loadLoops() {
         for(let i=0; i<4; i++) {
@@ -72,7 +116,6 @@ export class Looper {
                     try { bank.activeSource.stop(time); } catch(e){}
                 }
                 const playTime = time || ctx.currentTime;
-                // PASS BANK GAIN NODE AS CUSTOM DESTINATION
                 const result = playSample(-1, playTime, null, 'looper', bank.buffer, bank.gainNode);
                 if (result) bank.activeSource = result.osc; 
             }
@@ -196,12 +239,12 @@ export class Looper {
         if(bank.buffer) SampleStorage.saveSample(index, bank.buffer, newName, 'loop');
     }
 
-    // New: Update Volume
     updateVolume(index, val) {
         const bank = this.banks[index];
         bank.volume = val;
-        // Smooth transition to avoid clicks
-        bank.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.05);
+        if (bank.gainNode && isFinite(val)) {
+            bank.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.05);
+        }
     }
 
     render() {
@@ -312,7 +355,7 @@ export class Looper {
             /* ARM STATE */
             .btn-loop-arm.armed { background: #ff0055; color: white; box-shadow: 0 0 8px rgba(255, 0, 85, 0.4); }
             
-            /* PLAY STATE */
+            /* PLAY STATE (GREEN when Playing/Unmuted) */
             .btn-loop-play.playing { background: var(--primary-cyan); color: #000; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); }
 
             .loop-vol-slider { width: 80%; height: 3px; accent-color: var(--primary-cyan); cursor: pointer; }
@@ -340,7 +383,6 @@ export class Looper {
             inp.addEventListener('change', (e) => this.updateName(parseInt(e.target.dataset.index), e.target.value));
         });
 
-        // Volume Slider Binding
         this.container.querySelectorAll('.loop-vol-slider').forEach(inp => {
             inp.addEventListener('input', (e) => {
                 this.updateVolume(parseInt(e.target.dataset.index), parseFloat(e.target.value));
@@ -380,6 +422,7 @@ export class Looper {
     updateBankUI(index) {
         const bank = this.banks[index];
         const el = document.getElementById(`loop-bank-${index}`);
+        if(!el) return;
         const status = document.getElementById(`loop-status-${index}`);
         const btnArm = el.querySelector('.btn-loop-arm');
         const btnPlay = el.querySelector('.btn-loop-play');
@@ -387,15 +430,11 @@ export class Looper {
         const isLoaded = (bank.state !== 'empty');
         const isActive = (bank.state === 'recording' || (bank.state === 'playing' && !bank.isMuted));
         
-        // Update Card Classes
         if (isLoaded) el.classList.add('loaded'); else el.classList.remove('loaded');
         if (isActive) el.classList.add('active-slot'); else el.classList.remove('active-slot');
 
-        // Status Text
         status.textContent = bank.state.toUpperCase();
 
-        // Button States
-        // ARM Button
         if (bank.state === 'armed' || bank.state === 'recording') {
             btnArm.classList.add('armed');
             btnArm.textContent = (bank.state === 'recording') ? '● REC' : '● ARM';
@@ -404,9 +443,9 @@ export class Looper {
             btnArm.textContent = '● ARM';
         }
 
-        // PLAY Button (Mute Toggle)
+        // Green button means PLAYING (Unmuted). Grey means MUTED.
         if (!bank.isMuted) {
-            btnPlay.classList.add('playing');
+            btnPlay.classList.add('playing'); 
         } else {
             btnPlay.classList.remove('playing');
         }

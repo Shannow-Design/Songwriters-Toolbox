@@ -2,7 +2,7 @@
 import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb } from './audio.js';
 import { getDiatonicChords } from './theory.js';
 
-// ... (KEEP ALL DATA CONSTANTS UNCHANGED: DRUM_PATTERNS ... ROMAN_NUMERALS) ...
+// --- DATA CONSTANTS ---
 const DRUM_PATTERNS = {
     'Basic Rock': { kick: [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0] },
     'Four on Floor': { kick: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0] },
@@ -71,13 +71,14 @@ const ROMAN_NUMERALS = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
 // --- SEQUENCER CLASS ---
 
 export class Sequencer {
-    constructor(containerId, getScaleDataCallback, onChordChangeCallback, onPresetLoadCallback, onStepCallback, onStopCallback) {
+    constructor(containerId, getScaleDataCallback, onChordChangeCallback, onPresetLoadCallback, onStepCallback, onStopCallback, getLooperDataCallback) {
         this.container = document.getElementById(containerId);
         this.getScaleData = getScaleDataCallback; 
         this.onChordChange = onChordChangeCallback; 
         this.onPresetLoad = onPresetLoadCallback;
         this.onStepCallback = onStepCallback; 
         this.onStopCallback = onStopCallback; 
+        this.getLooperData = getLooperDataCallback; 
 
         // Main State
         this.isPlaying = false;
@@ -135,10 +136,7 @@ export class Sequencer {
             reverbs: { chords:0.1, bass:0.1, lead:0.1, samples:0.1 },
             octaves: { chords: 0, bass: 0, lead: 0, samples: 0 },
             drops: { chords: false, bass: false, lead: false, samples: false },
-            
-            // NEW: Toggle for Up-Strums
             upStrums: true,
-            
             progressionIndex: 0 
         };
 
@@ -220,7 +218,6 @@ export class Sequencer {
                     <div class="control-group">
                         ${createHeader('Rhythm', 'rhythm')}
                         <select id="sel-rhythm"></select>
-                        
                         <div style="display:flex; align-items:center; margin-top:5px; cursor:pointer;" title="Alternating Up/Down strums">
                             <input type="checkbox" id="cb-alt-strum" style="width:12px; height:12px; accent-color:var(--primary-cyan);" checked>
                             <label for="cb-alt-strum" style="font-size:0.7rem; color:#888; margin-left:5px; cursor:pointer;">Alt Strum</label>
@@ -495,16 +492,48 @@ export class Sequencer {
     addProgStep() { const cont = document.getElementById('chord-selectors-container'); const sel = document.createElement('select'); sel.className = 'prog-step-select'; sel.style.width = '50px'; sel.style.margin='2px'; ROMAN_NUMERALS.forEach((r, i) => sel.add(new Option(r, i))); cont.appendChild(sel); }
     saveCustomProgression() { const name = document.getElementById('new-prog-name').value.trim() || "My Prog"; const sels = document.querySelectorAll('.prog-step-select'); const indices = Array.from(sels).map(s => parseInt(s.value)); this.customData.progressions[name] = indices; this.libraries.progression[name] = indices; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); this.container.querySelector('#sel-progression').value = name; this.state.progressionName = name; document.getElementById('prog-modal').style.display = 'none'; }
     deleteCurrentProgression() { if(confirm(`Delete ${this.state.progressionName}?`)) { delete this.customData.progressions[this.state.progressionName]; delete this.libraries.progression[this.state.progressionName]; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); } }
-    savePreset() { const name = prompt("Preset Name:", "My Track"); if(!name) return; const ks = this.getScaleData(); const preset = { name, bpm: this.bpm, key: ks.key, scale: ks.scale, settings: this.settings, state: this.state }; this.savedPresets[name] = preset; localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); this.refreshPresetList(); this.container.querySelector('#sel-presets').value = name; this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; }
     
-    // UPDATED LOAD PRESET TO RESTORE ALT STRUM
+    // --- UPDATED: Save Preset with Looper Data ---
+    savePreset() { 
+        const name = prompt("Preset Name:", "My Track"); 
+        if(!name) return; 
+        
+        const ks = this.getScaleData(); 
+        
+        // Grab Looper settings if callback exists
+        const looperSettings = this.getLooperData ? this.getLooperData() : null;
+        console.log("Saving Preset:", name, looperSettings); // DEBUG
+
+        const preset = { 
+            name, 
+            bpm: this.bpm, 
+            key: ks.key, 
+            scale: ks.scale, 
+            settings: this.settings, 
+            state: this.state,
+            looper: looperSettings // Save it!
+        }; 
+        
+        this.savedPresets[name] = preset; 
+        localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); 
+        this.refreshPresetList(); 
+        this.container.querySelector('#sel-presets').value = name; 
+        this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; 
+    }
+    
+    // --- UPDATED: Load Preset returns Looper Data ---
     loadPreset(name) { 
-        const p = this.savedPresets[name]; if(!p) return; this.bpm = p.bpm; this.settings = p.settings; this.state = p.state; 
-        this.container.querySelector('#bpm-slider').value = this.bpm; this.container.querySelector('#bpm-val').textContent = this.bpm; this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; 
+        const p = this.savedPresets[name]; if(!p) return; 
+        this.bpm = p.bpm; this.settings = p.settings; this.state = p.state; 
+        
+        // Update UI
+        this.container.querySelector('#bpm-slider').value = this.bpm; 
+        this.container.querySelector('#bpm-val').textContent = this.bpm; 
+        this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; 
+        
         const setVal = (id, val) => { const el = this.container.querySelector(id); if(el) el.value = val; }; 
         setVal('#sel-instrument', this.settings.instrument); setVal('#sel-bass-instrument', this.settings.bassInstrument); setVal('#sel-lead-instrument', this.settings.leadInstrument); setVal('#sel-samples-instrument', this.settings.samplesInstrument); setVal('#sel-rhythm', this.state.rhythmName); setVal('#sel-bass-pattern', this.state.bassName); setVal('#sel-lead-pattern', this.state.leadName); setVal('#sel-samples-pattern', this.state.samplesName); setVal('#sel-drums', this.state.drumName); setVal('#sel-progression', this.state.progressionName); 
         
-        // Restore Octave, Drop & Alt Strum UI
         if(this.settings.octaves) {
             ['chords','bass','lead','samples'].forEach(t => {
                 const elOct = this.container.querySelector(`#sel-oct-${t}`);
@@ -514,14 +543,34 @@ export class Sequencer {
             });
         }
         
-        // Restore Alt Strum checkbox
         const elAlt = this.container.querySelector('#cb-alt-strum');
-        if(elAlt) elAlt.checked = (this.settings.upStrums !== false); // default true if undefined
+        if(elAlt) elAlt.checked = (this.settings.upStrums !== false);
 
-        const applyMix = (t) => { setVal(`#vol-${t}`, this.settings.volumes[t]); setVal(`#filt-${t}`, this.settings.filters[t]); if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); setTrackVolume(t, this.settings.volumes[t]); setTrackFilter(t, this.settings.filters[t]); if(t!=='drums') setTrackReverb(t, this.settings.reverbs[t]); }; ['chords','bass','lead','samples','drums'].forEach(applyMix); this.populateDropdowns(); if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale}); 
+        const applyMix = (t) => { 
+            setVal(`#vol-${t}`, this.settings.volumes[t]); 
+            setVal(`#filt-${t}`, this.settings.filters[t]); 
+            if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); 
+            
+            // Check for finite numbers before applying
+            if(isFinite(this.settings.volumes[t])) setTrackVolume(t, this.settings.volumes[t]); 
+            if(isFinite(this.settings.filters[t])) setTrackFilter(t, this.settings.filters[t]); 
+            if(t!=='drums' && isFinite(this.settings.reverbs[t])) setTrackReverb(t, this.settings.reverbs[t]); 
+        }; 
+        ['chords','bass','lead','samples','drums'].forEach(applyMix); 
+        
+        this.populateDropdowns(); 
+        
+        // Pass looper data back up
+        if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale, looper: p.looper}); 
     }
+
     refreshPresetList() { const sel = this.container.querySelector('#sel-presets'); sel.innerHTML = '<option value="">Load...</option>'; Object.keys(this.savedPresets).forEach(k => sel.add(new Option(k, k))); }
     deletePreset() { const name = this.container.querySelector('#sel-presets').value; if(name && confirm('Delete?')) { delete this.savedPresets[name]; localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); this.refreshPresetList(); this.container.querySelector('#btn-del-preset').style.display = 'none'; } }
+
+    resetProgressionIndex() {
+        this.settings.progressionIndex = -1;
+        this.progressionCycles = 0;
+    }
 
     togglePlay() {
         this.isPlaying = !this.isPlaying;
@@ -636,8 +685,6 @@ export class Sequencer {
                         this.getFrequencyForChord(note, key, chord.root, octaveOffset + chordOct, chordDrop)
                     );
                     
-                    // FIX: Check "Alt Strum" setting. 
-                    // If true, pass stepNumber (0,1,2...). If false, pass 0 (always down).
                     const strumStep = this.settings.upStrums ? stepNumber : 0;
                     playStrum(frequencies, time, this.settings.instrument, strumStep);
                 }

@@ -7,6 +7,12 @@ const ENHARMONIC_MAP = { 'Cb': 'B', 'Db': 'C#', 'Eb': 'D#', 'Fb': 'E', 'Gb': 'F#
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 export const ctx = new AudioContext();
 
+// --- EXPORTED STATE ---
+export const SAMPLE_BANKS = new Array(8).fill(null);
+
+// --- RECORDING BUS ---
+const recordingDest = ctx.createMediaStreamDestination();
+
 // --- MASTER MIXER ---
 const masterCompressor = ctx.createDynamicsCompressor();
 masterCompressor.threshold.setValueAtTime(-8, ctx.currentTime);
@@ -38,7 +44,43 @@ reverbNode.buffer = createImpulse(2.0, 2.0);
 masterCompressor.connect(masterGain);
 reverbNode.connect(reverbGain);
 reverbGain.connect(masterGain);
+
+// Master outputs
 masterGain.connect(ctx.destination);
+masterGain.connect(recordingDest); 
+
+// --- VOCAL FX CHAIN ---
+export function createVocalChain() {
+    const lowCut = ctx.createBiquadFilter();
+    lowCut.type = 'highpass';
+    lowCut.frequency.value = 100; 
+
+    const highShelf = ctx.createBiquadFilter();
+    highShelf.type = 'highshelf';
+    highShelf.frequency.value = 5000;
+    highShelf.gain.value = 3; 
+
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -20;
+    compressor.knee.value = 20;
+    compressor.ratio.value = 8;
+    compressor.attack.value = 0.01;
+    compressor.release.value = 0.2;
+
+    const reverbSend = ctx.createGain();
+    reverbSend.gain.value = 0.3; 
+
+    lowCut.connect(highShelf);
+    highShelf.connect(compressor);
+    compressor.connect(reverbSend);
+    reverbSend.connect(reverbNode);
+
+    return {
+        input: lowCut,
+        output: compressor, 
+        reverbSend: reverbSend
+    };
+}
 
 // --- MICROPHONE INPUT SYSTEM ---
 export const Microphone = {
@@ -46,8 +88,10 @@ export const Microphone = {
     sourceNode: null,
     gainNode: null,
     analyserNode: null,
-    destinationNode: null,
+    fxChain: null,
     isInitialized: false,
+    studioConnection: null, 
+    useFx: false,
 
     async init() {
         if (this.isInitialized) return;
@@ -56,8 +100,8 @@ export const Microphone = {
             const constraints = {
                 audio: {
                     echoCancellation: false,
-                    autoGainControl: false,
-                    noiseSuppression: false,
+                    autoGainControl: false, 
+                    noiseSuppression: false, 
                     latency: 0,
                     channelCount: 1 
                 }
@@ -72,15 +116,14 @@ export const Microphone = {
             this.analyserNode = ctx.createAnalyser();
             this.analyserNode.fftSize = 256;
             
-            this.destinationNode = ctx.createMediaStreamDestination();
+            this.fxChain = createVocalChain();
 
             this.sourceNode.connect(this.gainNode);
             this.gainNode.connect(this.analyserNode);
-            this.analyserNode.connect(this.destinationNode); 
-
-            this.stream = this.destinationNode.stream; 
+            
+            this.stream = rawStream; 
             this.isInitialized = true;
-            console.log("Microphone Initialized with HQ constraints");
+            console.log("Microphone Initialized");
 
         } catch (err) {
             console.error("Microphone Init Failed:", err);
@@ -89,9 +132,19 @@ export const Microphone = {
     },
 
     setGain(val) {
-        if(this.gainNode) {
+        if(this.gainNode && isFinite(val)) {
             this.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.02);
         }
+    },
+    
+    setReverbAmount(val) {
+        if(this.fxChain && isFinite(val)) {
+            this.fxChain.reverbSend.gain.setTargetAtTime(val, ctx.currentTime, 0.02);
+        }
+    },
+
+    setFxEnabled(enabled) {
+        this.useFx = enabled;
     },
 
     getLevel() {
@@ -105,8 +158,49 @@ export const Microphone = {
             sum += x * x;
         }
         return Math.sqrt(sum / dataArray.length);
+    },
+
+    connectToStudio() {
+        if (!this.gainNode) return;
+        this.disconnectFromStudio();
+
+        if (this.useFx && this.fxChain) {
+            this.gainNode.connect(this.fxChain.input);
+            this.studioConnection = this.fxChain.output.connect(recordingDest);
+        } else {
+            this.studioConnection = this.gainNode.connect(recordingDest);
+        }
+    },
+
+    disconnectFromStudio() {
+        if (this.gainNode) {
+            try { this.gainNode.disconnect(recordingDest); } catch(e){}
+            if (this.fxChain) {
+                try { this.gainNode.disconnect(this.fxChain.input); } catch(e){}
+                try { this.fxChain.output.disconnect(recordingDest); } catch(e){}
+            }
+            this.studioConnection = null;
+        }
     }
 };
+
+// --- STUDIO RECORDING FUNCTION ---
+export function startStudioRecording() {
+    Microphone.connectToStudio();
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+    const recorder = new MediaRecorder(recordingDest.stream, { mimeType, audioBitsPerSecond: 256000 });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    const stopPromise = new Promise(resolve => {
+        recorder.onstop = () => {
+            Microphone.disconnectFromStudio();
+            const blob = new Blob(chunks, { type: 'audio/webm' });
+            resolve(blob);
+        };
+    });
+    recorder.start();
+    return { stop: () => { if (recorder.state !== 'inactive') recorder.stop(); return stopPromise; } };
+}
 
 // --- TRACK MIXER ---
 const tracks = ['chords', 'bass', 'lead', 'drums', 'samples', 'looper'];
@@ -132,23 +226,20 @@ tracks.forEach(name => {
     mixer[name] = { input, filter, volume, reverbSend };
 });
 
-export function setTrackVolume(t, v) { if(mixer[t]) mixer[t].volume.gain.setTargetAtTime(v, ctx.currentTime, 0.02); }
+export function setTrackVolume(t, v) { if(mixer[t] && isFinite(v)) mixer[t].volume.gain.setTargetAtTime(v, ctx.currentTime, 0.02); }
 export function setTrackFilter(t, v) { 
-    if(mixer[t]) {
+    if(mixer[t] && isFinite(v)) {
         const freq = Math.exp(Math.log(100) + v * (Math.log(20000) - Math.log(100)));
         mixer[t].filter.frequency.setTargetAtTime(freq, ctx.currentTime, 0.05);
     }
 }
-export function setTrackReverb(t, v) { if(mixer[t]) mixer[t].reverbSend.gain.setTargetAtTime(v * 0.8, ctx.currentTime, 0.02); }
+export function setTrackReverb(t, v) { if(mixer[t] && isFinite(v)) mixer[t].reverbSend.gain.setTargetAtTime(v * 0.8, ctx.currentTime, 0.02); }
 
-// NEW: Helper to get a mixer track input (so Looper can connect its own gain nodes)
 export function getTrackInput(name) {
     return mixer[name] ? mixer[name].input : masterCompressor;
 }
 
-// --- SAMPLER ENGINE ---
-export const SAMPLE_BANKS = new Array(8).fill(null);
-
+// --- SAMPLER FUNCTIONS ---
 export async function loadSavedSamples() {
     for(let i=0; i<8; i++) {
         const entry = await SampleStorage.loadSample(i, ctx);
@@ -156,175 +247,101 @@ export async function loadSavedSamples() {
     }
 }
 
-// 1. RECORDING
 export function recordSample(stream, maxLen = 10.0) {
-    const types = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
-    const mimeType = types.find(t => MediaRecorder.isTypeSupported(t)) || "";
-    const options = mimeType ? { mimeType } : {};
-    
-    const mediaRecorder = new MediaRecorder(stream, options);
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+    const mediaRecorder = new MediaRecorder(stream, { mimeType });
     const chunks = [];
-
-    mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-    };
-
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     const result = new Promise(resolve => {
         mediaRecorder.onstop = async () => {
             try {
                 if (chunks.length === 0) { resolve(null); return; }
-                const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+                const blob = new Blob(chunks, { type: mimeType });
                 const arrayBuffer = await blob.arrayBuffer();
                 try {
                     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
                     resolve(audioBuffer);
-                } catch(e) { console.error(e); resolve(null); }
-            } catch (err) { console.error(err); resolve(null); }
+                } catch(e) { resolve(null); }
+            } catch (err) { resolve(null); }
         };
     });
-
     mediaRecorder.start();
-
-    const timeoutId = setTimeout(() => {
-        if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    }, maxLen * 1000);
-
-    return {
-        result,
-        stop: () => {
-            clearTimeout(timeoutId);
-            if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-        }
-    };
+    const timeoutId = setTimeout(() => { if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); }, maxLen * 1000);
+    return { result, stop: () => { clearTimeout(timeoutId); if (mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } };
 }
 
-// 2. TRIM & NORMALIZE
 export function autoTrimBuffer(buffer) {
     if (!buffer) return null;
     const data = buffer.getChannelData(0);
     const threshold = 0.02; 
     let start = 0, end = data.length;
-
-    for (let i = 0; i < data.length; i++) {
-        if (Math.abs(data[i]) > threshold) { start = i; break; }
-    }
-    for (let i = data.length - 1; i >= start; i--) {
-        if (Math.abs(data[i]) > threshold) { end = i + 1; break; }
-    }
-    start = Math.max(0, start - 200);
-    end = Math.min(data.length, end + 2000); 
-    const length = end - start;
-    if (length <= 0) return buffer;
-
+    for (let i = 0; i < data.length; i++) { if (Math.abs(data[i]) > threshold) { start = i; break; } }
+    for (let i = data.length - 1; i >= start; i--) { if (Math.abs(data[i]) > threshold) { end = i + 1; break; } }
+    start = Math.max(0, start - 200); end = Math.min(data.length, end + 2000); 
+    const length = end - start; if (length <= 0) return buffer;
     const trimmed = ctx.createBuffer(1, length, buffer.sampleRate);
     const trimmedData = trimmed.getChannelData(0);
-    
-    let maxAmp = 0;
-    for (let i = start; i < end; i++) {
-        const abs = Math.abs(data[i]);
-        if (abs > maxAmp) maxAmp = abs;
-    }
+    let maxAmp = 0; for (let i = start; i < end; i++) { const abs = Math.abs(data[i]); if (abs > maxAmp) maxAmp = abs; }
     const gainMult = 0.95 / (maxAmp || 1); 
-
-    for (let i = 0; i < length; i++) {
-        trimmedData[i] = data[start + i] * gainMult;
-    }
+    for (let i = 0; i < length; i++) { trimmedData[i] = data[start + i] * gainMult; }
     return trimmed;
 }
 
-// 3. FADE IN/OUT
 export function applyFades(buffer, fadeTime = 0.01) { 
     if (!buffer) return null;
-    
     const fadeSamples = Math.floor(fadeTime * buffer.sampleRate);
     const len = buffer.length;
-    
     if(len < fadeSamples * 2) return buffer;
-
     for (let c = 0; c < buffer.numberOfChannels; c++) {
         const data = buffer.getChannelData(c);
-        for (let i = 0; i < fadeSamples; i++) {
-            data[i] *= (i / fadeSamples);
-        }
-        for (let i = 0; i < fadeSamples; i++) {
-            const index = len - 1 - i;
-            data[index] *= (i / fadeSamples);
-        }
+        for (let i = 0; i < fadeSamples; i++) { data[i] *= (i / fadeSamples); }
+        for (let i = 0; i < fadeSamples; i++) { const index = len - 1 - i; data[index] *= (i / fadeSamples); }
     }
     return buffer;
 }
 
-// 4. SHIFT BUFFER
 export function shiftBuffer(buffer, shiftMs) {
     if (!buffer || shiftMs <= 0) return buffer;
-    
     const shiftSamples = Math.floor((shiftMs / 1000) * buffer.sampleRate);
     const newLen = buffer.length - shiftSamples;
-    
     if (newLen <= 0) return buffer; 
-
     const newBuf = ctx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
-
     for(let c=0; c<buffer.numberOfChannels; c++) {
         const oldData = buffer.getChannelData(c);
         const newData = newBuf.getChannelData(c);
-        for(let i=0; i<newLen; i++) {
-            newData[i] = oldData[i + shiftSamples];
-        }
+        for(let i=0; i<newLen; i++) { newData[i] = oldData[i + shiftSamples]; }
     }
     return newBuf;
 }
 
-// 5. PLAYBACK (UPDATED: Accepts customDest for per-loop volume control)
 export function playSample(slotIndex, time, freq = null, track = 'lead', bufferOverride = null, customDest = null) {
     let buffer;
-    
-    if (bufferOverride) {
-        buffer = bufferOverride; 
-    } else {
-        const entry = SAMPLE_BANKS[slotIndex];
-        if (!entry || !entry.buffer) return null;
+    if (bufferOverride) { buffer = bufferOverride; } else {
+        const entry = SAMPLE_BANKS[slotIndex]; if (!entry || !entry.buffer) return null;
         buffer = entry.buffer;
     }
-
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-
     if (freq) {
         let baseFreq = (track === 'bass') ? 65.41 : 130.81; 
-        let rate = freq / baseFreq;
-        if(rate < 0.1) rate = 0.1;
-        if(rate > 4.0) rate = 4.0;
+        let rate = freq / baseFreq; if(rate < 0.1) rate = 0.1; if(rate > 4.0) rate = 4.0;
         source.playbackRate.value = rate;
     }
-
-    // Use custom destination (like a bank's volume node) if provided, otherwise default to mixer track
     const dest = customDest || (mixer[track] ? mixer[track].input : mixer.lead.input);
-    
     source.connect(dest);
     source.start(time);
-    
     return { osc: source, gain: null, type: 'sampler' }; 
 }
 
-// 6. LOAD FILE
 export async function decodeAudioFile(file) {
     try {
         const arrayBuffer = await file.arrayBuffer();
         return await ctx.decodeAudioData(arrayBuffer);
-    } catch (e) {
-        console.error("File Decode Error", e);
-        return null;
-    }
+    } catch (e) { console.error("File Decode Error", e); return null; }
 }
 
-// 7. SAVE FILE
 export function bufferToWav(buffer) {
-    const numChannels = 1; 
-    const sampleRate = buffer.sampleRate;
-    const format = 1; 
-    const bitDepth = 16;
-    
+    const numChannels = 1; const sampleRate = buffer.sampleRate; const format = 1; const bitDepth = 16;
     const data = buffer.getChannelData(0);
     const byteRate = sampleRate * numChannels * bitDepth / 8;
     const blockAlign = numChannels * bitDepth / 8;
@@ -332,25 +349,11 @@ export function bufferToWav(buffer) {
     const bufferLen = 44 + dataSize;
     const wav = new ArrayBuffer(bufferLen);
     const view = new DataView(wav);
-
-    const writeString = (view, offset, string) => {
-        for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
-    };
-
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + dataSize, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, format, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitDepth, true);
-    writeString(view, 36, 'data');
+    const writeString = (view, offset, string) => { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); };
+    writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true); view.setUint16(20, format, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitDepth, true); writeString(view, 36, 'data');
     view.setUint32(40, dataSize, true);
-
     let offset = 44;
     for (let i = 0; i < data.length; i++) {
         let sample = Math.max(-1, Math.min(1, data[i]));
@@ -358,11 +361,10 @@ export function bufferToWav(buffer) {
         view.setInt16(offset, sample, true);
         offset += 2;
     }
-
     return new Blob([view], { type: 'audio/wav' });
 }
 
-// --- SYNTH ENGINE ---
+// --- SYNTH INSTRUMENTS ---
 export const INSTRUMENTS = {
     'Acoustic Guitar': { type: 'triangle', attack: 0.02, decay: 0.4, sustain: 0, release: 0.1 }, 
     'Piano':           { type: 'sine', attack: 0.01, decay: 0.8, sustain: 0.2, release: 0.5, type2: 'triangle', mix: 0.3 }, 
