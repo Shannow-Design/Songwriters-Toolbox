@@ -310,6 +310,7 @@ export class Looper {
             .input-controls-header { 
                 background: #1a1a1a; padding: 8px 15px; border-radius: 6px; margin-bottom: 10px; 
                 display: flex; gap: 20px; align-items: center; border: 1px solid #333;
+                flex-wrap: wrap; /* FIX: Allows header controls to wrap on mobile */
             }
             .ctrl-group { display: flex; flex-direction: column; gap: 2px; }
             .ctrl-group label { font-size: 0.65rem; color: #888; letter-spacing: 1px; font-weight:bold; }
@@ -318,7 +319,12 @@ export class Looper {
             .meter-bg { width: 100%; height: 6px; background: #333; border-radius: 3px; overflow: hidden; margin-top:5px; }
             .meter-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00e5ff, #00ff55, #ffff00, #ff0055); transition: width 0.05s; }
 
-            .looper-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+            .looper-grid { 
+                display: grid; 
+                /* FIX: Auto-fit allows grid to switch from 1x4 to 2x2 or 1x1 on mobile */
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+                gap: 10px; 
+            }
             
             .looper-bank { 
                 background: #222; border: 2px solid #333; border-radius: 6px; padding: 10px; 
