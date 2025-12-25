@@ -71,6 +71,7 @@
                 <div class="flex flex-col gap-2">
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-tuner" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Chromatic Tuner</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-buttons" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Note Buttons</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-circle" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Circle of Fifths</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-keyboard" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Keyboard (MIDI)</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-guitar" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Guitar Fretboard</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-bass" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Bass Fretboard</span></label></div>
@@ -108,6 +109,11 @@
         <div id="wrapper-buttons" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Scale Notes</h3>
             <section id="note-buttons-display" class="flex gap-4 justify-center flex-wrap"></section>
+        </div>
+
+        <div id="wrapper-circle" class="bg-gray-900 border border-gray-800 p-6 rounded-xl flex flex-col items-center">
+            <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Circle of Fifths</h3>
+            <section id="circle-container" class="w-full flex justify-center"></section>
         </div>
 
         <div id="wrapper-keyboard" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
