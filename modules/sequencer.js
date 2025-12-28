@@ -1,6 +1,6 @@
 // modules/sequencer.js
 import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb } from './audio.js';
-import { getDiatonicChords } from './theory.js';
+import { getDiatonicChords, generateScale } from './theory.js';
 
 // --- DATA CONSTANTS ---
 const DRUM_PATTERNS = {
@@ -14,33 +14,33 @@ const DRUM_PATTERNS = {
 };
 
 const BASS_PATTERNS = {
-    'Root Notes':    ['R',null,null,null, 'R',null,null,null, 'R',null,null,null, 'R',null,null,null],
-    'Root & Fifth':  ['R',null,null,null, '5',null,null,null, 'R',null,null,null, '5',null,null,null],
-    'Walking':       ['R',null,'3',null, '5',null,'O',null, 'R',null,'3',null, '5',null,'O',null],
-    'Disco Octaves': ['R',null,'O',null, 'R',null,'O',null, 'R',null,'O',null, 'R',null,'O',null],
-    'Offbeat Pump':  [null,'R',null,'R', null,'R',null,'R', null,'R',null,'R', null,'R',null,'R'],
-    'Running 8ths':  ['R',null,'R',null, 'R',null,'R',null, 'R',null,'R',null, 'R',null,'R',null],
+    'Root Notes':    ['1',null,null,null, '1',null,null,null, '1',null,null,null, '1',null,null,null],
+    'Root & Fifth':  ['1',null,null,null, '5',null,null,null, '1',null,null,null, '5',null,null,null],
+    'Walking':       ['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null],
+    'Disco Octaves': ['1',null,'8',null, '1',null,'8',null, '1',null,'8',null, '1',null,'8',null],
+    'Offbeat Pump':  [null,'1',null,'1', null,'1',null,'1', null,'1',null,'1', null,'1',null,'1'],
+    'Running 8ths':  ['1',null,'1',null, '1',null,'1',null, '1',null,'1',null, '1',null,'1',null],
     'Empty':         Array(16).fill(null)
 };
 
 const MELODY_PATTERNS = {
-    'Arp Up (8ths)':     ['R',null,'3',null, '5',null,'O',null, 'R',null,'3',null, '5',null,'O',null],
-    'Arp Down (8ths)':   ['O',null,'5',null, '3',null,'R',null, 'O',null,'5',null, '3',null,'R',null],
-    'Fast Arp (16ths)':  ['R','3','5','O', '5','3','R','3', '5','O','R','3', '5','O','5','3'],
-    'Alberti':           ['R',null,'5',null, '3',null,'5',null, 'R',null,'5',null, '3',null,'5',null],
-    'Staircase':         ['R',null,'3',null, 'R',null,'5',null, 'R',null,'O',null, 'R',null,'5',null],
-    'Pedal Point':       ['O',null,'3',null, 'O',null,'5',null, 'O',null,'R',null, 'O',null,'5',null],
+    'Arp Up (8ths)':     ['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null],
+    'Arp Down (8ths)':   ['8',null,'5',null, '3',null,'1',null, '8',null,'5',null, '3',null,'1',null],
+    'Fast Arp (16ths)':  ['1','3','5','8', '5','3','1','3', '5','8','1','3', '5','8','5','3'],
+    'Alberti':           ['1',null,'5',null, '3',null,'5',null, '1',null,'5',null, '3',null,'5',null],
+    'Staircase':         ['1',null,'3',null, '1',null,'5',null, '1',null,'8',null, '1',null,'5',null],
+    'Pedal Point':       ['8',null,'3',null, '8',null,'5',null, '8',null,'1',null, '8',null,'5',null],
     'Empty':             Array(16).fill(null)
 };
 
 const SAMPLES_PATTERNS = {
-    'Whole Note (Drone)': ['R',null,null,null, null,null,null,null, null,null,null,null, null,null,null,null],
-    'Half Notes (1 & 3)': ['R',null,null,null, null,null,null,null, 'R',null,null,null, null,null,null,null],
-    'Backbeat Stab':      [null,null,null,null, 'R',null,null,null, null,null,null,null, 'R',null,null,null],
-    'Dotted Quarter':     ['R',null,null,null, null,null,'R',null, null,null,null,null, 'R',null,null,null],
-    'Offbeat 8ths':       [null,null,'R',null, null,null,'R',null, null,null,'R',null, null,null,'R',null],
-    'Slow Arp (Halves)':  ['R',null,null,null, null,null,null,null, '5',null,null,null, null,null,null,null],
-    'Charleston':         ['R',null,null,null, null,null,'R',null, null,null,null,null, null,null,null,null],
+    'Whole Note (Drone)': ['1',null,null,null, null,null,null,null, null,null,null,null, null,null,null,null],
+    'Half Notes (1 & 3)': ['1',null,null,null, null,null,null,null, '1',null,null,null, null,null,null,null],
+    'Backbeat Stab':      [null,null,null,null, '1',null,null,null, null,null,null,null, '1',null,null,null],
+    'Dotted Quarter':     ['1',null,null,null, null,null,'1',null, null,null,null,null, '1',null,null,null],
+    'Offbeat 8ths':       [null,null,'1',null, null,null,'1',null, null,null,'1',null, null,null,'1',null],
+    'Slow Arp (Halves)':  ['1',null,null,null, null,null,null,null, '5',null,null,null, null,null,null,null],
+    'Charleston':         ['1',null,null,null, null,null,'1',null, null,null,null,null, null,null,null,null],
     'Empty':              Array(16).fill(null)
 };
 
@@ -67,6 +67,7 @@ const RHYTHM_PATTERNS = {
 };
 
 const ROMAN_NUMERALS = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+const SCALE_OPTIONS = [null, '1', '2', '3', '4', '5', '6', '7', '8'];
 
 // --- SEQUENCER CLASS ---
 
@@ -293,7 +294,7 @@ export class Sequencer {
         this.bindEvents();
     }
 
-    bindEvents() {
+bindEvents() {
         this.container.querySelector('#btn-seq-play').addEventListener('click', () => this.togglePlay());
         this.container.querySelector('#bpm-slider').addEventListener('input', (e) => {
             this.bpm = parseInt(e.target.value);
@@ -308,6 +309,12 @@ export class Sequencer {
                 else this.openPatternEditor(type);
             });
         });
+
+        // --- FIXED: ADDED LISTENER FOR PROGRESSION DELETE ---
+        const btnDelProg = this.container.querySelector('#btn-delete-prog');
+        if(btnDelProg) {
+            btnDelProg.addEventListener('click', () => this.deleteCurrentProgression());
+        }
 
         ['rhythm', 'bass', 'lead', 'samples', 'drums'].forEach(type => {
             const btn = this.container.querySelector(`#btn-del-${type}`);
@@ -343,7 +350,6 @@ export class Sequencer {
             if(t!=='drums') bindMixer(`#verb-${t}`, 'reverbs', t);
         });
 
-        // OCTAVE + DROP BINDINGS
         ['chords','bass','lead','samples'].forEach(track => {
             const elOct = this.container.querySelector(`#sel-oct-${track}`);
             const elDrop = this.container.querySelector(`#cb-drop-${track}`);
@@ -358,7 +364,6 @@ export class Sequencer {
             }
         });
 
-        // NEW: Alt Strum Binding
         const cbAltStrum = this.container.querySelector('#cb-alt-strum');
         if(cbAltStrum) {
             cbAltStrum.checked = this.settings.upStrums;
@@ -392,7 +397,6 @@ export class Sequencer {
         this.container.querySelector('#sel-metronome-sub').addEventListener('change', (e) => this.settings.metronomeSubdivision = parseInt(e.target.value));
     }
 
-    // ... (Standard methods unchanged: populateDropdowns ... savePreset) ...
     populateDropdowns() {
         const populate = (id, lib) => { const sel = this.container.querySelector(id); sel.innerHTML = ''; Object.keys(lib).forEach(k => sel.add(new Option(k, k))); };
         const insts = Object.keys(INSTRUMENTS);
@@ -440,12 +444,17 @@ export class Sequencer {
         document.getElementById('btn-save-pat').addEventListener('click', () => this.saveCustomPattern());
         document.getElementById('btn-preview-pat').addEventListener('click', () => this.togglePatternPreview());
     }
+    
+    // --- UPDATED: Use SCALE_OPTIONS instead of limited list ---
     openPatternEditor(type) {
         const modal = document.getElementById('pattern-modal'); const grid = document.getElementById('pattern-editor-grid'); const title = document.getElementById('pat-modal-title'); const nameInput = document.getElementById('new-pat-name');
         modal.style.display = 'flex'; title.textContent = `Edit ${type.toUpperCase()} Pattern`; title.dataset.type = type; nameInput.value = ''; grid.innerHTML = '';
         if(this.isPlaying) this.togglePlay();
-        if (type === 'drums') this.renderDrumGrid(grid); else if (type === 'rhythm') this.renderToggleGrid(grid, 'Strum'); else this.renderCycleGrid(grid, type==='bass' ? ['R','3','5','O'] : ['R','3','5','7','O']); 
+        if (type === 'drums') this.renderDrumGrid(grid); 
+        else if (type === 'rhythm') this.renderToggleGrid(grid, 'Strum'); 
+        else this.renderCycleGrid(grid, SCALE_OPTIONS); // Use full scale options (1-8)
     }
+
     closeModal() { document.getElementById('pattern-modal').style.display = 'none'; document.getElementById('prog-modal').style.display = 'none'; if(this.isPreviewing) this.togglePatternPreview(); }
     togglePatternPreview() {
         this.isPreviewing = !this.isPreviewing; const btn = document.getElementById('btn-preview-pat');
@@ -465,55 +474,62 @@ export class Sequencer {
         }
         this.timerID = window.setTimeout(() => this.previewScheduler(), this.lookahead);
     }
+    
+    // --- UPDATED: Preview logic for 1-8 ---
     playPreviewStep(step, time) {
         const type = document.getElementById('pat-modal-title').dataset.type;
         const grid = document.getElementById('pattern-editor-grid');
         requestAnimationFrame(() => { grid.querySelectorAll('.step-cell').forEach(c => c.style.borderColor = "#444"); if(type === 'drums') grid.querySelectorAll(`.step-cell[data-step="${step}"]`).forEach(c => c.style.borderColor = "#fff"); else { const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); if(cell) cell.style.borderColor = "#fff"; } });
-        const C_MAJ = { root:'C', notes:['C','E','G'], freqs: [130.81, 164.81, 196.00] };
+        
+        // Preview C Major Scale (for 1-8 options)
+        const C_MAJ_SCALE = ['C','D','E','F','G','A','B']; 
+        
         if (type === 'drums') {
              const getVal = (part) => { const cell = grid.querySelector(`.step-cell[data-part="${part}"][data-step="${step}"]`); return cell && parseInt(cell.dataset.val) === 1; };
              if(getVal('kick')) playDrum('kick', time); if(getVal('snare')) playDrum('snare', time); if(getVal('hihat')) playDrum('hihat', time);
         } else if (type === 'rhythm') {
-            const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); if(cell && parseInt(cell.dataset.val) === 1) playStrum(C_MAJ.freqs, time, this.settings.instrument);
+            const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); 
+            // Mock C Major Chord for rhythm preview
+            if(cell && parseInt(cell.dataset.val) === 1) playStrum([130.81, 164.81, 196.00], time, this.settings.instrument);
         } else { 
             const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); const val = cell ? cell.textContent : '-';
             if(val !== '-' && val !== '') {
-                let noteName = 'C', oct = 0; if(val === '3') noteName = 'E'; else if(val === '5') noteName = 'G'; else if(val === '7') noteName = 'B'; else if(val === 'O') { noteName = 'C'; oct=1; }
+                // Map instruction (1-8, R, O) to C Major Scale
+                let noteName = 'C'; let oct = 0;
+                
+                // Compatibility for old "R" "3" "5" "O" and new "1"-"8"
+                if (val === 'R' || val === '1') noteName = C_MAJ_SCALE[0];
+                else if (val === '2') noteName = C_MAJ_SCALE[1];
+                else if (val === '3') noteName = C_MAJ_SCALE[2];
+                else if (val === '4') noteName = C_MAJ_SCALE[3];
+                else if (val === '5') noteName = C_MAJ_SCALE[4];
+                else if (val === '6') noteName = C_MAJ_SCALE[5];
+                else if (val === '7') noteName = C_MAJ_SCALE[6];
+                else if (val === '8' || val === 'O') { noteName = C_MAJ_SCALE[0]; oct = 1; }
+                
                 const freq = (type==='bass') ? this.getBassFrequency(noteName, oct, 0) : this.getMelodyFrequency(noteName, oct, 0);
                 startNote(freq, -1, (type==='bass'?this.settings.bassInstrument:this.settings.leadInstrument), time, 0.2, type);
             }
         }
     }
+
     renderDrumGrid(container) { ['kick', 'snare', 'hihat'].forEach(part => { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${part.toUpperCase()}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.part = part; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-drum', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }); }
     renderToggleGrid(container, label) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${label}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-note', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }
-    renderCycleGrid(container, options) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">Note</div>`; const cycle = [null, ...options]; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.textContent = '-'; cell.dataset.idx = 0; cell.dataset.step = i; cell.addEventListener('click', () => { let idx = parseInt(cell.dataset.idx); idx = (idx + 1) % cycle.length; cell.dataset.idx = idx; const val = cycle[idx]; cell.textContent = val || '-'; cell.classList.toggle('active-note', val !== null); }); row.appendChild(cell); } container.appendChild(row); }
-    saveCustomPattern() { const modal = document.getElementById('pattern-modal'); const type = document.getElementById('pat-modal-title').dataset.type; const name = document.getElementById('new-pat-name').value.trim() || `My ${type}`; const grid = document.getElementById('pattern-editor-grid'); let data; if (type === 'drums') { data = { kick: [], snare: [], hihat: [] }; grid.querySelectorAll('.step-cell').forEach(cell => { data[cell.dataset.part][cell.dataset.step] = parseInt(cell.dataset.val); }); } else if (type === 'rhythm') { data = []; grid.querySelectorAll('.step-cell').forEach(cell => data.push(parseInt(cell.dataset.val))); } else { const options = type === 'bass' ? [null,'R','3','5','O'] : [null,'R','3','5','7','O']; data = []; grid.querySelectorAll('.step-cell').forEach(cell => { const idx = parseInt(cell.dataset.idx); data.push(options[idx]); }); } this.customData[type][name] = data; this.libraries[type][name] = data; let key = (type==='rhythm') ? 'custom_rhythms' : `custom_${type}`; localStorage.setItem(key, JSON.stringify(this.customData[type])); this.populateDropdowns(); if(type==='drums') { this.state.drumName = name; this.container.querySelector('#sel-drums').value = name; } else if(type==='rhythm') { this.state.rhythmName = name; this.container.querySelector('#sel-rhythm').value = name; } else if(type==='bass') { this.state.bassName = name; this.container.querySelector('#sel-bass-pattern').value = name; } else if(type==='lead') { this.state.leadName = name; this.container.querySelector('#sel-lead-pattern').value = name; } else if(type==='samples') { this.state.samplesName = name; this.container.querySelector('#sel-samples-pattern').value = name; } modal.style.display = 'none'; }
+    renderCycleGrid(container, options) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">Note</div>`; const cycle = options; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.textContent = '-'; cell.dataset.idx = 0; cell.dataset.step = i; cell.addEventListener('click', () => { let idx = parseInt(cell.dataset.idx); idx = (idx + 1) % cycle.length; cell.dataset.idx = idx; const val = cycle[idx]; cell.textContent = val || '-'; cell.classList.toggle('active-note', val !== null); }); row.appendChild(cell); } container.appendChild(row); }
+    
+    // --- UPDATED: Save Pattern using SCALE_OPTIONS ---
+    saveCustomPattern() { const modal = document.getElementById('pattern-modal'); const type = document.getElementById('pat-modal-title').dataset.type; const name = document.getElementById('new-pat-name').value.trim() || `My ${type}`; const grid = document.getElementById('pattern-editor-grid'); let data; if (type === 'drums') { data = { kick: [], snare: [], hihat: [] }; grid.querySelectorAll('.step-cell').forEach(cell => { data[cell.dataset.part][cell.dataset.step] = parseInt(cell.dataset.val); }); } else if (type === 'rhythm') { data = []; grid.querySelectorAll('.step-cell').forEach(cell => data.push(parseInt(cell.dataset.val))); } else { const options = SCALE_OPTIONS; data = []; grid.querySelectorAll('.step-cell').forEach(cell => { const idx = parseInt(cell.dataset.idx); data.push(options[idx]); }); } this.customData[type][name] = data; this.libraries[type][name] = data; let key = (type==='rhythm') ? 'custom_rhythms' : `custom_${type}`; localStorage.setItem(key, JSON.stringify(this.customData[type])); this.populateDropdowns(); if(type==='drums') { this.state.drumName = name; this.container.querySelector('#sel-drums').value = name; } else if(type==='rhythm') { this.state.rhythmName = name; this.container.querySelector('#sel-rhythm').value = name; } else if(type==='bass') { this.state.bassName = name; this.container.querySelector('#sel-bass-pattern').value = name; } else if(type==='lead') { this.state.leadName = name; this.container.querySelector('#sel-lead-pattern').value = name; } else if(type==='samples') { this.state.samplesName = name; this.container.querySelector('#sel-samples-pattern').value = name; } modal.style.display = 'none'; }
     openProgressionModal() { document.getElementById('prog-modal').style.display = 'flex'; document.getElementById('new-prog-name').value = ''; document.getElementById('chord-selectors-container').innerHTML = ''; for(let i=0; i<4; i++) this.addProgStep(); }
     addProgStep() { const cont = document.getElementById('chord-selectors-container'); const sel = document.createElement('select'); sel.className = 'prog-step-select'; sel.style.width = '50px'; sel.style.margin='2px'; ROMAN_NUMERALS.forEach((r, i) => sel.add(new Option(r, i))); cont.appendChild(sel); }
     saveCustomProgression() { const name = document.getElementById('new-prog-name').value.trim() || "My Prog"; const sels = document.querySelectorAll('.prog-step-select'); const indices = Array.from(sels).map(s => parseInt(s.value)); this.customData.progressions[name] = indices; this.libraries.progression[name] = indices; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); this.container.querySelector('#sel-progression').value = name; this.state.progressionName = name; document.getElementById('prog-modal').style.display = 'none'; }
     deleteCurrentProgression() { if(confirm(`Delete ${this.state.progressionName}?`)) { delete this.customData.progressions[this.state.progressionName]; delete this.libraries.progression[this.state.progressionName]; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); } }
     
-    // --- UPDATED: Save Preset with Looper Data ---
     savePreset() { 
         const name = prompt("Preset Name:", "My Track"); 
         if(!name) return; 
-        
         const ks = this.getScaleData(); 
-        
-        // Grab Looper settings if callback exists
         const looperSettings = this.getLooperData ? this.getLooperData() : null;
-        console.log("Saving Preset:", name, looperSettings); // DEBUG
-
-        const preset = { 
-            name, 
-            bpm: this.bpm, 
-            key: ks.key, 
-            scale: ks.scale, 
-            settings: this.settings, 
-            state: this.state,
-            looper: looperSettings // Save it!
-        }; 
-        
+        const preset = { name, bpm: this.bpm, key: ks.key, scale: ks.scale, settings: this.settings, state: this.state, looper: looperSettings }; 
         this.savedPresets[name] = preset; 
         localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); 
         this.refreshPresetList(); 
@@ -521,19 +537,14 @@ export class Sequencer {
         this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; 
     }
     
-    // --- UPDATED: Load Preset returns Looper Data ---
     loadPreset(name) { 
         const p = this.savedPresets[name]; if(!p) return; 
         this.bpm = p.bpm; this.settings = p.settings; this.state = p.state; 
-        
-        // Update UI
         this.container.querySelector('#bpm-slider').value = this.bpm; 
         this.container.querySelector('#bpm-val').textContent = this.bpm; 
         this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; 
-        
         const setVal = (id, val) => { const el = this.container.querySelector(id); if(el) el.value = val; }; 
         setVal('#sel-instrument', this.settings.instrument); setVal('#sel-bass-instrument', this.settings.bassInstrument); setVal('#sel-lead-instrument', this.settings.leadInstrument); setVal('#sel-samples-instrument', this.settings.samplesInstrument); setVal('#sel-rhythm', this.state.rhythmName); setVal('#sel-bass-pattern', this.state.bassName); setVal('#sel-lead-pattern', this.state.leadName); setVal('#sel-samples-pattern', this.state.samplesName); setVal('#sel-drums', this.state.drumName); setVal('#sel-progression', this.state.progressionName); 
-        
         if(this.settings.octaves) {
             ['chords','bass','lead','samples'].forEach(t => {
                 const elOct = this.container.querySelector(`#sel-oct-${t}`);
@@ -542,25 +553,10 @@ export class Sequencer {
                 if(elDrop) elDrop.checked = this.settings.drops[t] || false;
             });
         }
-        
-        const elAlt = this.container.querySelector('#cb-alt-strum');
-        if(elAlt) elAlt.checked = (this.settings.upStrums !== false);
-
-        const applyMix = (t) => { 
-            setVal(`#vol-${t}`, this.settings.volumes[t]); 
-            setVal(`#filt-${t}`, this.settings.filters[t]); 
-            if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); 
-            
-            // Check for finite numbers before applying
-            if(isFinite(this.settings.volumes[t])) setTrackVolume(t, this.settings.volumes[t]); 
-            if(isFinite(this.settings.filters[t])) setTrackFilter(t, this.settings.filters[t]); 
-            if(t!=='drums' && isFinite(this.settings.reverbs[t])) setTrackReverb(t, this.settings.reverbs[t]); 
-        }; 
+        const elAlt = this.container.querySelector('#cb-alt-strum'); if(elAlt) elAlt.checked = (this.settings.upStrums !== false);
+        const applyMix = (t) => { setVal(`#vol-${t}`, this.settings.volumes[t]); setVal(`#filt-${t}`, this.settings.filters[t]); if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); if(isFinite(this.settings.volumes[t])) setTrackVolume(t, this.settings.volumes[t]); if(isFinite(this.settings.filters[t])) setTrackFilter(t, this.settings.filters[t]); if(t!=='drums' && isFinite(this.settings.reverbs[t])) setTrackReverb(t, this.settings.reverbs[t]); }; 
         ['chords','bass','lead','samples','drums'].forEach(applyMix); 
-        
         this.populateDropdowns(); 
-        
-        // Pass looper data back up
         if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale, looper: p.looper}); 
     }
 
@@ -649,7 +645,6 @@ export class Sequencer {
 
         if (this.settings.metronome && (stepNumber % this.settings.metronomeSubdivision === 0)) playDrum('metronome', time);
         
-        // Drums
         const drumPat = this.libraries.drums[this.state.drumName];
         if (drumPat) {
             if (drumPat.kick && drumPat.kick[stepNumber]) playDrum('kick', time);
@@ -660,12 +655,14 @@ export class Sequencer {
         const { key, scale } = this.getScaleData();
         const chords = getDiatonicChords(key, scale);
         
+        // --- NEW: Generate Full Scale for Note mapping ---
+        const fullScale = generateScale(key, scale); // e.g., ['C','D','E','F','G','A','B']
+        
         if (!prog || !chords) return;
         const chordIndex = prog[this.settings.progressionIndex];
-        const chord = chords[chordIndex];
+        const chord = chords[chordIndex]; // e.g., { root: 'C', notes: ['C','E','G'] }
 
         if (chord) {
-            // APPLY OCTAVE + DROP
             const chordOct = this.settings.octaves.chords || 0;
             const bassOct = this.settings.octaves.bass || 0;
             const leadOct = this.settings.octaves.lead || 0;
@@ -676,6 +673,7 @@ export class Sequencer {
             const leadDrop = this.settings.drops.lead || false;
             const sampDrop = this.settings.drops.samples || false;
 
+            // --- Rhythm Strum (Uses Chord Notes only) ---
             const rhythmPat = this.libraries.rhythm[this.state.rhythmName];
             if (rhythmPat && rhythmPat[stepNumber]) {
                 const isBassStr = this.settings.instrument === 'Bass Guitar';
@@ -684,92 +682,86 @@ export class Sequencer {
                     const frequencies = chord.notes.map(note => 
                         this.getFrequencyForChord(note, key, chord.root, octaveOffset + chordOct, chordDrop)
                     );
-                    
                     const strumStep = this.settings.upStrums ? stepNumber : 0;
                     playStrum(frequencies, time, this.settings.instrument, strumStep);
                 }
             }
 
+            // --- HELPER TO CALCULATE SCALE NOTE ---
+            const playScaleNote = (instruction, instrument, octSetting, octDrop, trackType, defaultDur) => {
+                if (!instruction) return;
+
+                // 1. Find Root position in Full Scale
+                const rootIndex = fullScale.indexOf(chord.root); 
+                if(rootIndex === -1) return;
+
+                // 2. Parse instruction ('1'-'8', or old 'R','3','5')
+                let interval = 0; // 0 = Root
+                let isOctave = false;
+
+                if (instruction === 'R' || instruction === '1') interval = 0;
+                else if (instruction === '2') interval = 1;
+                else if (instruction === '3') interval = 2;
+                else if (instruction === '4') interval = 3;
+                else if (instruction === '5') interval = 4;
+                else if (instruction === '6') interval = 5;
+                else if (instruction === '7') interval = 6;
+                else if (instruction === '8' || instruction === 'O') { interval = 0; isOctave = true; }
+                
+                // 3. Get Note Name from Scale
+                const noteIndex = (rootIndex + interval) % fullScale.length;
+                const noteToPlay = fullScale[noteIndex];
+                
+                // 4. Determine Octave Shift (Did we wrap around the scale?)
+                // e.g. Root is B, we play 3rd (D). D is "lower" in list than B, so it must be next octave up.
+                // UNLESS interval was 0 (Root)
+                let scaleWrapOctave = 0;
+                if (noteIndex < rootIndex) scaleWrapOctave = 1;
+                if (isOctave) scaleWrapOctave += 1; // '8' adds another octave
+
+                // 5. Play
+                const freq = (trackType === 'bass') 
+                    ? this.getBassFrequency(noteToPlay, scaleWrapOctave, octSetting, key, chord.root, octDrop)
+                    : this.getMelodyFrequency(noteToPlay, scaleWrapOctave, octSetting, key, chord.root, octDrop);
+                
+                startNote(freq, -1, instrument, time, defaultDur, trackType);
+            };
+
             const bassPat = this.libraries.bass[this.state.bassName];
-            const bassInstruction = bassPat ? bassPat[stepNumber] : null;
-            if (bassInstruction && chord.notes) {
-                let noteToPlay = chord.notes[0];
-                let octaveShift = 0;
-                if (bassInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
-                if (bassInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
-                if (bassInstruction === 'O') octaveShift = 1;
-                const bassFreq = this.getBassFrequency(noteToPlay, octaveShift, bassOct, key, chord.root, bassDrop);
-                startNote(bassFreq, -1, this.settings.bassInstrument, time, 0.4, 'bass');
-            }
+            if (bassPat) playScaleNote(bassPat[stepNumber], this.settings.bassInstrument, bassOct, bassDrop, 'bass', 0.4);
 
             const leadPat = this.libraries.lead[this.state.leadName];
-            const melodyInstruction = leadPat ? leadPat[stepNumber] : null;
-            if (melodyInstruction && chord.notes) {
-                let noteToPlay = chord.notes[0];
-                if (melodyInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
-                if (melodyInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
-                if (melodyInstruction === 'O' || melodyInstruction === '7') noteToPlay = chord.notes[0]; 
-                const leadFreq = this.getMelodyFrequency(noteToPlay, melodyInstruction === 'O' ? 1 : 0, leadOct, key, chord.root, leadDrop);
-                startNote(leadFreq, -1, this.settings.leadInstrument, time, 0.2, 'lead');
-            }
+            if (leadPat) playScaleNote(leadPat[stepNumber], this.settings.leadInstrument, leadOct, leadDrop, 'lead', 0.2);
 
             const samplesPat = this.libraries.samples[this.state.samplesName];
-            const samplesInstruction = samplesPat ? samplesPat[stepNumber] : null;
-            if (samplesInstruction && chord.notes) {
-                let noteToPlay = chord.notes[0];
-                if (samplesInstruction === '3' && chord.notes[1]) noteToPlay = chord.notes[1];
-                if (samplesInstruction === '5' && chord.notes[2]) noteToPlay = chord.notes[2];
-                if (samplesInstruction === 'O' || samplesInstruction === '7') noteToPlay = chord.notes[0]; 
-                const sampleFreq = this.getMelodyFrequency(noteToPlay, samplesInstruction === 'O' ? 1 : 0, sampOct, key, chord.root, sampDrop);
-                startNote(sampleFreq, -1, this.settings.samplesInstrument, time, 0.2, 'samples');
-            }
+            if (samplesPat) playScaleNote(samplesPat[stepNumber], this.settings.samplesInstrument, sampOct, sampDrop, 'samples', 0.2);
         }
     }
     
-    // UPDATED CALCULATORS with Drop Logic
-    // If drop=true AND note index > key index, shift down 1 octave
+    // Updated Logic: If drop is requested and note > key index, shift down
     getFrequencyForChord(n, k, r, o=0, drop=false) { 
         const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; 
         const ni=SHARPS.indexOf(n); const ki=SHARPS.indexOf(k); const ri=SHARPS.indexOf(r); 
         let bo=3+o; 
-        
-        // Original logic: bump if root < key (to stay above)
         if(ri < ki) bo++; 
-        
-        // NEW Logic: If drop is requested and we are "above" based on simple index comparison, force down
-        // Simplest way: if this note's index > key index, subtract octave
         if(drop && ni > ki) bo--;
-
         let no=bo; if(ni<ri) no++; 
         return 440*Math.pow(2,((ni-9)+(no-4)*12)/12); 
     }
     
-    // Bass Base Octave = 2
     getBassFrequency(n, o=0, oTrack=0, k=null, r=null, drop=false) { 
         const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; 
         let base = 2 + o + oTrack;
         const ni = SHARPS.indexOf(n);
-        
-        // If drop is enabled and key context is provided
-        if (drop && k) {
-            const ki = SHARPS.indexOf(k);
-            if (ni > ki) base--;
-        }
-        
+        if (drop && k) { const ki = SHARPS.indexOf(k); if (ni > ki) base--; }
         return 440*Math.pow(2,((ni-9)+(base-4)*12)/12); 
     }
     
-    // Melody Base Octave = 4
     getMelodyFrequency(n, o=0, oTrack=0, k=null, r=null, drop=false) { 
         const SHARPS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; 
         let base = 4 + o + oTrack;
         const ni = SHARPS.indexOf(n);
-        
-        if (drop && k) {
-            const ki = SHARPS.indexOf(k);
-            if (ni > ki) base--;
-        }
-
+        if (drop && k) { const ki = SHARPS.indexOf(k); if (ni > ki) base--; }
         return 440*Math.pow(2,((ni-9)+(base-4)*12)/12); 
     }
 

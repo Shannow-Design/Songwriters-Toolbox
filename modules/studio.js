@@ -1,14 +1,26 @@
 // modules/studio.js
-import { Microphone, startStudioRecording, ctx } from './audio.js';
+import { Microphone, startStudioRecording, ctx, bufferToWav } from './audio.js';
 
 export class Studio {
-    constructor(containerId) {
+    // UPDATED: Constructor now accepts sequencer and songBuilder instances
+    constructor(containerId, sequencerInstance, songBuilderInstance) {
         this.container = document.getElementById(containerId);
-        
+        this.sequencer = sequencerInstance;
+        this.songBuilder = songBuilderInstance;
+
+        // State
         this.isRecording = false;
+        this.isCountingDown = false; // New State for Pre-roll
         this.recorder = null;
         this.timerInterval = null;
+        this.countdownInterval = null; // Separate timer for the 10s countdown
         this.startTime = 0;
+        this.isPlaying = false;
+        
+        // Track Management
+        this.tracks = []; 
+        this.trackCounter = 1;
+        this.activeSources = []; 
 
         this.render();
         this.initCanvasMeter();
@@ -17,34 +29,46 @@ export class Studio {
     render() {
         this.container.innerHTML = `
             <div class="studio-panel">
-                <div class="studio-controls">
-                    <button id="btn-studio-rec" class="btn-big-rec">● REC</button>
+                <div class="studio-controls-top">
+                    <div class="transport-group">
+                        <button id="btn-studio-rec" class="btn-transport rec" title="Record New Track">● REC NEW</button>
+                        <button id="btn-studio-play" class="btn-transport play" title="Play All">▶ PLAY MIX</button>
+                        <button id="btn-studio-stop" class="btn-transport stop" title="Stop All">■ STOP</button>
+                    </div>
+                    
+                    <div class="sync-controls" style="display:flex; flex-direction:column; align-items:center;">
+                        <label style="font-size:0.6rem; color:#666; font-weight:bold;">AUTO-START</label>
+                        <select id="sel-studio-sync" style="background:#222; color:#fff; border:1px solid #444; font-size:0.75rem; padding:2px;">
+                            <option value="none">None (Rec Only)</option>
+                            <option value="sequencer">Sequencer</option>
+                            <option value="songbuilder">Song Builder</option>
+                        </select>
+                    </div>
+
                     <div id="studio-timer" class="studio-timer">00:00</div>
                 </div>
 
-                <div class="studio-mixer">
-                    <div class="meter-container">
-                        <canvas id="studio-vu-meter" width="200" height="20"></canvas>
-                    </div>
-                    
-                    <div class="slider-group">
-                        <label>VOCAL / MIC GAIN</label>
-                        <input type="range" id="studio-mic-gain" min="0" max="3" step="0.1" value="1">
-                    </div>
-
-                    <div class="fx-group">
-                        <input type="checkbox" id="cb-vocal-fx" class="fx-checkbox">
-                        <label for="cb-vocal-fx">✨ Vocal Enhance (Comp + Rev + EQ)</label>
-                    </div>
-                    
-                    <div class="slider-group" id="reverb-slider-group" style="display:none; margin-top:5px;">
-                        <label>REVERB AMOUNT</label>
-                        <input type="range" id="studio-reverb-amt" min="0" max="1" step="0.05" value="0.3">
-                    </div>
+                <div class="track-list-container" id="track-list">
+                    <div class="empty-state">No tracks recorded yet. Select a Sync source and hit REC.</div>
                 </div>
 
-                <div class="studio-info">
-                    <p>Records Everything: Sequencer + Loop Station + Vocals</p>
+                <div class="studio-footer">
+                    <div class="mixer-global">
+                        <label>INPUT MONITOR</label>
+                        <canvas id="studio-vu-meter" width="150" height="10"></canvas>
+                    </div>
+                    <button id="btn-export-mix" class="btn-export" disabled>💾 RENDER & DOWNLOAD MIX</button>
+                </div>
+                
+                <div class="input-settings">
+                    <div class="slider-compact">
+                        <label>Mic Gain</label>
+                        <input type="range" id="studio-mic-gain" min="0" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="fx-toggle">
+                        <input type="checkbox" id="cb-vocal-fx">
+                        <label for="cb-vocal-fx">Vocal FX</label>
+                    </div>
                 </div>
             </div>
         `;
@@ -52,156 +76,349 @@ export class Studio {
         const style = document.createElement('style');
         style.innerHTML = `
             .studio-panel { 
-                background: #1a1a1a; padding: 20px; border-radius: 8px; border: 1px solid #333;
-                display: flex; flex-direction: column; align-items: center; gap: 20px;
+                background: #181818; padding: 15px; border-radius: 8px; border: 1px solid #333;
+                display: flex; flex-direction: column; gap: 15px; min-height: 300px;
             }
-            .studio-controls { display: flex; align-items: center; gap: 20px; }
+
+            /* TRANSPORT */
+            .studio-controls-top { 
+                display: flex; justify-content: space-between; align-items: center; 
+                padding-bottom: 15px; border-bottom: 1px solid #333;
+            }
+            .transport-group { display: flex; gap: 10px; }
+            .btn-transport { 
+                border: none; border-radius: 4px; padding: 10px 15px; font-weight: bold; cursor: pointer; color: white;
+                font-family: monospace; font-size: 0.9rem; transition: all 0.2s;
+            }
+            .btn-transport.rec { background: #aa0033; }
+            .btn-transport.rec:hover { background: #ff0055; }
+            .btn-transport.rec.recording { background: #ff0055; animation: pulse 1s infinite; }
+            .btn-transport.rec.counting { background: #ffaa00; color: #000; } /* Yellow for countdown */
             
-            .btn-big-rec { 
-                width: 80px; height: 80px; border-radius: 50%; border: 4px solid #444;
-                background: #222; color: #ff0055; font-weight: bold; font-size: 1.2rem;
-                cursor: pointer; transition: all 0.2s;
-            }
-            .btn-big-rec:hover { border-color: #ff0055; background: #333; }
-            .btn-big-rec.recording { 
-                background: #ff0055; color: white; border-color: white; 
-                box-shadow: 0 0 20px rgba(255, 0, 85, 0.6); animation: pulse 1.5s infinite;
-            }
-
-            @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-
-            .studio-timer { font-family: monospace; font-size: 2rem; color: #00e5ff; text-shadow: 0 0 10px rgba(0,229,255,0.3); }
-
-            .studio-mixer { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
+            .btn-transport.play { background: #222; border: 1px solid #444; }
+            .btn-transport.play:hover { background: #00e5ff; color: #000; border-color: #00e5ff; }
+            .btn-transport.stop { background: #222; border: 1px solid #444; }
+            .btn-transport.stop:hover { background: #fff; color: #000; }
             
-            .meter-container { background: #111; border-radius: 4px; border: 1px solid #333; padding: 2px; }
-            #studio-vu-meter { width: 100%; height: 20px; display: block; }
+            .studio-timer { font-family: monospace; font-size: 1.5rem; color: #00e5ff; min-width: 80px; text-align: right; }
 
-            .slider-group { display: flex; flex-direction: column; gap: 5px; }
-            .slider-group label { font-size: 0.7rem; color: #888; font-weight: bold; letter-spacing: 1px; }
-            .slider-group input { width: 100%; accent-color: #ff0055; }
+            /* TRACK LIST */
+            .track-list-container { 
+                flex-grow: 1; background: #111; border: 1px inset #222; border-radius: 4px; 
+                padding: 10px; overflow-y: auto; max-height: 250px; min-height: 100px;
+            }
+            .empty-state { color: #555; text-align: center; margin-top: 30px; font-style: italic; font-size: 0.8rem; }
 
-            .fx-group { display: flex; align-items: center; gap: 8px; justify-content: center; background: #222; padding: 8px; border-radius: 4px; border: 1px solid #333; }
-            .fx-checkbox { width: 16px; height: 16px; accent-color: #00e5ff; cursor: pointer; }
-            .fx-group label { color: #ccc; font-size: 0.9rem; cursor: pointer; }
+            .track-row { 
+                display: flex; align-items: center; gap: 10px; background: #222; 
+                margin-bottom: 5px; padding: 8px; border-radius: 4px; border-left: 3px solid #00e5ff;
+            }
+            .track-info { flex-grow: 1; display: flex; flex-direction: column; }
+            .track-name { font-size: 0.8rem; font-weight: bold; color: #eee; margin-bottom: 2px; }
+            .track-details { font-size: 0.65rem; color: #777; }
+            
+            .track-controls { display: flex; align-items: center; gap: 10px; }
+            .track-vol-slider { width: 80px; height: 4px; accent-color: #00e5ff; }
+            .btn-track-action { 
+                background: none; border: none; color: #666; cursor: pointer; font-size: 0.8rem; 
+            }
+            .btn-track-action:hover { color: white; }
+            .btn-track-action.delete:hover { color: #ff0055; }
+            .btn-mute.muted { color: #ffaa00; text-decoration: line-through; }
 
-            .studio-info { font-size: 0.8rem; color: #555; font-style: italic; }
+            /* FOOTER */
+            .studio-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+            .mixer-global { display: flex; flex-direction: column; gap: 5px; }
+            .mixer-global label { font-size: 0.6rem; color: #666; font-weight: bold; }
+            
+            .btn-export { 
+                background: linear-gradient(45deg, #00e5ff, #0099cc); border: none; padding: 10px 20px;
+                border-radius: 4px; color: #000; font-weight: bold; cursor: pointer; opacity: 1;
+            }
+            .btn-export:disabled { background: #333; color: #555; cursor: default; }
+
+            .input-settings { display: flex; gap: 20px; border-top: 1px solid #333; padding-top: 10px; }
+            .slider-compact { display: flex; align-items: center; gap: 5px; flex-grow: 1; }
+            .slider-compact label { font-size: 0.7rem; color: #888; white-space: nowrap; }
+            .slider-compact input { width: 100%; height: 4px; accent-color: #ff0055; }
+            .fx-toggle { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: #888; }
+            
+            @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         `;
         this.container.appendChild(style);
 
-        // Bindings
-        this.container.querySelector('#btn-studio-rec').addEventListener('click', () => this.toggleRecording());
-        this.container.querySelector('#studio-mic-gain').addEventListener('input', (e) => {
-            Microphone.setGain(parseFloat(e.target.value));
-        });
-
-        // Vocal FX Logic
-        const cbFx = this.container.querySelector('#cb-vocal-fx');
-        const revGroup = this.container.querySelector('#reverb-slider-group');
-        const revSlider = this.container.querySelector('#studio-reverb-amt');
-
-        cbFx.addEventListener('change', (e) => {
-            const enabled = e.target.checked;
-            Microphone.setFxEnabled(enabled);
-            revGroup.style.display = enabled ? 'flex' : 'none';
-            // Need to re-connect if active
-            if(Microphone.studioConnection) {
-                Microphone.connectToStudio();
-            }
-        });
-
-        revSlider.addEventListener('input', (e) => {
-            Microphone.setReverbAmount(parseFloat(e.target.value));
-        });
+        this.bindEvents();
     }
 
-    async toggleRecording() {
-        const btn = this.container.querySelector('#btn-studio-rec');
-        
-        if (this.isRecording) {
-            // STOP
-            this.isRecording = false;
-            clearInterval(this.timerInterval);
-            btn.textContent = "● REC";
-            btn.classList.remove('recording');
-            
-            if (this.recorder) {
-                const blob = await this.recorder.stop();
-                this.downloadRecording(blob);
-                this.recorder = null;
-            }
+    bindEvents() {
+        this.container.querySelector('#btn-studio-rec').addEventListener('click', () => this.handleRecordButton());
+        this.container.querySelector('#btn-studio-play').addEventListener('click', () => this.playMix());
+        this.container.querySelector('#btn-studio-stop').addEventListener('click', () => this.stopAll());
+        this.container.querySelector('#btn-export-mix').addEventListener('click', () => this.exportMix());
+        this.container.querySelector('#studio-mic-gain').addEventListener('input', (e) => Microphone.setGain(parseFloat(e.target.value)));
+        this.container.querySelector('#cb-vocal-fx').addEventListener('change', (e) => Microphone.setFxEnabled(e.target.checked));
+    }
+
+    // NEW: Handles the "REC" click, deciding whether to countdown or stop
+    handleRecordButton() {
+        if (this.isRecording || this.isCountingDown) {
+            this.stopAll(); // Stop if we are recording OR counting down
         } else {
-            // START
-            // Ensure Mic is initialized
-            await Microphone.init();
-            
-            if (ctx.state === 'suspended') await ctx.resume();
-
-            this.recorder = startStudioRecording();
-            this.isRecording = true;
-            this.startTime = Date.now();
-            
-            btn.textContent = "■ STOP";
-            btn.classList.add('recording');
-
-            this.timerInterval = setInterval(() => {
-                const elapsed = Date.now() - this.startTime;
-                const secs = Math.floor(elapsed / 1000) % 60;
-                const mins = Math.floor(elapsed / 60000);
-                this.container.querySelector('#studio-timer').textContent = 
-                    `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-            }, 1000);
+            this.startCountdown();
         }
     }
 
-    downloadRecording(blob) {
-        const url = URL.createObjectURL(blob);
+    // NEW: 10s Countdown logic
+    startCountdown() {
+        const btn = this.container.querySelector('#btn-studio-rec');
+        const timerDisplay = this.container.querySelector('#studio-timer');
+        
+        this.isCountingDown = true;
+        btn.classList.add('counting');
+        btn.textContent = "GET READY";
+
+        let timeLeft = 10;
+        
+        // Initial visual update
+        timerDisplay.textContent = `-${timeLeft.toString().padStart(2, '0')}s`;
+        timerDisplay.style.color = "#ffaa00";
+
+        this.countdownInterval = setInterval(() => {
+            timeLeft--;
+            if (timeLeft > 0) {
+                timerDisplay.textContent = `-${timeLeft.toString().padStart(2, '0')}s`;
+            } else {
+                // COUNTDOWN FINISHED -> START RECORDING
+                clearInterval(this.countdownInterval);
+                this.isCountingDown = false;
+                btn.classList.remove('counting');
+                timerDisplay.style.color = "#00e5ff";
+                this.startRecording(); // Triggers actual recording + Sync start
+            }
+        }, 1000);
+    }
+
+    async startRecording() {
+        const btn = this.container.querySelector('#btn-studio-rec');
+        const syncSource = this.container.querySelector('#sel-studio-sync').value;
+
+        // 1. Initialize Mic
+        await Microphone.init();
+        if (ctx.state === 'suspended') await ctx.resume();
+
+        // 2. Start Audio Recorder
+        this.recorder = startStudioRecording();
+        this.isRecording = true;
+        this.startTime = Date.now();
+        
+        btn.textContent = "■ STOP";
+        btn.classList.add('recording');
+
+        // 3. Start Sync Source (Sequencer or SongBuilder)
+        if (syncSource === 'sequencer' && this.sequencer) {
+            if (!this.sequencer.isPlaying) this.sequencer.togglePlay();
+        } else if (syncSource === 'songbuilder' && this.songBuilder) {
+            // Assumes SongBuilder uses same sequencer instance or has its own play
+            // If SongBuilder is just a UI over sequencer, we might just play sequencer.
+            // But if it has a specific play method:
+            if(this.songBuilder.togglePlay) this.songBuilder.togglePlay();
+            else if(!this.sequencer.isPlaying) this.sequencer.togglePlay(); 
+        }
+
+        // 4. Start Timer UI
+        this.timerInterval = setInterval(() => {
+            const elapsed = Date.now() - this.startTime;
+            const secs = Math.floor(elapsed / 1000) % 60;
+            const mins = Math.floor(elapsed / 60000);
+            this.container.querySelector('#studio-timer').textContent = 
+                `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }, 1000);
+    }
+
+    async stopRecording() {
+        const btn = this.container.querySelector('#btn-studio-rec');
+        
+        this.isRecording = false;
+        clearInterval(this.timerInterval);
+        btn.textContent = "● REC NEW";
+        btn.classList.remove('recording');
+        
+        // Stop Sync Source
+        const syncSource = this.container.querySelector('#sel-studio-sync').value;
+        if ((syncSource === 'sequencer' || syncSource === 'songbuilder') && this.sequencer && this.sequencer.isPlaying) {
+             this.sequencer.togglePlay(); // Toggle off
+        }
+
+        if (this.recorder) {
+            const blob = await this.recorder.stop();
+            await this.addTrackFromBlob(blob);
+            this.recorder = null;
+        }
+    }
+
+    async addTrackFromBlob(blob) {
+        const arrayBuffer = await blob.arrayBuffer();
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        
+        const newTrack = {
+            id: Date.now(),
+            name: `Track ${this.trackCounter++}`,
+            buffer: audioBuffer,
+            volume: 0.8,
+            muted: false,
+            blob: blob
+        };
+        
+        this.tracks.push(newTrack);
+        this.renderTrackList();
+        this.updateExportButton();
+    }
+
+    renderTrackList() {
+        const list = this.container.querySelector('#track-list');
+        list.innerHTML = '';
+
+        if (this.tracks.length === 0) {
+            list.innerHTML = '<div class="empty-state">No tracks recorded yet. Select a Sync source and hit REC.</div>';
+            return;
+        }
+
+        this.tracks.forEach((track, index) => {
+            const div = document.createElement('div');
+            div.className = 'track-row';
+            div.innerHTML = `
+                <div class="track-info">
+                    <div class="track-name" contenteditable="true" title="Click to rename">${track.name}</div>
+                    <div class="track-details">${track.buffer.duration.toFixed(1)}s</div>
+                </div>
+                <div class="track-controls">
+                    <button class="btn-track-action btn-mute ${track.muted ? 'muted' : ''}" data-id="${track.id}">M</button>
+                    <input type="range" class="track-vol-slider" min="0" max="1" step="0.05" value="${track.volume}" data-id="${track.id}" title="Volume">
+                    <button class="btn-track-action delete" data-id="${track.id}">×</button>
+                </div>
+            `;
+            
+            div.querySelector('.track-name').addEventListener('blur', (e) => { track.name = e.target.textContent; });
+            div.querySelector('.btn-mute').addEventListener('click', () => { track.muted = !track.muted; this.renderTrackList(); });
+            div.querySelector('.track-vol-slider').addEventListener('input', (e) => { track.volume = parseFloat(e.target.value); });
+            div.querySelector('.delete').addEventListener('click', () => { if(confirm('Delete this track?')) { this.tracks.splice(index, 1); this.renderTrackList(); this.updateExportButton(); } });
+            list.appendChild(div);
+        });
+    }
+
+    playMix() {
+        this.stopAll(); 
+        if(this.tracks.length === 0) return;
+
+        this.isPlaying = true;
+        this.container.querySelector('#btn-studio-play').classList.add('recording'); 
+
+        this.tracks.forEach(track => {
+            if (track.muted) return;
+            const source = ctx.createBufferSource();
+            source.buffer = track.buffer;
+            const gainNode = ctx.createGain();
+            gainNode.gain.value = track.volume;
+            source.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            source.start(0);
+            this.activeSources.push(source);
+            source.onended = () => {
+                this.activeSources = this.activeSources.filter(s => s !== source);
+                if(this.activeSources.length === 0) this.stopAll();
+            };
+        });
+    }
+
+    stopAll() {
+        // 1. Reset Recording State
+        if (this.isRecording) {
+            this.stopRecording();
+            return; // stopRecording handles the rest
+        }
+
+        // 2. Reset Countdown State
+        if (this.isCountingDown) {
+            clearInterval(this.countdownInterval);
+            this.isCountingDown = false;
+            const btn = this.container.querySelector('#btn-studio-rec');
+            btn.classList.remove('counting');
+            btn.textContent = "● REC NEW";
+            this.container.querySelector('#studio-timer').textContent = "00:00";
+            this.container.querySelector('#studio-timer').style.color = "#00e5ff";
+            return;
+        }
+
+        // 3. Stop Playback
+        this.isPlaying = false;
+        this.container.querySelector('#btn-studio-play').classList.remove('recording');
+        this.activeSources.forEach(src => { try { src.stop(); } catch(e) {} });
+        this.activeSources = [];
+    }
+
+    async exportMix() {
+        if(this.tracks.length === 0) return;
+        const btn = this.container.querySelector('#btn-export-mix');
+        const originalText = btn.textContent;
+        btn.textContent = "⏳ RENDERING...";
+        btn.disabled = true;
+
+        let maxDuration = 0;
+        this.tracks.forEach(t => { if(t.buffer.duration > maxDuration) maxDuration = t.buffer.duration; });
+
+        const offlineCtx = new OfflineAudioContext(2, maxDuration * ctx.sampleRate, ctx.sampleRate);
+        this.tracks.forEach(track => {
+            if (track.muted) return;
+            const source = offlineCtx.createBufferSource();
+            source.buffer = track.buffer;
+            const gain = offlineCtx.createGain();
+            gain.gain.value = track.volume;
+            source.connect(gain);
+            gain.connect(offlineCtx.destination);
+            source.start(0);
+        });
+
+        const renderedBuffer = await offlineCtx.startRendering();
+        const wavBlob = bufferToWav(renderedBuffer); 
+        const url = URL.createObjectURL(wavBlob);
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        a.download = `song-export-${timestamp}.webm`; // WebM is standard for browser recording
+        a.download = `studio-mix-${new Date().toISOString().slice(0,10)}.wav`;
         document.body.appendChild(a);
         a.click();
+        
         setTimeout(() => {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
+            btn.textContent = originalText;
+            btn.disabled = false;
         }, 100);
+    }
+
+    updateExportButton() {
+        this.container.querySelector('#btn-export-mix').disabled = (this.tracks.length === 0);
     }
 
     initCanvasMeter() {
         const canvas = document.getElementById('studio-vu-meter');
         if (!canvas) return;
         const cCtx = canvas.getContext('2d');
-        
         const draw = () => {
             requestAnimationFrame(draw);
-            
-            // Only draw if module is visible
             if (this.container.offsetParent === null) return; 
-
             const width = canvas.width;
             const height = canvas.height;
             cCtx.clearRect(0, 0, width, height);
-
             let level = 0;
-            if (Microphone.isInitialized) {
-                level = Microphone.getLevel();
-            }
-
-            // Draw Background
+            if (Microphone.isInitialized) level = Microphone.getLevel();
             cCtx.fillStyle = '#222';
             cCtx.fillRect(0, 0, width, height);
-
-            // Draw Level
-            const fillWidth = Math.min(width, level * width * 1.5); // 1.5x gain for visual
-            
-            // Gradient
+            const fillWidth = Math.min(width, level * width * 1.5); 
             const grad = cCtx.createLinearGradient(0, 0, width, 0);
             grad.addColorStop(0, '#00ff55');
             grad.addColorStop(0.6, '#ffff00');
             grad.addColorStop(1, '#ff0055');
-            
             cCtx.fillStyle = grad;
             cCtx.fillRect(0, 0, fillWidth, height);
         };

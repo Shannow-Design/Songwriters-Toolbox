@@ -10,7 +10,7 @@ import { Looper } from './looper.js';
 import { SongBuilder } from './songbuilder.js'; 
 import { Studio } from './studio.js'; 
 import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
-import { CircleOfFifths } from './circle.js'; // --- ADDED IMPORT ---
+import { CircleOfFifths } from './circle.js'; 
 
 // --- DOM Elements ---
 const keySelect = document.getElementById('key-select');
@@ -29,7 +29,7 @@ const noteButtonsDisplay = document.getElementById('note-buttons-display');
 
 // Checkboxes
 const cbButtons = document.getElementById('cb-buttons');
-const cbCircle = document.getElementById('cb-circle'); // --- ADDED CHECKBOX ---
+const cbCircle = document.getElementById('cb-circle'); 
 const cbChords = document.getElementById('cb-chords');
 const cbGuitar = document.getElementById('cb-guitar');
 const cbBass = document.getElementById('cb-bass');
@@ -43,7 +43,7 @@ const cbStudio = document.getElementById('cb-studio');
 
 // Wrappers
 const wrapperButtons = document.getElementById('wrapper-buttons');
-const wrapperCircle = document.getElementById('wrapper-circle'); // --- ADDED WRAPPER ---
+const wrapperCircle = document.getElementById('wrapper-circle'); 
 const wrapperChords = document.getElementById('wrapper-chords');
 const wrapperGuitar = document.getElementById('wrapper-guitar');
 const wrapperBass = document.getElementById('wrapper-bass');
@@ -65,45 +65,8 @@ const tuner = new Tuner('tuner-container');
 const keyboard = new Keyboard('keyboard-container');
 const sampler = new Sampler('sampler-container');
 const looper = new Looper('looper-module'); 
-const studio = new Studio('studio-module');
 
-// --- INITIALIZE CIRCLE OF FIFTHS ---
-// We pass a callback so clicking the circle updates the main key select
-const circle = new CircleOfFifths('circle-container', (newKey) => {
-    // 1. Try to find exact match in dropdown
-    let optionFound = false;
-    for(let i=0; i<keySelect.options.length; i++) {
-        if(keySelect.options[i].value === newKey) {
-            keySelect.selectedIndex = i;
-            optionFound = true;
-            break;
-        }
-    }
-    // 2. If not found (e.g. circle sent Db but list has C#), check enharmonics
-    if(!optionFound) {
-        const enharmonics = {'Db':'C#', 'Eb':'D#', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#', 'C#':'Db', 'D#':'Eb', 'F#':'Gb', 'G#':'Ab', 'A#':'Bb'};
-        if(enharmonics[newKey]) {
-            // Loop again to find the enharmonic match
-             for(let i=0; i<keySelect.options.length; i++) {
-                if(keySelect.options[i].value === enharmonics[newKey]) {
-                    keySelect.selectedIndex = i;
-                    break;
-                }
-            }
-        }
-    }
-    // 3. Trigger Change
-    keySelect.dispatchEvent(new Event('change'));
-});
-
-// Placeholder for SongBuilder
-let songBuilder; 
-
-// STATE
-let currentActiveChordNotes = []; 
-let currentActiveChordRoot = null; 
-
-// Initialize Sequencer
+// 1. Initialize Sequencer FIRST (so it is ready for SongBuilder & Studio)
 const sequencer = new Sequencer('sequencer-container', 
     // 1. Get Data Callback
     () => { return { key: keySelect.value, scale: scaleSelect.value }; },
@@ -145,6 +108,8 @@ const sequencer = new Sequencer('sequencer-container',
     // 4. Step Callback (Pulse for Looper & Song Builder)
     (step, progIndex, progLength, cycleCount, time) => {
         looper.onStep(step, progIndex, progLength, cycleCount, time);
+        // We reference songBuilder here, but since it's a const defined below, 
+        // JS hosting handles it inside the callback execution later.
         if (songBuilder) songBuilder.onStep(step, time);
     },
 
@@ -159,8 +124,44 @@ const sequencer = new Sequencer('sequencer-container',
     }
 );
 
-// --- INIT SONG BUILDER ---
-songBuilder = new SongBuilder('songbuilder-module', sequencer);
+// 2. Initialize SongBuilder SECOND (Needs sequencer)
+const songBuilder = new SongBuilder('songbuilder-module', sequencer);
+
+// 3. Initialize Studio LAST (Needs both Sequencer and SongBuilder)
+const studio = new Studio('studio-module', sequencer, songBuilder);
+
+
+// --- INITIALIZE CIRCLE OF FIFTHS ---
+const circle = new CircleOfFifths('circle-container', (newKey) => {
+    // 1. Try to find exact match in dropdown
+    let optionFound = false;
+    for(let i=0; i<keySelect.options.length; i++) {
+        if(keySelect.options[i].value === newKey) {
+            keySelect.selectedIndex = i;
+            optionFound = true;
+            break;
+        }
+    }
+    // 2. If not found (e.g. circle sent Db but list has C#), check enharmonics
+    if(!optionFound) {
+        const enharmonics = {'Db':'C#', 'Eb':'D#', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#', 'C#':'Db', 'D#':'Eb', 'F#':'Gb', 'G#':'Ab', 'A#':'Bb'};
+        if(enharmonics[newKey]) {
+            // Loop again to find the enharmonic match
+             for(let i=0; i<keySelect.options.length; i++) {
+                if(keySelect.options[i].value === enharmonics[newKey]) {
+                    keySelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+    // 3. Trigger Change
+    keySelect.dispatchEvent(new Event('change'));
+});
+
+// STATE
+let currentActiveChordNotes = []; 
+let currentActiveChordRoot = null; 
 
 // Sync BPM
 const originalOnStep = looper.onStep.bind(looper);
