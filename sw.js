@@ -18,7 +18,7 @@ const ASSETS_TO_CACHE = [
   './modules/storage.js',
   './modules/songbuilder.js',
   './modules/studio.js',
-  './modules/drumSampler.js' // NEW: Added Drum Sampler module
+  './modules/drumsampler.js' // NEW: Added Drum Sampler module
 ];
 
 // Install Event: Cache files
