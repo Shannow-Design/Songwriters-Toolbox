@@ -10,7 +10,8 @@ import { Looper } from './looper.js';
 import { SongBuilder } from './songbuilder.js'; 
 import { Studio } from './studio.js'; 
 import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
-import { CircleOfFifths } from './circle.js'; 
+import { CircleOfFifths } from './circle.js';
+import { DrumSampler } from './drumSampler.js'; 
 
 // --- DOM Elements ---
 const keySelect = document.getElementById('key-select');
@@ -51,6 +52,8 @@ const wrapperTuner = document.getElementById('wrapper-tuner');
 const wrapperKeyboard = document.getElementById('wrapper-keyboard');
 const wrapperSequencer = document.getElementById('wrapper-sequencer');
 const wrapperSampler = document.getElementById('wrapper-sampler');
+const cbDrumSampler = document.getElementById('cb-drum-sampler');
+const wrapperDrumSampler = document.getElementById('wrapper-drum-sampler');
 const wrapperSongBuilder = document.getElementById('wrapper-songbuilder');
 const wrapperLooper = document.getElementById('wrapper-looper');
 const wrapperStudio = document.getElementById('wrapper-studio');
@@ -64,6 +67,7 @@ const chordRenderer = new ChordRenderer('chords-container');
 const tuner = new Tuner('tuner-container');
 const keyboard = new Keyboard('keyboard-container');
 const sampler = new Sampler('sampler-container');
+const drumSampler = new DrumSampler('drum-sampler-container');
 const looper = new Looper('looper-module'); 
 
 // 1. Initialize Sequencer FIRST (so it is ready for SongBuilder & Studio)
@@ -367,6 +371,14 @@ function renderNoteButtons(scaleNotes) {
             }, 200);
         });
         noteButtonsDisplay.appendChild(btn);
+    });
+}
+
+if(cbDrumSampler) {
+    cbDrumSampler.addEventListener('change', () => {
+        wrapperDrumSampler.style.display = cbDrumSampler.checked ? 'block' : 'none';
+        // Refresh status when opened in case samples loaded in background
+        if(cbDrumSampler.checked) drumSampler.updateStatus();
     });
 }
 

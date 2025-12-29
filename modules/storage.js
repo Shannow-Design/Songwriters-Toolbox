@@ -21,7 +21,6 @@ export const SampleStorage = {
         });
     },
 
-    // Updated: Accepts 'prefix' to distinguish 'slot' (Sampler) from 'loop' (Looper)
     async saveSample(index, audioBuffer, name, prefix = 'slot') {
         const db = await this.openDB();
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -62,5 +61,14 @@ export const SampleStorage = {
             };
             req.onerror = () => resolve(null);
         });
+    },
+
+    // --- NEW: Ability to delete a sample ---
+    async deleteSample(index, prefix = 'slot') {
+        const db = await this.openDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.delete(`${prefix}_${index}`);
+        return tx.complete;
     }
 };

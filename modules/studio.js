@@ -1,8 +1,7 @@
 // modules/studio.js
-import { Microphone, startStudioRecording, ctx, bufferToWav } from './audio.js';
+import { Microphone, startStudioRecording, ctx, bufferToWav, playDrum } from './audio.js';
 
 export class Studio {
-    // UPDATED: Constructor now accepts sequencer and songBuilder instances
     constructor(containerId, sequencerInstance, songBuilderInstance) {
         this.container = document.getElementById(containerId);
         this.sequencer = sequencerInstance;
@@ -10,10 +9,10 @@ export class Studio {
 
         // State
         this.isRecording = false;
-        this.isCountingDown = false; // New State for Pre-roll
+        this.isCountingDown = false; 
         this.recorder = null;
         this.timerInterval = null;
-        this.countdownInterval = null; // Separate timer for the 10s countdown
+        this.countdownInterval = null; 
         this.startTime = 0;
         this.isPlaying = false;
         
@@ -93,7 +92,7 @@ export class Studio {
             .btn-transport.rec { background: #aa0033; }
             .btn-transport.rec:hover { background: #ff0055; }
             .btn-transport.rec.recording { background: #ff0055; animation: pulse 1s infinite; }
-            .btn-transport.rec.counting { background: #ffaa00; color: #000; } /* Yellow for countdown */
+            .btn-transport.rec.counting { background: #ffaa00; color: #000; } 
             
             .btn-transport.play { background: #222; border: 1px solid #444; }
             .btn-transport.play:hover { background: #00e5ff; color: #000; border-color: #00e5ff; }
@@ -159,16 +158,14 @@ export class Studio {
         this.container.querySelector('#cb-vocal-fx').addEventListener('change', (e) => Microphone.setFxEnabled(e.target.checked));
     }
 
-    // NEW: Handles the "REC" click, deciding whether to countdown or stop
     handleRecordButton() {
         if (this.isRecording || this.isCountingDown) {
-            this.stopAll(); // Stop if we are recording OR counting down
+            this.stopAll(); 
         } else {
             this.startCountdown();
         }
     }
 
-    // NEW: 10s Countdown logic
     startCountdown() {
         const btn = this.container.querySelector('#btn-studio-rec');
         const timerDisplay = this.container.querySelector('#studio-timer');
@@ -177,36 +174,37 @@ export class Studio {
         btn.classList.add('counting');
         btn.textContent = "GET READY";
 
-        let timeLeft = 10;
+        const bpm = this.sequencer ? this.sequencer.bpm : 100;
+        const msPerBeat = 60000 / bpm;
+        let beatsLeft = 4;
         
-        // Initial visual update
-        timerDisplay.textContent = `-${timeLeft.toString().padStart(2, '0')}s`;
+        timerDisplay.textContent = `-${beatsLeft}`;
         timerDisplay.style.color = "#ffaa00";
 
+        if (ctx.state === 'suspended') ctx.resume();
+
         this.countdownInterval = setInterval(() => {
-            timeLeft--;
-            if (timeLeft > 0) {
-                timerDisplay.textContent = `-${timeLeft.toString().padStart(2, '0')}s`;
+            beatsLeft--;
+            if (beatsLeft > 0) {
+                timerDisplay.textContent = `-${beatsLeft}`;
+                if (beatsLeft <= 3) playDrum('metronome'); 
             } else {
-                // COUNTDOWN FINISHED -> START RECORDING
                 clearInterval(this.countdownInterval);
                 this.isCountingDown = false;
                 btn.classList.remove('counting');
                 timerDisplay.style.color = "#00e5ff";
-                this.startRecording(); // Triggers actual recording + Sync start
+                this.startRecording(); 
             }
-        }, 1000);
+        }, msPerBeat);
     }
 
     async startRecording() {
         const btn = this.container.querySelector('#btn-studio-rec');
         const syncSource = this.container.querySelector('#sel-studio-sync').value;
 
-        // 1. Initialize Mic
         await Microphone.init();
         if (ctx.state === 'suspended') await ctx.resume();
 
-        // 2. Start Audio Recorder
         this.recorder = startStudioRecording();
         this.isRecording = true;
         this.startTime = Date.now();
@@ -214,18 +212,13 @@ export class Studio {
         btn.textContent = "■ STOP";
         btn.classList.add('recording');
 
-        // 3. Start Sync Source (Sequencer or SongBuilder)
         if (syncSource === 'sequencer' && this.sequencer) {
             if (!this.sequencer.isPlaying) this.sequencer.togglePlay();
         } else if (syncSource === 'songbuilder' && this.songBuilder) {
-            // Assumes SongBuilder uses same sequencer instance or has its own play
-            // If SongBuilder is just a UI over sequencer, we might just play sequencer.
-            // But if it has a specific play method:
             if(this.songBuilder.togglePlay) this.songBuilder.togglePlay();
             else if(!this.sequencer.isPlaying) this.sequencer.togglePlay(); 
         }
 
-        // 4. Start Timer UI
         this.timerInterval = setInterval(() => {
             const elapsed = Date.now() - this.startTime;
             const secs = Math.floor(elapsed / 1000) % 60;
@@ -243,10 +236,9 @@ export class Studio {
         btn.textContent = "● REC NEW";
         btn.classList.remove('recording');
         
-        // Stop Sync Source
         const syncSource = this.container.querySelector('#sel-studio-sync').value;
         if ((syncSource === 'sequencer' || syncSource === 'songbuilder') && this.sequencer && this.sequencer.isPlaying) {
-             this.sequencer.togglePlay(); // Toggle off
+             this.sequencer.togglePlay(); 
         }
 
         if (this.recorder) {
@@ -266,7 +258,8 @@ export class Studio {
             buffer: audioBuffer,
             volume: 0.8,
             muted: false,
-            blob: blob
+            blob: blob,
+            _activeGain: null // Placeholder for live gain node
         };
         
         this.tracks.push(newTrack);
@@ -300,7 +293,17 @@ export class Studio {
             
             div.querySelector('.track-name').addEventListener('blur', (e) => { track.name = e.target.textContent; });
             div.querySelector('.btn-mute').addEventListener('click', () => { track.muted = !track.muted; this.renderTrackList(); });
-            div.querySelector('.track-vol-slider').addEventListener('input', (e) => { track.volume = parseFloat(e.target.value); });
+            
+            // --- FIXED: Real-time volume update ---
+            div.querySelector('.track-vol-slider').addEventListener('input', (e) => { 
+                const newVol = parseFloat(e.target.value);
+                track.volume = newVol; 
+                // If this track is currently playing, update the gain node immediately
+                if (track._activeGain) {
+                    track._activeGain.gain.setTargetAtTime(newVol, ctx.currentTime, 0.05);
+                }
+            });
+
             div.querySelector('.delete').addEventListener('click', () => { if(confirm('Delete this track?')) { this.tracks.splice(index, 1); this.renderTrackList(); this.updateExportButton(); } });
             list.appendChild(div);
         });
@@ -317,27 +320,32 @@ export class Studio {
             if (track.muted) return;
             const source = ctx.createBufferSource();
             source.buffer = track.buffer;
+            
             const gainNode = ctx.createGain();
             gainNode.gain.value = track.volume;
+            
+            // Store reference so slider can access it
+            track._activeGain = gainNode;
+
             source.connect(gainNode);
             gainNode.connect(ctx.destination);
             source.start(0);
             this.activeSources.push(source);
+            
             source.onended = () => {
                 this.activeSources = this.activeSources.filter(s => s !== source);
+                track._activeGain = null; // Clean up reference
                 if(this.activeSources.length === 0) this.stopAll();
             };
         });
     }
 
     stopAll() {
-        // 1. Reset Recording State
         if (this.isRecording) {
             this.stopRecording();
-            return; // stopRecording handles the rest
+            return; 
         }
 
-        // 2. Reset Countdown State
         if (this.isCountingDown) {
             clearInterval(this.countdownInterval);
             this.isCountingDown = false;
@@ -349,11 +357,14 @@ export class Studio {
             return;
         }
 
-        // 3. Stop Playback
         this.isPlaying = false;
         this.container.querySelector('#btn-studio-play').classList.remove('recording');
+        
         this.activeSources.forEach(src => { try { src.stop(); } catch(e) {} });
         this.activeSources = [];
+        
+        // Clean up all gain references
+        this.tracks.forEach(t => t._activeGain = null);
     }
 
     async exportMix() {

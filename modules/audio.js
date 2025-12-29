@@ -9,11 +9,13 @@ export const ctx = new AudioContext();
 
 // --- EXPORTED STATE ---
 export const SAMPLE_BANKS = new Array(8).fill(null);
+export const DRUM_SAMPLES = new Array(5).fill(null);
+export const DRUM_VOLUMES = new Array(5).fill(1.0); 
 
-// --- RECORDING BUS ---
+const DRUM_MAP = { 'kick': 0, 'snare': 1, 'hihat': 2, 'tom': 3, 'crash': 4 };
+
 const recordingDest = ctx.createMediaStreamDestination();
 
-// --- MASTER MIXER ---
 const masterCompressor = ctx.createDynamicsCompressor();
 masterCompressor.threshold.setValueAtTime(-8, ctx.currentTime);
 masterCompressor.knee.setValueAtTime(30, ctx.currentTime);
@@ -24,7 +26,6 @@ masterCompressor.release.setValueAtTime(0.25, ctx.currentTime);
 const masterGain = ctx.createGain();
 masterGain.gain.value = 0.5; 
 
-// Reverb Bus
 const reverbNode = ctx.createConvolver();
 const reverbGain = ctx.createGain();
 reverbGain.gain.value = 1.0; 
@@ -45,146 +46,82 @@ masterCompressor.connect(masterGain);
 reverbNode.connect(reverbGain);
 reverbGain.connect(masterGain);
 
-// Master outputs
 masterGain.connect(ctx.destination);
 masterGain.connect(recordingDest); 
 
-// --- VOCAL FX CHAIN ---
 export function createVocalChain() {
     const lowCut = ctx.createBiquadFilter();
     lowCut.type = 'highpass';
     lowCut.frequency.value = 100; 
-
     const highShelf = ctx.createBiquadFilter();
     highShelf.type = 'highshelf';
     highShelf.frequency.value = 5000;
     highShelf.gain.value = 3; 
-
     const compressor = ctx.createDynamicsCompressor();
     compressor.threshold.value = -20;
     compressor.knee.value = 20;
     compressor.ratio.value = 8;
     compressor.attack.value = 0.01;
     compressor.release.value = 0.2;
-
     const reverbSend = ctx.createGain();
     reverbSend.gain.value = 0.3; 
-
     lowCut.connect(highShelf);
     highShelf.connect(compressor);
     compressor.connect(reverbSend);
     reverbSend.connect(reverbNode);
-
-    return {
-        input: lowCut,
-        output: compressor, 
-        reverbSend: reverbSend
-    };
+    return { input: lowCut, output: compressor, reverbSend: reverbSend };
 }
 
-// --- MICROPHONE INPUT SYSTEM ---
 export const Microphone = {
-    stream: null,
-    sourceNode: null,
-    gainNode: null,
-    analyserNode: null,
-    fxChain: null,
-    isInitialized: false,
-    studioConnection: null, 
-    useFx: false,
-
+    stream: null, sourceNode: null, gainNode: null, analyserNode: null, fxChain: null, isInitialized: false, studioConnection: null, useFx: false,
     async init() {
         if (this.isInitialized) return;
-
         try {
-            const constraints = {
-                audio: {
-                    echoCancellation: false,
-                    autoGainControl: false, 
-                    noiseSuppression: false, 
-                    latency: 0,
-                    channelCount: 1 
-                }
-            };
-
+            const constraints = { audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false, latency: 0, channelCount: 1 } };
             const rawStream = await navigator.mediaDevices.getUserMedia(constraints);
-            
             this.sourceNode = ctx.createMediaStreamSource(rawStream);
             this.gainNode = ctx.createGain();
             this.gainNode.gain.value = 1.0; 
             
+            // --- UPDATED: Increased FFT size for Bass detection ---
             this.analyserNode = ctx.createAnalyser();
-            this.analyserNode.fftSize = 256;
-            
-            this.fxChain = createVocalChain();
+            this.analyserNode.fftSize = 4096; 
+            // -----------------------------------------------------
 
+            this.fxChain = createVocalChain();
             this.sourceNode.connect(this.gainNode);
             this.gainNode.connect(this.analyserNode);
-            
             this.stream = rawStream; 
             this.isInitialized = true;
             console.log("Microphone Initialized");
-
-        } catch (err) {
-            console.error("Microphone Init Failed:", err);
-            throw err;
-        }
+        } catch (err) { console.error("Microphone Init Failed:", err); throw err; }
     },
-
-    setGain(val) {
-        if(this.gainNode && isFinite(val)) {
-            this.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.02);
-        }
-    },
-    
-    setReverbAmount(val) {
-        if(this.fxChain && isFinite(val)) {
-            this.fxChain.reverbSend.gain.setTargetAtTime(val, ctx.currentTime, 0.02);
-        }
-    },
-
-    setFxEnabled(enabled) {
-        this.useFx = enabled;
-    },
-
+    setGain(val) { if(this.gainNode && isFinite(val)) this.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.02); },
+    setReverbAmount(val) { if(this.fxChain && isFinite(val)) this.fxChain.reverbSend.gain.setTargetAtTime(val, ctx.currentTime, 0.02); },
+    setFxEnabled(enabled) { this.useFx = enabled; },
     getLevel() {
         if(!this.analyserNode) return 0;
         const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
         this.analyserNode.getByteTimeDomainData(dataArray);
-        
         let sum = 0;
-        for(let i = 0; i < dataArray.length; i++) {
-            const x = (dataArray[i] - 128) / 128.0;
-            sum += x * x;
-        }
+        for(let i = 0; i < dataArray.length; i++) { const x = (dataArray[i] - 128) / 128.0; sum += x * x; }
         return Math.sqrt(sum / dataArray.length);
     },
-
     connectToStudio() {
         if (!this.gainNode) return;
         this.disconnectFromStudio();
-
-        if (this.useFx && this.fxChain) {
-            this.gainNode.connect(this.fxChain.input);
-            this.studioConnection = this.fxChain.output.connect(recordingDest);
-        } else {
-            this.studioConnection = this.gainNode.connect(recordingDest);
-        }
+        if (this.useFx && this.fxChain) { this.gainNode.connect(this.fxChain.input); this.studioConnection = this.fxChain.output.connect(recordingDest); } 
+        else { this.studioConnection = this.gainNode.connect(recordingDest); }
     },
-
     disconnectFromStudio() {
         if (this.gainNode) {
             try { this.gainNode.disconnect(recordingDest); } catch(e){}
-            if (this.fxChain) {
-                try { this.gainNode.disconnect(this.fxChain.input); } catch(e){}
-                try { this.fxChain.output.disconnect(recordingDest); } catch(e){}
-            }
+            if (this.fxChain) { try { this.gainNode.disconnect(this.fxChain.input); } catch(e){} try { this.fxChain.output.disconnect(recordingDest); } catch(e){} }
             this.studioConnection = null;
         }
     }
 };
 
-// --- STUDIO RECORDING FUNCTION ---
 export function startStudioRecording() {
     Microphone.connectToStudio();
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
@@ -192,37 +129,21 @@ export function startStudioRecording() {
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     const stopPromise = new Promise(resolve => {
-        recorder.onstop = () => {
-            Microphone.disconnectFromStudio();
-            const blob = new Blob(chunks, { type: 'audio/webm' });
-            resolve(blob);
-        };
+        recorder.onstop = () => { Microphone.disconnectFromStudio(); const blob = new Blob(chunks, { type: 'audio/webm' }); resolve(blob); };
     });
     recorder.start();
     return { stop: () => { if (recorder.state !== 'inactive') recorder.stop(); return stopPromise; } };
 }
 
-// --- TRACK MIXER ---
 const tracks = ['chords', 'bass', 'lead', 'drums', 'samples', 'looper'];
 const mixer = {};
-
 tracks.forEach(name => {
     const input = ctx.createGain();
     const filter = ctx.createBiquadFilter();
     const volume = ctx.createGain();
     const reverbSend = ctx.createGain();
-
-    input.gain.value = 1.0;
-    filter.frequency.value = 20000; 
-    volume.gain.value = 0.8;
-    reverbSend.gain.value = 0.1;
-
-    input.connect(filter);
-    filter.connect(volume);
-    volume.connect(masterCompressor);
-    input.connect(reverbSend);
-    reverbSend.connect(reverbNode);
-
+    input.gain.value = 1.0; filter.frequency.value = 20000; volume.gain.value = 0.8; reverbSend.gain.value = 0.1;
+    input.connect(filter); filter.connect(volume); volume.connect(masterCompressor); input.connect(reverbSend); reverbSend.connect(reverbNode);
     mixer[name] = { input, filter, volume, reverbSend };
 });
 
@@ -234,17 +155,20 @@ export function setTrackFilter(t, v) {
     }
 }
 export function setTrackReverb(t, v) { if(mixer[t] && isFinite(v)) mixer[t].reverbSend.gain.setTargetAtTime(v * 0.8, ctx.currentTime, 0.02); }
+export function getTrackInput(name) { return mixer[name] ? mixer[name].input : masterCompressor; }
 
-export function getTrackInput(name) {
-    return mixer[name] ? mixer[name].input : masterCompressor;
+export async function loadSavedSamples() {
+    for(let i=0; i<8; i++) { const entry = await SampleStorage.loadSample(i, ctx, 'slot'); if(entry && entry.buffer) SAMPLE_BANKS[i] = entry; }
+    for(let i=0; i<5; i++) { const entry = await SampleStorage.loadSample(i, ctx, 'drum'); if(entry && entry.buffer) DRUM_SAMPLES[i] = entry; }
 }
 
-// --- SAMPLER FUNCTIONS ---
-export async function loadSavedSamples() {
-    for(let i=0; i<8; i++) {
-        const entry = await SampleStorage.loadSample(i, ctx);
-        if(entry && entry.buffer) SAMPLE_BANKS[i] = entry;
-    }
+export async function unloadDrumSample(index) {
+    DRUM_SAMPLES[index] = null;
+    await SampleStorage.deleteSample(index, 'drum');
+}
+
+export function setDrumVolume(index, val) {
+    if(index >= 0 && index < 5) DRUM_VOLUMES[index] = val;
 }
 
 export function recordSample(stream, maxLen = 10.0) {
@@ -258,10 +182,7 @@ export function recordSample(stream, maxLen = 10.0) {
                 if (chunks.length === 0) { resolve(null); return; }
                 const blob = new Blob(chunks, { type: mimeType });
                 const arrayBuffer = await blob.arrayBuffer();
-                try {
-                    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-                    resolve(audioBuffer);
-                } catch(e) { resolve(null); }
+                try { const audioBuffer = await ctx.decodeAudioData(arrayBuffer); resolve(audioBuffer); } catch(e) { resolve(null); }
             } catch (err) { resolve(null); }
         };
     });
@@ -314,9 +235,10 @@ export function shiftBuffer(buffer, shiftMs) {
     return newBuf;
 }
 
-export function playSample(slotIndex, time, freq = null, track = 'lead', bufferOverride = null, customDest = null) {
+export function playSample(slotIndex, time, freq = null, track = 'lead', bufferOverride = null, customDest = null, volume = 1.0) {
     let buffer;
-    if (bufferOverride) { buffer = bufferOverride; } else {
+    if (bufferOverride) { buffer = bufferOverride; } 
+    else {
         const entry = SAMPLE_BANKS[slotIndex]; if (!entry || !entry.buffer) return null;
         buffer = entry.buffer;
     }
@@ -327,17 +249,17 @@ export function playSample(slotIndex, time, freq = null, track = 'lead', bufferO
         let rate = freq / baseFreq; if(rate < 0.1) rate = 0.1; if(rate > 4.0) rate = 4.0;
         source.playbackRate.value = rate;
     }
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = volume;
     const dest = customDest || (mixer[track] ? mixer[track].input : mixer.lead.input);
-    source.connect(dest);
+    source.connect(gainNode);
+    gainNode.connect(dest);
     source.start(time);
-    return { osc: source, gain: null, type: 'sampler' }; 
+    return { osc: source, gain: gainNode, type: 'sampler' }; 
 }
 
 export async function decodeAudioFile(file) {
-    try {
-        const arrayBuffer = await file.arrayBuffer();
-        return await ctx.decodeAudioData(arrayBuffer);
-    } catch (e) { console.error("File Decode Error", e); return null; }
+    try { const arrayBuffer = await file.arrayBuffer(); return await ctx.decodeAudioData(arrayBuffer); } catch (e) { console.error("File Decode Error", e); return null; }
 }
 
 export function bufferToWav(buffer) {
@@ -364,7 +286,6 @@ export function bufferToWav(buffer) {
     return new Blob([view], { type: 'audio/wav' });
 }
 
-// --- SYNTH INSTRUMENTS ---
 export const INSTRUMENTS = {
     'Acoustic Guitar': { type: 'triangle', attack: 0.02, decay: 0.4, sustain: 0, release: 0.1 }, 
     'Piano':           { type: 'sine', attack: 0.01, decay: 0.8, sustain: 0.2, release: 0.5, type2: 'triangle', mix: 0.3 }, 
@@ -375,79 +296,40 @@ export const INSTRUMENTS = {
     'Marimba':         { type: 'sine', attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
     '8-Bit / NES':     { type: 'square', attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.1 }
 };
-
 for(let i=1; i<=8; i++) INSTRUMENTS[`Sampler ${i}`] = { type: 'sampler', slot: i-1 };
 
-const MAX_VOICES = 30; 
-const activeOscillators = {}; 
-const allRunningVoices = []; 
+const MAX_VOICES = 30; const activeOscillators = {}; const allRunningVoices = []; 
 
 export function startNote(freq, midiNote, instName = 'Lead Synth', start = null, dur = null, track = 'lead') {
     if (ctx.state === 'suspended') ctx.resume();
-    
-    if (midiNote > 0 && activeOscillators[midiNote]) {
-        stopNote(midiNote);
-    }
-
-    if (allRunningVoices.length >= MAX_VOICES) {
-        const oldest = allRunningVoices.shift();
-        try {
-            oldest.gain.disconnect();
-            oldest.osc.stop();
-        } catch(e) { }
-    }
-
+    if (midiNote > 0 && activeOscillators[midiNote]) stopNote(midiNote);
+    if (allRunningVoices.length >= MAX_VOICES) { const oldest = allRunningVoices.shift(); try { oldest.gain.disconnect(); oldest.osc.stop(); } catch(e) { } }
     if (instName.startsWith('Sampler')) {
         const slot = parseInt(instName.split(' ')[1]) - 1;
         const voice = playSample(slot, start || ctx.currentTime, freq, track);
         if (midiNote > 0 && voice) activeOscillators[midiNote] = voice;
         return voice;
     }
-
     const t = start || ctx.currentTime;
     const recipe = INSTRUMENTS[instName] || INSTRUMENTS['Lead Synth'];
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = recipe.type;
-    osc.frequency.value = freq;
-
+    osc.type = recipe.type; osc.frequency.value = freq;
     let outputNode = gain;
-    if (recipe.filter) {
-        const f = ctx.createBiquadFilter();
-        f.type = 'lowpass'; f.frequency.value = recipe.filter;
-        gain.connect(f); outputNode = f;
-    }
+    if (recipe.filter) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = recipe.filter; gain.connect(f); outputNode = f; }
     outputNode.connect(mixer[track] ? mixer[track].input : mixer.lead.input);
     osc.connect(gain);
-
     const peakGain = 0.15; 
-
     gain.gain.setValueAtTime(0, t);
     gain.gain.linearRampToValueAtTime(peakGain, t + recipe.attack); 
     gain.gain.setTargetAtTime(peakGain * (recipe.sustain !== undefined ? recipe.sustain : 0.6), t + recipe.attack, recipe.decay / 3);
-
     if (dur) {
         const releaseTail = recipe.release || 0.2;
-        if (recipe.sustain === 0) {
-             osc.start(t);
-             osc.stop(t + recipe.decay + releaseTail + 1.0); 
-        } else {
-             gain.gain.setTargetAtTime(0, t + dur, 0.1);
-             osc.start(t);
-             osc.stop(t + dur + releaseTail);
-        }
-    } else {
-        osc.start(t);
-    }
-    
-    const voice = { osc, gain, type: 'synth' };
-    allRunningVoices.push(voice);
-    
-    osc.onended = () => {
-        const idx = allRunningVoices.indexOf(voice);
-        if (idx > -1) allRunningVoices.splice(idx, 1);
-    };
-
+        if (recipe.sustain === 0) { osc.start(t); osc.stop(t + recipe.decay + releaseTail + 1.0); } 
+        else { gain.gain.setTargetAtTime(0, t + dur, 0.1); osc.start(t); osc.stop(t + dur + releaseTail); }
+    } else { osc.start(t); }
+    const voice = { osc, gain, type: 'synth' }; allRunningVoices.push(voice);
+    osc.onended = () => { const idx = allRunningVoices.indexOf(voice); if (idx > -1) allRunningVoices.splice(idx, 1); };
     if (midiNote > 0) activeOscillators[midiNote] = voice;
     return voice;
 }
@@ -455,36 +337,16 @@ export function startNote(freq, midiNote, instName = 'Lead Synth', start = null,
 export function stopNote(midiNote) {
     const voice = activeOscillators[midiNote];
     if (voice) {
-        if (voice.type === 'synth') {
-            const now = ctx.currentTime;
-            voice.gain.gain.cancelScheduledValues(now);
-            voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
-            voice.gain.gain.linearRampToValueAtTime(0, now + 0.1);
-            voice.osc.stop(now + 0.1);
-        } else if (voice.type === 'sampler') {
-            try { voice.osc.stop(); } catch(e){}
-        }
+        if (voice.type === 'synth') { const now = ctx.currentTime; voice.gain.gain.cancelScheduledValues(now); voice.gain.gain.setValueAtTime(voice.gain.gain.value, now); voice.gain.gain.linearRampToValueAtTime(0, now + 0.1); voice.osc.stop(now + 0.1); } 
+        else if (voice.type === 'sampler') { try { voice.osc.stop(); } catch(e){} }
         delete activeOscillators[midiNote];
     }
 }
 
 export function playStrum(freqs, time, instName, step = 0) {
-    if (instName && instName.startsWith('Sampler')) {
-        const slot = parseInt(instName.split(' ')[1]) - 1;
-        freqs.forEach((f, i) => playSample(slot, time + (i*0.03), f, 'chords'));
-        return;
-    }
-    
-    const t = time || ctx.currentTime;
-    const isG = instName && instName.includes('Guitar');
-    let d = isG ? 0.03 : 0.0;
-    
-    let notesToPlay = [...freqs];
-    
-    if (isG && step % 2 !== 0) {
-        notesToPlay.reverse(); 
-    }
-
+    if (instName && instName.startsWith('Sampler')) { const slot = parseInt(instName.split(' ')[1]) - 1; freqs.forEach((f, i) => playSample(slot, time + (i*0.03), f, 'chords')); return; }
+    const t = time || ctx.currentTime; const isG = instName && instName.includes('Guitar'); let d = isG ? 0.03 : 0.0;
+    let notesToPlay = [...freqs]; if (isG && step % 2 !== 0) notesToPlay.reverse(); 
     notesToPlay.forEach((f, i) => startNote(f, -1, instName, t + (i*d), 0.5, 'chords'));
 }
 
@@ -492,58 +354,54 @@ export function playDrum(type, time) {
     const t = time || ctx.currentTime;
     const dest = mixer.drums.input; 
     
+    // Volume logic
+    const drumIndex = DRUM_MAP[type];
+    const vol = (drumIndex !== undefined) ? DRUM_VOLUMES[drumIndex] : 1.0;
+
+    if (drumIndex !== undefined && DRUM_SAMPLES[drumIndex] && DRUM_SAMPLES[drumIndex].buffer) {
+        playSample(null, t, null, 'drums', DRUM_SAMPLES[drumIndex].buffer, null, vol);
+        return; 
+    }
+
     if (type === 'kick') {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.frequency.setValueAtTime(150, t);
-        osc.frequency.exponentialRampToValueAtTime(0.01, t + 0.5);
-        gain.gain.setValueAtTime(1, t);
-        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
-        osc.connect(gain); gain.connect(dest);
-        osc.start(t); osc.stop(t + 0.5);
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(0.01, t + 0.5);
+        gain.gain.setValueAtTime(1 * vol, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+        osc.connect(gain); gain.connect(dest); osc.start(t); osc.stop(t + 0.5);
     } 
     else if (type === 'snare') {
-        const osc = ctx.createOscillator();
-        const oscGain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(100, t);
-        oscGain.gain.setValueAtTime(0, t);
-        oscGain.gain.linearRampToValueAtTime(0.6, t + 0.01);
-        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
-        osc.connect(oscGain); oscGain.connect(dest);
-        osc.start(t); osc.stop(t + 0.2);
-        
-        const buf = ctx.createBuffer(1, ctx.sampleRate*0.2, ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
-        const noise = ctx.createBufferSource();
-        noise.buffer = buf;
-        const nGain = ctx.createGain();
-        nGain.gain.setValueAtTime(0.5, t);
-        nGain.gain.exponentialRampToValueAtTime(0.01, t+0.2);
-        noise.connect(nGain); nGain.connect(dest);
-        noise.start(t);
+        const osc = ctx.createOscillator(); const oscGain = ctx.createGain();
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(100, t);
+        oscGain.gain.setValueAtTime(0, t); oscGain.gain.linearRampToValueAtTime(0.6 * vol, t + 0.01); oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+        osc.connect(oscGain); oscGain.connect(dest); osc.start(t); osc.stop(t + 0.2);
+        const buf = ctx.createBuffer(1, ctx.sampleRate*0.2, ctx.sampleRate); const data = buf.getChannelData(0); for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
+        const noise = ctx.createBufferSource(); noise.buffer = buf; const nGain = ctx.createGain();
+        nGain.gain.setValueAtTime(0.5 * vol, t); nGain.gain.exponentialRampToValueAtTime(0.01, t+0.2);
+        noise.connect(nGain); nGain.connect(dest); noise.start(t);
     }
     else if (type === 'hihat') {
-        const buf = ctx.createBuffer(1, ctx.sampleRate*0.05, ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
-        const noise = ctx.createBufferSource();
-        noise.buffer = buf;
-        const f = ctx.createBiquadFilter(); f.type='highpass'; f.frequency.value=8000;
-        const g = ctx.createGain(); g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.05);
-        noise.connect(f).connect(g).connect(dest);
-        noise.start(t);
+        const buf = ctx.createBuffer(1, ctx.sampleRate*0.05, ctx.sampleRate); const data = buf.getChannelData(0); for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
+        const noise = ctx.createBufferSource(); noise.buffer = buf; const f = ctx.createBiquadFilter(); f.type='highpass'; f.frequency.value=8000;
+        const g = ctx.createGain(); g.gain.setValueAtTime(0.3 * vol, t); g.gain.exponentialRampToValueAtTime(0.01, t+0.05);
+        noise.connect(f).connect(g).connect(dest); noise.start(t);
+    }
+    else if (type === 'tom') {
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(200, t); osc.frequency.exponentialRampToValueAtTime(100, t + 0.2);
+        gain.gain.setValueAtTime(0.7 * vol, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        osc.connect(gain); gain.connect(dest); osc.start(t); osc.stop(t + 0.3);
+    }
+    else if (type === 'crash') {
+        const buf = ctx.createBuffer(1, ctx.sampleRate * 2.0, ctx.sampleRate); const data = buf.getChannelData(0); for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
+        const noise = ctx.createBufferSource(); noise.buffer = buf; const f = ctx.createBiquadFilter(); f.type='highpass'; f.frequency.value=3000;
+        const g = ctx.createGain(); g.gain.setValueAtTime(0.4 * vol, t); g.gain.exponentialRampToValueAtTime(0.01, t+1.5); 
+        noise.connect(f).connect(g).connect(dest); noise.start(t);
     }
     else if (type === 'metronome') {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
         osc.frequency.value = 1200;
-        gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(0.5, t + 0.005);
-        gain.gain.linearRampToValueAtTime(0, t + 0.05);
-        osc.connect(gain); gain.connect(dest);
-        osc.start(t); osc.stop(t + 0.05);
+        gain.gain.setValueAtTime(0, t); gain.gain.linearRampToValueAtTime(0.5, t + 0.005); gain.gain.linearRampToValueAtTime(0, t + 0.05);
+        osc.connect(gain); gain.connect(dest); osc.start(t); osc.stop(t + 0.05);
     }
 }
 
@@ -563,21 +421,11 @@ function getFrequency(noteName, octave) {
 
 export function playScaleSequence(notes) {
     if (ctx.state === 'suspended') ctx.resume();
-    const now = ctx.currentTime;
-    let currentOctave = 3;
-    let lastNoteIndex = -1;
+    const now = ctx.currentTime; let currentOctave = 3; let lastNoteIndex = -1;
     notes.forEach((note, index) => {
-        let cleanNote = note;
-        if (!SHARPS.includes(cleanNote)) cleanNote = ENHARMONIC_MAP[cleanNote] || cleanNote;
-        const noteIndex = SHARPS.indexOf(cleanNote);
-        if (noteIndex < lastNoteIndex) currentOctave++;
-        lastNoteIndex = noteIndex;
-        const freq = getFrequency(note, currentOctave);
-        startNote(freq, -1, 'Lead Synth', now + (index * 0.4), 0.5, 'lead');
+        let cleanNote = note; if (!SHARPS.includes(cleanNote)) cleanNote = ENHARMONIC_MAP[cleanNote] || cleanNote;
+        const noteIndex = SHARPS.indexOf(cleanNote); if (noteIndex < lastNoteIndex) currentOctave++; lastNoteIndex = noteIndex;
+        const freq = getFrequency(note, currentOctave); startNote(freq, -1, 'Lead Synth', now + (index * 0.4), 0.5, 'lead');
     });
 }
-
-export function playSingleNote(note, oct, time, inst) { 
-    const t = time||ctx.currentTime;
-    startNote(getFrequency(note, oct), -1, inst || 'Piano', t, 1.5, 'lead');
-}
+export function playSingleNote(note, oct, time, inst) { const t = time||ctx.currentTime; startNote(getFrequency(note, oct), -1, inst || 'Piano', t, 1.5, 'lead'); }
