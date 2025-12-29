@@ -1,4 +1,4 @@
-const CACHE_NAME = 'songwriters-toolbox-v7'; // Incremented version to force update
+const CACHE_NAME = 'songwriters-toolbox-v11'; // Incremented to v11
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -13,10 +13,12 @@ const ASSETS_TO_CACHE = [
   './modules/tuner.js',
   './modules/keyboard.js',
   './modules/sequencer.js',
-  // --- NEW MODULES ADDED BELOW ---
   './modules/looper.js',
   './modules/sampler.js',
-  './modules/storage.js'
+  './modules/storage.js',
+  './modules/songbuilder.js',
+  './modules/studio.js',
+  './modules/drumSampler.js' // NEW: Added Drum Sampler module
 ];
 
 // Install Event: Cache files
