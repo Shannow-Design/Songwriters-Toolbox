@@ -11,7 +11,7 @@ import { SongBuilder } from './songbuilder.js';
 import { Studio } from './studio.js'; 
 import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
 import { CircleOfFifths } from './circle.js';
-import { DrumSampler } from './drumSampler.js'; 
+import { DrumSampler } from './drumsampler.js'; 
 
 // --- DOM Elements ---
 const keySelect = document.getElementById('key-select');
