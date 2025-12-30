@@ -9,9 +9,9 @@ import { Sampler } from './sampler.js';
 import { Looper } from './looper.js'; 
 import { SongBuilder } from './songbuilder.js'; 
 import { Studio } from './studio.js'; 
+import { DrumSampler } from './drumSampler.js'; 
 import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
-import { CircleOfFifths } from './circle.js';
-import { DrumSampler } from './drumsampler.js'; 
+import { CircleOfFifths } from './circle.js'; 
 
 // --- DOM Elements ---
 const keySelect = document.getElementById('key-select');
@@ -41,6 +41,7 @@ const cbSampler = document.getElementById('cb-sampler');
 const cbSongBuilder = document.getElementById('cb-songbuilder'); 
 const cbLooper = document.getElementById('cb-looper');
 const cbStudio = document.getElementById('cb-studio');
+const cbDrumSampler = document.getElementById('cb-drum-sampler');
 
 // Wrappers
 const wrapperButtons = document.getElementById('wrapper-buttons');
@@ -52,11 +53,10 @@ const wrapperTuner = document.getElementById('wrapper-tuner');
 const wrapperKeyboard = document.getElementById('wrapper-keyboard');
 const wrapperSequencer = document.getElementById('wrapper-sequencer');
 const wrapperSampler = document.getElementById('wrapper-sampler');
-const cbDrumSampler = document.getElementById('cb-drum-sampler');
-const wrapperDrumSampler = document.getElementById('wrapper-drum-sampler');
 const wrapperSongBuilder = document.getElementById('wrapper-songbuilder');
 const wrapperLooper = document.getElementById('wrapper-looper');
 const wrapperStudio = document.getElementById('wrapper-studio');
+const wrapperDrumSampler = document.getElementById('wrapper-drum-sampler');
 
 // --- Initialize Modules ---
 const theory = new TheoryEngine(); 
@@ -190,9 +190,12 @@ function updateFretboards(chordNotes, chordRoot = null) {
     if (TUNINGS[tuningSelect.value]) gTuning = TUNINGS[tuningSelect.value].notes;
     else if (TUNINGS.standard) gTuning = TUNINGS.standard.notes;
 
+    // --- UPDATED: Handle 4 or 5 string bass tuning ---
     let bTuning = ['E','A','D','G'];
-    if (TUNINGS[bassTuningSelect.value]) bTuning = TUNINGS[bassTuningSelect.value].notes;
-    else if (TUNINGS.bass_standard) bTuning = TUNINGS.bass_standard.notes;
+    if (TUNINGS[bassTuningSelect.value]) {
+        bTuning = TUNINGS[bassTuningSelect.value].notes;
+    }
+    // -----------------------------------------------
 
     const capo = parseInt(capoSelect.value || 0);
 
@@ -221,8 +224,15 @@ function init() {
         const option = document.createElement('option');
         option.value = key;
         option.textContent = value.name;
-        if (value.notes.length === 6) tuningSelect.appendChild(option);
-        else if (value.notes.length === 4) bassTuningSelect.appendChild(option);
+        
+        // Populate Guitar Dropdown (6 strings)
+        if (value.notes.length === 6) {
+            tuningSelect.appendChild(option);
+        }
+        // Populate Bass Dropdown (4 OR 5 strings) - UPDATED
+        else if (value.notes.length === 4 || value.notes.length === 5) {
+            bassTuningSelect.appendChild(option);
+        }
     }
     tuningSelect.value = 'standard';
     bassTuningSelect.value = 'bass_standard';
@@ -275,10 +285,18 @@ function init() {
         });
     }
 
-    // NEW: Studio Listener
+    // Studio Listener
     if(cbStudio) {
         cbStudio.addEventListener('change', () => {
             wrapperStudio.style.display = cbStudio.checked ? 'block' : 'none';
+        });
+    }
+    
+    // Drum Sampler Listener
+    if(cbDrumSampler) {
+        cbDrumSampler.addEventListener('change', () => {
+            wrapperDrumSampler.style.display = cbDrumSampler.checked ? 'block' : 'none';
+            if(cbDrumSampler.checked) drumSampler.updateStatus();
         });
     }
     
@@ -371,14 +389,6 @@ function renderNoteButtons(scaleNotes) {
             }, 200);
         });
         noteButtonsDisplay.appendChild(btn);
-    });
-}
-
-if(cbDrumSampler) {
-    cbDrumSampler.addEventListener('change', () => {
-        wrapperDrumSampler.style.display = cbDrumSampler.checked ? 'block' : 'none';
-        // Refresh status when opened in case samples loaded in background
-        if(cbDrumSampler.checked) drumSampler.updateStatus();
     });
 }
 

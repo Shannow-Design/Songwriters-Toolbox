@@ -3,7 +3,6 @@ import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTra
 import { getDiatonicChords, generateScale } from './theory.js';
 
 // --- DATA CONSTANTS ---
-// Updated to 5 Drum Tracks: Kick, Snare, HiHat, Tom, Crash
 const DRUM_PATTERNS = {
     'Basic Rock': { 
         kick:  [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], 
@@ -518,7 +517,6 @@ export class Sequencer {
         this.timerID = window.setTimeout(() => this.previewScheduler(), this.lookahead);
     }
     
-    // --- UPDATED: 5-Drum Support ---
     playPreviewStep(step, time) {
         const type = document.getElementById('pat-modal-title').dataset.type;
         const grid = document.getElementById('pattern-editor-grid');
@@ -554,7 +552,6 @@ export class Sequencer {
         }
     }
 
-    // --- UPDATED: 5-Drum Grid ---
     renderDrumGrid(container) { 
         ['kick', 'snare', 'hihat', 'tom', 'crash'].forEach(part => { 
             const row = document.createElement('div'); 
@@ -580,7 +577,6 @@ export class Sequencer {
     renderToggleGrid(container, label) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${label}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-note', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }
     renderCycleGrid(container, options) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">Note</div>`; const cycle = options; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.textContent = '-'; cell.dataset.idx = 0; cell.dataset.step = i; cell.addEventListener('click', () => { let idx = parseInt(cell.dataset.idx); idx = (idx + 1) % cycle.length; cell.dataset.idx = idx; const val = cycle[idx]; cell.textContent = val || '-'; cell.classList.toggle('active-note', val !== null); }); row.appendChild(cell); } container.appendChild(row); }
     
-    // --- UPDATED: Save 5-Drum Pattern ---
     saveCustomPattern() { 
         const modal = document.getElementById('pattern-modal'); 
         const type = document.getElementById('pat-modal-title').dataset.type; 
@@ -638,7 +634,20 @@ export class Sequencer {
     
     loadPreset(name) { 
         const p = this.savedPresets[name]; if(!p) return; 
-        this.bpm = p.bpm; this.settings = p.settings; this.state = p.state; 
+        this.bpm = p.bpm; this.settings = p.settings; 
+        
+        // --- FIXED: Merge defaults to prevent crash from missing keys in old presets ---
+        const defaultState = {
+            progressionName: 'Pop Hit (I-V-vi-IV)',
+            rhythmName: 'Whole Notes',
+            drumName: 'Basic Rock',
+            bassName: 'Root & Fifth',
+            leadName: 'Empty',
+            samplesName: 'Whole Note (Drone)'
+        };
+        this.state = { ...defaultState, ...p.state }; 
+        // -------------------------------------------------------------------------------
+
         this.container.querySelector('#bpm-slider').value = this.bpm; 
         this.container.querySelector('#bpm-val').textContent = this.bpm; 
         this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; 
@@ -744,7 +753,6 @@ export class Sequencer {
 
         if (this.settings.metronome && (stepNumber % this.settings.metronomeSubdivision === 0)) playDrum('metronome', time);
         
-        // --- UPDATED: 5-Drum Playback ---
         const drumPat = this.libraries.drums[this.state.drumName];
         if (drumPat) {
             if (drumPat.kick && drumPat.kick[stepNumber]) playDrum('kick', time);

@@ -13,6 +13,7 @@ const NOTE_TO_INDEX = {
     'B': 11
 };
 
+// --- RESTORED: Full Scale Library ---
 export const SCALES = {
     major: { name: "Major (Ionian)", intervals: [0, 2, 4, 5, 7, 9, 11] },
     natural_minor: { name: "Natural Minor (Aeolian)", intervals: [0, 2, 3, 5, 7, 8, 10] },
@@ -28,13 +29,16 @@ export const SCALES = {
     blues: { name: "Blues", intervals: [0, 3, 5, 6, 7, 10] }
 };
 
+// --- RESTORED: Tunings + 5-String Bass ---
 export const TUNINGS = {
     standard: { name: "Guitar: Standard", notes: ['E', 'A', 'D', 'G', 'B', 'E'] },
     drop_d: { name: "Guitar: Drop D", notes: ['D', 'A', 'D', 'G', 'B', 'E'] },
     dadgad: { name: "Guitar: DADGAD", notes: ['D', 'A', 'D', 'G', 'A', 'D'] },
     open_g: { name: "Guitar: Open G", notes: ['D', 'G', 'D', 'G', 'B', 'D'] },
-    bass_standard: { name: "Bass: Standard (E A D G)", notes: ['E', 'A', 'D', 'G'] },
-    bass_drop_d: { name: "Bass: Drop D (D A D G)", notes: ['D', 'A', 'D', 'G'] }
+    bass_standard: { name: "Bass: Standard (4)", notes: ['E', 'A', 'D', 'G'] },
+    bass_drop_d: { name: "Bass: Drop D (4)", notes: ['D', 'A', 'D', 'G'] },
+    // 5-String Support
+    bass_5_string: { name: 'Bass: Standard (5)', notes: ['B', 'E', 'A', 'D', 'G'] }
 };
 
 export function getNotes() { return RAW_NOTES; }
@@ -49,9 +53,18 @@ function shouldUseFlats(rootIndex, scaleType) {
     return flatRoots.includes(rootIndex);
 }
 
+// --- UPDATED: Crash-Proof Scale Generation ---
 export function generateScale(root, scaleType) {
+    // 1. Safety Check: If old save file requests missing scale, default to Major
+    let scaleObj = SCALES[scaleType];
+    if (!scaleObj) {
+        console.warn(`Scale '${scaleType}' not found. Defaulting to Major.`);
+        scaleObj = SCALES['major'];
+        scaleType = 'major'; // Update type so flat/sharp logic works
+    }
+
     const rootIndex = RAW_NOTES.indexOf(root);
-    const intervals = SCALES[scaleType].intervals;
+    const intervals = scaleObj.intervals;
     const useFlats = shouldUseFlats(rootIndex, scaleType);
     const sourceScale = useFlats ? FLATS : SHARPS;
 
@@ -65,8 +78,12 @@ export function getDiatonicChords(root, scaleType) {
     const scaleNotes = generateScale(root, scaleType);
     const chords = [];
 
+    // Safety: If scale generation failed (empty), return empty
+    if (!scaleNotes || scaleNotes.length === 0) return [];
+
     for (let i = 0; i < scaleNotes.length; i++) {
         const rootNote = scaleNotes[i];
+        // Diatonic stacking: 1, 3, 5
         const third = scaleNotes[(i + 2) % scaleNotes.length];
         const fifth = scaleNotes[(i + 4) % scaleNotes.length];
         
@@ -91,6 +108,10 @@ export function getDiatonicChords(root, scaleType) {
                 suffix = "m";
                 quality = "Minor";
             }
+        } else {
+            // Fallback for strange scales (e.g. Locrian/Blues)
+            suffix = "?";
+            quality = "Other";
         }
 
         chords.push({
@@ -103,10 +124,8 @@ export function getDiatonicChords(root, scaleType) {
     return chords;
 }
 
-// --- ADDED CLASS DEFINITION ---
 export class TheoryEngine {
     constructor() {
-        this.key = 'C';
-        this.scale = 'major';
+        this.cache = {};
     }
 }

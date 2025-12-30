@@ -29,6 +29,7 @@ export class Looper {
         this.render();
         this.startMeterLoop();
         this.loadLoops(); 
+        this.bindEvents(); // Bind events immediately
     }
 
     setBpm(bpm) {
@@ -37,48 +38,61 @@ export class Looper {
 
     // --- STATE MANAGEMENT ---
     getSettings() {
-        // Snapshot current state
         const settings = this.banks.map(b => ({
             muted: b.isMuted,
             volume: b.volume
         }));
-        console.log("Looper: Settings Captured", settings);
-        return settings;
+        return {
+            banks: settings,
+            latencyMs: this.latencyMs,
+            micGain: parseFloat(document.getElementById('mic-gain').value)
+        };
     }
 
-    applySettings(settings) {
-        if (!settings || !Array.isArray(settings)) {
-            console.warn("Looper: No settings to apply");
-            return;
+    applySettings(data) {
+        if (!data) return;
+        
+        // Restore Globals
+        if (data.latencyMs) {
+            this.latencyMs = data.latencyMs;
+            const slider = this.container.querySelector('#latency-slider');
+            const val = this.container.querySelector('#latency-val');
+            if(slider) slider.value = this.latencyMs;
+            if(val) val.textContent = `${this.latencyMs}ms`;
         }
         
-        console.log("Looper: Applying Settings", settings);
-
-        settings.forEach((s, i) => {
-            const bank = this.banks[i];
-            if (bank) {
-                // 1. Apply Mute
-                const shouldMute = s.muted; 
-                // If we are playing and need to mute, stop audio immediately
-                if (shouldMute && !bank.isMuted && bank.activeSource) {
-                    try { bank.activeSource.stop(); } catch(e) {}
-                    bank.activeSource = null;
-                }
-                bank.isMuted = shouldMute;
-
-                // 2. Apply Volume
-                const newVol = (typeof s.volume === 'number') ? s.volume : 1.0;
-                this.updateVolume(i, newVol);
-                
-                // 3. Force UI Update
-                const slider = this.container.querySelector(`.loop-vol-slider[data-index="${i}"]`);
-                if(slider) slider.value = newVol;
-                
-                this.updateBankUI(i);
+        if (data.micGain) {
+            const slider = this.container.querySelector('#mic-gain');
+            if(slider) {
+                slider.value = data.micGain;
+                Microphone.setGain(data.micGain);
             }
-        });
+        }
+
+        // Restore Banks
+        const settings = data.banks || data; // Handle legacy format
+        if (Array.isArray(settings)) {
+            settings.forEach((s, i) => {
+                const bank = this.banks[i];
+                if (bank) {
+                    const shouldMute = s.muted; 
+                    if (shouldMute && !bank.isMuted && bank.activeSource) {
+                        try { bank.activeSource.stop(); } catch(e) {}
+                        bank.activeSource = null;
+                    }
+                    bank.isMuted = shouldMute;
+
+                    const newVol = (typeof s.volume === 'number') ? s.volume : 1.0;
+                    this.updateVolume(i, newVol);
+                    
+                    const slider = this.container.querySelector(`.loop-vol-slider[data-index="${i}"]`);
+                    if(slider) slider.value = newVol;
+                    
+                    this.updateBankUI(i);
+                }
+            });
+        }
     }
-    // ------------------------
 
     async loadLoops() {
         for(let i=0; i<4; i++) {
@@ -99,23 +113,28 @@ export class Looper {
         const totalDuration = secondsPerBeat * 4 * progLength;
 
         this.banks.forEach(async (bank, index) => {
+            // Start Recording on Beat 1
             if (bank.state === 'armed' && isLoopStart && cycleCount > 0) {
                 this.startRecording(index, totalDuration);
                 bank.state = 'recording';
                 this.updateBankUI(index);
             }
+            // Stop Recording on Beat 1 (next cycle)
             else if (bank.state === 'recording' && isLoopStart && bank.recorder) {
+                // Ensure we recorded at least something (debounce)
                 if (ctx.currentTime - bank.startTime > 1.0) {
                     await this.finishRecording(index);
                     bank.state = 'playing';
                     this.updateBankUI(index);
                 }
             }
+            // Play Loop
             if (bank.state === 'playing' && bank.buffer && isLoopStart && !bank.isMuted) {
                 if (bank.activeSource) {
                     try { bank.activeSource.stop(time); } catch(e){}
                 }
                 const playTime = time || ctx.currentTime;
+                // PlaySample wrapper handles creation and routing
                 const result = playSample(-1, playTime, null, 'looper', bank.buffer, bank.gainNode);
                 if (result) bank.activeSource = result.osc; 
             }
@@ -131,8 +150,8 @@ export class Looper {
             if (bank.state === 'recording' || bank.state === 'armed') {
                 if(bank.recorder) bank.recorder.stop();
                 bank.recorder = null;
-                if(bank.state === 'recording') bank.state = bank.buffer ? 'playing' : 'empty';
-                else if(bank.state === 'armed') bank.state = bank.buffer ? 'playing' : 'empty';
+                // Revert state if we cancelled mid-record
+                bank.state = bank.buffer ? 'playing' : 'empty';
                 this.updateBankUI(bank.id);
             }
         });
@@ -144,6 +163,7 @@ export class Looper {
             const stream = Microphone.stream;
             this.banks[index].startTime = ctx.currentTime;
             
+            // Record slightly longer to allow for latency shifting
             const controller = recordSample(stream, duration + 2.0);
             this.banks[index].recorder = controller;
             this.banks[index].stream = stream;
@@ -162,6 +182,7 @@ export class Looper {
         let buffer = await bank.recorder.result;
 
         if (buffer) {
+            // APPLY LATENCY COMPENSATION
             buffer = shiftBuffer(buffer, this.latencyMs);
             bank.buffer = applyFades(buffer, 0.01);
             await SampleStorage.saveSample(index, bank.buffer, bank.name, 'loop');
@@ -176,6 +197,7 @@ export class Looper {
         Microphone.init();
 
         if (bank.state === 'empty' || bank.state === 'playing') {
+            // Disarm others
             this.banks.forEach((b, i) => {
                 if(b.state === 'armed') { b.state = b.buffer ? 'playing' : 'empty'; this.updateBankUI(i); }
             });
@@ -202,6 +224,8 @@ export class Looper {
             bank.state = 'empty';
             bank.name = `Loop ${index+1}`;
             bank.isMuted = false;
+            // Also clear from storage
+            await SampleStorage.deleteSample(index, 'loop');
             this.updateBankUI(index);
         }
     }
@@ -247,6 +271,92 @@ export class Looper {
         }
     }
 
+    // --- NEW: Auto Latency Test ---
+    async runLatencyTest() {
+        const btn = this.container.querySelector('#btn-auto-latency');
+        const originalText = btn.textContent;
+        
+        await Microphone.init();
+        if (ctx.state === 'suspended') await ctx.resume();
+
+        btn.textContent = "WAIT...";
+        btn.style.background = "#ffaa00";
+        btn.disabled = true;
+
+        // Play Beep
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(1000, ctx.currentTime);
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.2);
+
+        // Listen
+        const startTime = performance.now();
+        const analyser = Microphone.analyserNode;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        let found = false;
+        
+        const checkVolume = () => {
+            if (found) return;
+            if (performance.now() - startTime > 1000) {
+                btn.textContent = "FAIL";
+                btn.style.background = "#ff0055";
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = "#333";
+                    btn.disabled = false;
+                }, 2000);
+                return;
+            }
+
+            analyser.getByteTimeDomainData(dataArray);
+            let sum = 0;
+            for(let i = 0; i < bufferLength; i++) {
+                const x = (dataArray[i] - 128) / 128.0;
+                sum += x * x;
+            }
+            const rms = Math.sqrt(sum / bufferLength);
+
+            if (rms > 0.05) {
+                found = true;
+                const endTime = performance.now();
+                // 20ms offset for JS frame overhead
+                let lag = Math.round(endTime - startTime) - 20; 
+                if(lag < 0) lag = 0;
+
+                this.latencyMs = lag;
+                
+                // Update UI
+                const slider = this.container.querySelector('#latency-slider');
+                const val = this.container.querySelector('#latency-val');
+                if(slider) slider.value = lag;
+                if(val) val.textContent = `${lag}ms`;
+
+                btn.textContent = "OK";
+                btn.style.background = "#00e5ff";
+                btn.style.color = "#000";
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = "#333";
+                    btn.style.color = "#fff";
+                    btn.disabled = false;
+                }, 1500);
+            } else {
+                requestAnimationFrame(checkVolume);
+            }
+        };
+        setTimeout(() => { requestAnimationFrame(checkVolume); }, 10);
+    }
+
     render() {
         this.container.innerHTML = `
             <div class="input-controls-header">
@@ -255,7 +365,10 @@ export class Looper {
                     <input type="range" id="mic-gain" min="0" max="3" step="0.1" value="1" class="mini-slider">
                 </div>
                 <div class="ctrl-group">
-                    <label>SYNC (MS)</label>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <label>SYNC (MS)</label>
+                        <button id="btn-auto-latency" style="background:#333; border:1px solid #555; color:#fff; font-size:0.6rem; padding:2px 6px; cursor:pointer; border-radius:3px;">TEST</button>
+                    </div>
                     <div style="display:flex; align-items:center; gap:5px;">
                         <input type="range" id="latency-slider" min="0" max="200" step="10" value="${this.latencyMs}" class="mini-slider">
                         <span id="latency-val" style="font-size:0.6rem; color:var(--primary-cyan); min-width:30px;">${this.latencyMs}ms</span>
@@ -310,7 +423,7 @@ export class Looper {
             .input-controls-header { 
                 background: #1a1a1a; padding: 8px 15px; border-radius: 6px; margin-bottom: 10px; 
                 display: flex; gap: 20px; align-items: center; border: 1px solid #333;
-                flex-wrap: wrap; /* FIX: Allows header controls to wrap on mobile */
+                flex-wrap: wrap; 
             }
             .ctrl-group { display: flex; flex-direction: column; gap: 2px; }
             .ctrl-group label { font-size: 0.65rem; color: #888; letter-spacing: 1px; font-weight:bold; }
@@ -321,7 +434,6 @@ export class Looper {
 
             .looper-grid { 
                 display: grid; 
-                /* FIX: Auto-fit allows grid to switch from 1x4 to 2x2 or 1x1 on mobile */
                 grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
                 gap: 10px; 
             }
@@ -358,10 +470,9 @@ export class Looper {
             
             .btn-loop-arm:hover, .btn-loop-play:hover { background: #444; color: #fff; }
 
-            /* ARM STATE */
             .btn-loop-arm.armed { background: #ff0055; color: white; box-shadow: 0 0 8px rgba(255, 0, 85, 0.4); }
             
-            /* PLAY STATE (GREEN when Playing/Unmuted) */
+            /* Play Button Logic: Green when Playing (Unmuted), Grey when Muted */
             .btn-loop-play.playing { background: var(--primary-cyan); color: #000; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); }
 
             .loop-vol-slider { width: 80%; height: 3px; accent-color: var(--primary-cyan); cursor: pointer; }
@@ -373,7 +484,6 @@ export class Looper {
             .looper-bank.loaded .btn-loop-icon { opacity: 0.7; }
         `;
         this.container.appendChild(style);
-        this.bindEvents();
     }
 
     bindEvents() {
@@ -423,6 +533,9 @@ export class Looper {
             this.latencyMs = parseInt(e.target.value);
             latVal.textContent = `${this.latencyMs}ms`;
         });
+
+        // Test Button
+        this.container.querySelector('#btn-auto-latency').addEventListener('click', () => this.runLatencyTest());
     }
 
     updateBankUI(index) {
@@ -449,7 +562,7 @@ export class Looper {
             btnArm.textContent = '● ARM';
         }
 
-        // Green button means PLAYING (Unmuted). Grey means MUTED.
+        // Play Button: Green when Playing (Unmuted), Grey when Muted
         if (!bank.isMuted) {
             btnPlay.classList.add('playing'); 
         } else {
