@@ -9,7 +9,7 @@ import { Sampler } from './sampler.js';
 import { Looper } from './looper.js'; 
 import { SongBuilder } from './songbuilder.js'; 
 import { Studio } from './studio.js'; 
-import { DrumSampler } from './drumSampler.js'; 
+import { Drumsampler } from './drumsampler.js'; 
 import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
 import { CircleOfFifths } from './circle.js'; 
 
