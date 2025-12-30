@@ -80,9 +80,10 @@
                     <div class="h-px bg-gray-700 my-1"></div>
                     
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-sequencer" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Backing Sequencer</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-vocal" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Vocal Generator</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-songbuilder" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Song Builder</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-sampler" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Audio Sampler</span></label></div>
-		    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-drum-sampler" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Drum Sampler</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-drum-sampler" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Drum Sampler</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-looper" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Loop Station</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-studio" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Recording Studio</span></label></div>
                 </div>
@@ -148,6 +149,10 @@
             <section id="sequencer-container" class="display-area"></section>
         </div>
 
+        <div id="wrapper-vocal" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+            <div id="vocal-module" class="display-area"></div>
+        </div>
+
         <div id="wrapper-songbuilder" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Song Builder</h3>
             <section id="songbuilder-module" class="display-area"></section>
@@ -158,7 +163,7 @@
             <section id="sampler-container" class="display-area"></section>
         </div>
 
-	<div id="wrapper-drum-sampler" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-drum-sampler" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
             <div id="drum-sampler-container" class="module-container"></div>
         </div>
 
@@ -178,5 +183,3 @@
 
 </body>
 </html>
-}
-
