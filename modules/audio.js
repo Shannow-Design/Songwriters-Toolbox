@@ -82,12 +82,8 @@ export const Microphone = {
             this.sourceNode = ctx.createMediaStreamSource(rawStream);
             this.gainNode = ctx.createGain();
             this.gainNode.gain.value = 1.0; 
-            
-            // --- UPDATED: Increased FFT size for Bass detection ---
             this.analyserNode = ctx.createAnalyser();
             this.analyserNode.fftSize = 4096; 
-            // -----------------------------------------------------
-
             this.fxChain = createVocalChain();
             this.sourceNode.connect(this.gainNode);
             this.gainNode.connect(this.analyserNode);
@@ -135,7 +131,8 @@ export function startStudioRecording() {
     return { stop: () => { if (recorder.state !== 'inactive') recorder.stop(); return stopPromise; } };
 }
 
-const tracks = ['chords', 'bass', 'lead', 'drums', 'samples', 'looper'];
+// --- TRACK MIXER ---
+const tracks = ['chords', 'bass', 'lead', 'drums', 'samples', 'looper', 'vocal']; // Added 'vocal'
 const mixer = {};
 tracks.forEach(name => {
     const input = ctx.createGain();
@@ -157,6 +154,7 @@ export function setTrackFilter(t, v) {
 export function setTrackReverb(t, v) { if(mixer[t] && isFinite(v)) mixer[t].reverbSend.gain.setTargetAtTime(v * 0.8, ctx.currentTime, 0.02); }
 export function getTrackInput(name) { return mixer[name] ? mixer[name].input : masterCompressor; }
 
+// --- SAMPLER FUNCTIONS ---
 export async function loadSavedSamples() {
     for(let i=0; i<8; i++) { const entry = await SampleStorage.loadSample(i, ctx, 'slot'); if(entry && entry.buffer) SAMPLE_BANKS[i] = entry; }
     for(let i=0; i<5; i++) { const entry = await SampleStorage.loadSample(i, ctx, 'drum'); if(entry && entry.buffer) DRUM_SAMPLES[i] = entry; }
@@ -294,7 +292,9 @@ export const INSTRUMENTS = {
     'Bass Guitar':     { type: 'square', attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.1, filter: 600 },
     'Strings':         { type: 'sawtooth', attack: 0.4, decay: 0.5, sustain: 0.7, release: 1.2, filter: 2000 },
     'Marimba':         { type: 'sine', attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
-    '8-Bit / NES':     { type: 'square', attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.1 }
+    '8-Bit / NES':     { type: 'square', attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.1 },
+    // --- NEW VOCAL INSTRUMENT ---
+    'Vocal Lead':      { type: 'sine', attack: 0.15, decay: 0.2, sustain: 0.9, release: 0.3 }
 };
 for(let i=1; i<=8; i++) INSTRUMENTS[`Sampler ${i}`] = { type: 'sampler', slot: i-1 };
 

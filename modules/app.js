@@ -9,7 +9,8 @@ import { Sampler } from './sampler.js';
 import { Looper } from './looper.js'; 
 import { SongBuilder } from './songbuilder.js'; 
 import { Studio } from './studio.js'; 
-import { Drumsampler } from './drumsampler.js'; 
+import { DrumSampler } from './drumsampler.js'; // Ensure casing matches your file!
+import { VocalGenerator } from './vocal.js';    // NEW Import
 import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
 import { CircleOfFifths } from './circle.js'; 
 
@@ -37,6 +38,7 @@ const cbBass = document.getElementById('cb-bass');
 const cbTuner = document.getElementById('cb-tuner');
 const cbKeyboard = document.getElementById('cb-keyboard');
 const cbSequencer = document.getElementById('cb-sequencer');
+const cbVocal = document.getElementById('cb-vocal'); // NEW
 const cbSampler = document.getElementById('cb-sampler');
 const cbSongBuilder = document.getElementById('cb-songbuilder'); 
 const cbLooper = document.getElementById('cb-looper');
@@ -52,6 +54,7 @@ const wrapperBass = document.getElementById('wrapper-bass');
 const wrapperTuner = document.getElementById('wrapper-tuner');
 const wrapperKeyboard = document.getElementById('wrapper-keyboard');
 const wrapperSequencer = document.getElementById('wrapper-sequencer');
+const wrapperVocal = document.getElementById('wrapper-vocal'); // NEW
 const wrapperSampler = document.getElementById('wrapper-sampler');
 const wrapperSongBuilder = document.getElementById('wrapper-songbuilder');
 const wrapperLooper = document.getElementById('wrapper-looper');
@@ -70,7 +73,7 @@ const sampler = new Sampler('sampler-container');
 const drumSampler = new DrumSampler('drum-sampler-container');
 const looper = new Looper('looper-module'); 
 
-// 1. Initialize Sequencer FIRST (so it is ready for SongBuilder & Studio)
+// 1. Initialize Sequencer FIRST
 const sequencer = new Sequencer('sequencer-container', 
     // 1. Get Data Callback
     () => { return { key: keySelect.value, scale: scaleSelect.value }; },
@@ -109,35 +112,38 @@ const sequencer = new Sequencer('sequencer-container',
         setTimeout(() => document.body.style.background = "", 100);
     },
 
-    // 4. Step Callback (Pulse for Looper & Song Builder)
+    // 4. Step Callback (Pulse for Looper & Song Builder & Vocals)
     (step, progIndex, progLength, cycleCount, time) => {
         looper.onStep(step, progIndex, progLength, cycleCount, time);
-        // We reference songBuilder here, but since it's a const defined below, 
-        // JS hosting handles it inside the callback execution later.
         if (songBuilder) songBuilder.onStep(step, time);
+        
+        // --- NEW: Trigger Vocal Generator ---
+        if (vocalGenerator) vocalGenerator.onStep(step, progIndex, progLength, cycleCount, time);
     },
 
-    // 5. Stop Callback (Tells Looper to cut sound)
+    // 5. Stop Callback
     () => {
         looper.stopAll();
     },
     
-    // 6. Callback to GET looper data for saving
+    // 6. Callback to GET looper data
     () => {
         return looper.getSettings();
     }
 );
 
-// 2. Initialize SongBuilder SECOND (Needs sequencer)
+// 2. Initialize Vocal Generator (Requires sequencer)
+const vocalGenerator = new VocalGenerator('vocal-module', sequencer);
+
+// 3. Initialize SongBuilder
 const songBuilder = new SongBuilder('songbuilder-module', sequencer);
 
-// 3. Initialize Studio LAST (Needs both Sequencer and SongBuilder)
+// 4. Initialize Studio
 const studio = new Studio('studio-module', sequencer, songBuilder);
 
 
 // --- INITIALIZE CIRCLE OF FIFTHS ---
 const circle = new CircleOfFifths('circle-container', (newKey) => {
-    // 1. Try to find exact match in dropdown
     let optionFound = false;
     for(let i=0; i<keySelect.options.length; i++) {
         if(keySelect.options[i].value === newKey) {
@@ -146,11 +152,9 @@ const circle = new CircleOfFifths('circle-container', (newKey) => {
             break;
         }
     }
-    // 2. If not found (e.g. circle sent Db but list has C#), check enharmonics
     if(!optionFound) {
         const enharmonics = {'Db':'C#', 'Eb':'D#', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#', 'C#':'Db', 'D#':'Eb', 'F#':'Gb', 'G#':'Ab', 'A#':'Bb'};
         if(enharmonics[newKey]) {
-            // Loop again to find the enharmonic match
              for(let i=0; i<keySelect.options.length; i++) {
                 if(keySelect.options[i].value === enharmonics[newKey]) {
                     keySelect.selectedIndex = i;
@@ -159,7 +163,6 @@ const circle = new CircleOfFifths('circle-container', (newKey) => {
             }
         }
     }
-    // 3. Trigger Change
     keySelect.dispatchEvent(new Event('change'));
 });
 
@@ -190,12 +193,10 @@ function updateFretboards(chordNotes, chordRoot = null) {
     if (TUNINGS[tuningSelect.value]) gTuning = TUNINGS[tuningSelect.value].notes;
     else if (TUNINGS.standard) gTuning = TUNINGS.standard.notes;
 
-    // --- UPDATED: Handle 4 or 5 string bass tuning ---
     let bTuning = ['E','A','D','G'];
     if (TUNINGS[bassTuningSelect.value]) {
         bTuning = TUNINGS[bassTuningSelect.value].notes;
     }
-    // -----------------------------------------------
 
     const capo = parseInt(capoSelect.value || 0);
 
@@ -225,11 +226,9 @@ function init() {
         option.value = key;
         option.textContent = value.name;
         
-        // Populate Guitar Dropdown (6 strings)
         if (value.notes.length === 6) {
             tuningSelect.appendChild(option);
         }
-        // Populate Bass Dropdown (4 OR 5 strings) - UPDATED
         else if (value.notes.length === 4 || value.notes.length === 5) {
             bassTuningSelect.appendChild(option);
         }
@@ -257,7 +256,6 @@ function init() {
     // --- DISPLAY OPTIONS LISTENERS ---
     cbButtons.addEventListener('change', () => { wrapperButtons.style.display = cbButtons.checked ? 'block' : 'none'; });
     
-    // Circle Listener
     if(cbCircle) {
         cbCircle.addEventListener('change', () => {
             wrapperCircle.style.display = cbCircle.checked ? 'block' : 'none';
@@ -269,30 +267,34 @@ function init() {
     cbBass.addEventListener('change', () => { wrapperBass.style.display = cbBass.checked ? 'block' : 'none'; });
     cbKeyboard.addEventListener('change', () => { wrapperKeyboard.style.display = cbKeyboard.checked ? 'block' : 'none'; });
     cbSequencer.addEventListener('change', () => { wrapperSequencer.style.display = cbSequencer.checked ? 'block' : 'none'; });
+    
+    // NEW: Vocal Listener
+    if(cbVocal) {
+        cbVocal.addEventListener('change', () => {
+            wrapperVocal.style.display = cbVocal.checked ? 'block' : 'none';
+        });
+    }
+
     cbSampler.addEventListener('change', () => { wrapperSampler.style.display = cbSampler.checked ? 'block' : 'none'; });
     
-    // Song Builder Listener
     if(cbSongBuilder) {
         cbSongBuilder.addEventListener('change', () => { 
             wrapperSongBuilder.style.display = cbSongBuilder.checked ? 'block' : 'none'; 
         });
     }
 
-    // Looper Listener
     if(cbLooper) {
         cbLooper.addEventListener('change', () => {
             wrapperLooper.style.display = cbLooper.checked ? 'block' : 'none';
         });
     }
 
-    // Studio Listener
     if(cbStudio) {
         cbStudio.addEventListener('change', () => {
             wrapperStudio.style.display = cbStudio.checked ? 'block' : 'none';
         });
     }
     
-    // Drum Sampler Listener
     if(cbDrumSampler) {
         cbDrumSampler.addEventListener('change', () => {
             wrapperDrumSampler.style.display = cbDrumSampler.checked ? 'block' : 'none';
@@ -313,7 +315,6 @@ function updateDisplay() {
     const activeNotes = getActiveNotes();
     updateFretboards(currentActiveChordNotes, currentActiveChordRoot);
     
-    // --- UPDATE CIRCLE ---
     if(circle) circle.update(keySelect.value);
 
     keyboard.render(activeNotes, keySelect.value); 
