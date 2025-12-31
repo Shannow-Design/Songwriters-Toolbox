@@ -14,111 +14,138 @@
 </head>
 <body class="min-h-screen flex flex-col items-center p-6 gap-6 bg-[#111] text-gray-300">
 
-    <div class="bg-gray-900 p-8 rounded-xl shadow-2xl w-full max-w-6xl flex gap-8 border border-gray-800">
-
-        <div class="flex-1 grid grid-cols-2 gap-x-8 gap-y-6">
-            <div>
-                <label for="key-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-2">Select Root Key</label>
-                <select id="key-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-3 focus:border-cyan-500 focus:outline-none transition"></select>
-            </div>
-            <div>
-                <label for="scale-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-2">Select Scale</label>
-                <select id="scale-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-3 focus:border-cyan-500 focus:outline-none transition"></select>
-            </div>
-            <div>
-                <label for="tuning-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-2">Guitar Tuning</label>
-                <select id="tuning-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-3 focus:border-cyan-500 focus:outline-none transition"></select>
-                
-                <select id="guitar-display-mode" class="mt-2 w-full bg-gray-900 border border-gray-700 text-gray-400 text-xs rounded p-1">
-                    <option value="scale">Show Scale</option>
-                    <option value="chord">Show Chord Only</option>
-                </select>
-            </div>
-            <div>
-                <label for="capo-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-2">Guitar Capo</label>
-                <select id="capo-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-3 focus:border-cyan-500 focus:outline-none transition">
-    <option value="0">None (Open)</option>
-    <option value="1">Fret 1</option>
-    <option value="2">Fret 2</option>
-    <option value="3">Fret 3</option>
-    <option value="4">Fret 4</option>
-    <option value="5">Fret 5</option>
-    <option value="6">Fret 6</option>
-    <option value="7">Fret 7</option>
-    <option value="8">Fret 8</option>
-    <option value="9">Fret 9</option>
-    <option value="10">Fret 10</option>
-    <option value="11">Fret 11</option>
-    <option value="12">Fret 12</option>
-</select>
-            </div>
-            <div>
-                <label for="bass-tuning-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-2">Bass Tuning</label>
-                <select id="bass-tuning-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-3 focus:border-cyan-500 focus:outline-none transition"></select>
-                 <select id="bass-display-mode" class="mt-2 w-full bg-gray-900 border border-gray-700 text-gray-400 text-xs rounded p-1">
-                    <option value="scale">Show Scale</option>
-                    <option value="chord">Show Chord Only</option>
-                </select>
-            </div>
-            <div></div>
-        </div>
-
-        <div class="w-px bg-gray-700"></div>
-
-        <div class="w-64 flex flex-col justify-between">
-            <div>
-                <h3 class="text-gray-500 text-sm font-medium mb-4">Display Options</h3>
-                <div class="flex flex-col gap-2">
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-tuner" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Chromatic Tuner</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-buttons" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Note Buttons</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-circle" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Circle of Fifths</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-keyboard" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Keyboard (MIDI)</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-guitar" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Guitar Fretboard</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-bass" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Bass Fretboard</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-chords" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Chord Charts</span></label></div>
-                    
-                    <div class="h-px bg-gray-700 my-1"></div>
-                    
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-sequencer" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Backing Sequencer</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-vocal" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Vocal Generator</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-songbuilder" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Song Builder</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-sampler" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Audio Sampler</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-drum-sampler" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Drum Sampler</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-looper" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Loop Station</span></label></div>
-                    <div class="checkbox-group"><label class="flex items-center gap-3 cursor-pointer"><input type="checkbox" id="cb-studio" checked class="accent-cyan-400 bg-gray-700"><span class="text-sm">Recording Studio</span></label></div>
-                </div>
-            </div>
-
-            <div class="mt-4">
-                <div class="flex justify-center items-center gap-2 text-xs text-gray-500 mb-2">
-                    <span>MIDI</span>
-                    <span id="midi-status-light" class="w-2 h-2 rounded-full bg-gray-600 transition-colors"></span>
-                </div>
-                <button id="play-btn" class="w-full bg-cyan-400 hover:bg-cyan-300 text-gray-900 font-bold py-3 rounded shadow-lg shadow-cyan-400/20 transition active:scale-95">
-                    Play Scale
-                </button>
-            </div>
-        </div>
+    <div id="wrapper-visualizer" class="w-full max-w-[98%] bg-gray-900 border border-gray-800 p-4 rounded-xl transition-all duration-300">
+        <div id="visualizer-module" class="w-full h-32"></div>
     </div>
 
-    <div class="w-full max-w-6xl flex flex-col gap-6">
+    <div id="module-layout-container" class="w-full max-w-5xl flex flex-col gap-6 transition-all duration-300">
 
-        <div id="wrapper-tuner" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-settings" class="bg-gray-900 border border-gray-800 p-6 rounded-xl break-inside-avoid mb-6">
+            <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Global Settings</h3>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="key-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Root Key</label>
+                    <select id="key-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none"></select>
+                </div>
+                <div>
+                    <label for="scale-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Scale</label>
+                    <select id="scale-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none"></select>
+                </div>
+                
+                <div>
+                    <label for="tuning-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Guitar Tuning</label>
+                    <select id="tuning-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none mb-2"></select>
+                    <select id="guitar-display-mode" class="w-full bg-gray-900 border border-gray-700 text-gray-400 text-xs rounded p-1">
+                        <option value="scale">Show Scale</option>
+                        <option value="chord">Show Chord Only</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="capo-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Guitar Capo</label>
+                    <select id="capo-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none">
+                        <option value="0">None (Open)</option>
+                        <option value="1">Fret 1</option>
+                        <option value="2">Fret 2</option>
+                        <option value="3">Fret 3</option>
+                        <option value="4">Fret 4</option>
+                        <option value="5">Fret 5</option>
+                        <option value="6">Fret 6</option>
+                        <option value="7">Fret 7</option>
+                        <option value="8">Fret 8</option>
+                        <option value="9">Fret 9</option>
+                        <option value="10">Fret 10</option>
+                        <option value="11">Fret 11</option>
+                        <option value="12">Fret 12</option>
+                    </select>
+                </div>
+
+                <div class="sm:col-span-2">
+                    <label for="bass-tuning-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Bass Tuning</label>
+                    <div class="flex gap-2">
+                        <select id="bass-tuning-select" class="flex-1 bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none"></select>
+                        <select id="bass-display-mode" class="w-32 bg-gray-900 border border-gray-700 text-gray-400 text-xs rounded p-1">
+                            <option value="scale">Show Scale</option>
+                            <option value="chord">Show Chord Only</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="wrapper-display" class="bg-gray-900 border border-gray-800 p-6 rounded-xl break-inside-avoid mb-6">
+            <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Display & Layout</h3>
+            
+            <div class="flex flex-col gap-4">
+                <div class="p-3 bg-gray-800 rounded border border-gray-700 flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-gray-400">Mode</label>
+                        <select id="sel-layout-mode" class="bg-gray-900 border border-gray-600 text-xs rounded p-1 text-cyan-400 w-28">
+                            <option value="single">Single</option>
+                            <option value="grid">Grid (Fast)</option>
+                            <option value="masonry">Masonry</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-gray-400">Columns</label>
+                        <select id="sel-layout-cols" class="bg-gray-900 border border-gray-600 text-xs rounded p-1 text-cyan-400 w-16" disabled>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-tuner" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Tuner</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-buttons" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Buttons</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-circle" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Circle 5ths</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-keyboard" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Keyboard</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-guitar" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Guitar</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-bass" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Bass</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-chords" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Chords</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-visualizer" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Visualizer</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-sequencer" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Sequencer</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-vocal" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Vocal Gen</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-songbuilder" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Song Builder</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-sampler" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Sampler</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-drum-sampler" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Drums</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-looper" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Looper</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-studio" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Studio</span></label></div>
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-lyrics" class="accent-cyan-400 bg-gray-700"><span class="text-xs">Lyrics</span></label></div>
+                </div>
+
+                <div class="h-px bg-gray-700 my-1"></div>
+
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-2 text-xs text-gray-500">
+                        <span>MIDI</span>
+                        <span id="midi-status-light" class="w-2 h-2 rounded-full bg-gray-600 transition-colors"></span>
+                    </div>
+                    <button id="play-btn" class="bg-cyan-400 hover:bg-cyan-300 text-gray-900 font-bold py-2 px-4 rounded text-xs shadow-lg shadow-cyan-400/20 transition active:scale-95">
+                        Play Scale
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="wrapper-tuner" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Chromatic Tuner</h3>
             <section id="tuner-container" class="flex flex-col items-center justify-center min-h-[150px]"></section>
         </div>
 
-        <div id="wrapper-buttons" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-buttons" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Scale Notes</h3>
             <section id="note-buttons-display" class="flex gap-4 justify-center flex-wrap"></section>
         </div>
 
-        <div id="wrapper-circle" class="bg-gray-900 border border-gray-800 p-6 rounded-xl flex flex-col items-center">
+        <div id="wrapper-circle" class="bg-gray-900 border border-gray-800 p-6 rounded-xl flex flex-col items-center mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Circle of Fifths</h3>
             <section id="circle-container" class="w-full flex justify-center"></section>
         </div>
 
-        <div id="wrapper-keyboard" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-keyboard" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-gray-500 font-bold text-sm tracking-wider uppercase">Keyboard (C3-C5)</h3>
                 <div class="flex gap-4 items-center">
@@ -129,52 +156,56 @@
             <section id="keyboard-container" class="overflow-x-auto pb-2 text-center"></section>
         </div>
 
-        <div id="wrapper-guitar" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-guitar" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Guitar</h3>
             <section id="fretboard-container" class="overflow-x-auto"></section>
         </div>
 
-        <div id="wrapper-bass" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-bass" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Bass</h3>
             <section id="bass-fretboard-container" class="overflow-x-auto"></section>
         </div>
 
-        <div id="wrapper-chords" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-chords" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Chords in Key</h3>
             <section id="chords-container" class="flex flex-wrap gap-4 justify-center"></section>
         </div>
 
-        <div id="wrapper-sequencer" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-sequencer" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Backing Track Sequencer</h3>
             <section id="sequencer-container" class="display-area"></section>
         </div>
 
-        <div id="wrapper-vocal" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-vocal" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <div id="vocal-module" class="display-area"></div>
         </div>
 
-        <div id="wrapper-songbuilder" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-songbuilder" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Song Builder</h3>
             <section id="songbuilder-module" class="display-area"></section>
         </div>
 
-        <div id="wrapper-sampler" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-sampler" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Audio Sampler</h3>
             <section id="sampler-container" class="display-area"></section>
         </div>
 
-        <div id="wrapper-drum-sampler" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-drum-sampler" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <div id="drum-sampler-container" class="module-container"></div>
         </div>
 
-        <div id="wrapper-looper" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-looper" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Loop Station</h3>
             <section id="looper-module" class="display-area"></section>
         </div>
 
-        <div id="wrapper-studio" class="bg-gray-900 border border-gray-800 p-6 rounded-xl">
+        <div id="wrapper-studio" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Recording Studio</h3>
             <section id="studio-module" class="display-area"></section>
+        </div>
+
+        <div id="wrapper-lyrics" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid" style="display:none;">
+            <div id="lyrics-module" class="display-area"></div>
         </div>
 
     </div>

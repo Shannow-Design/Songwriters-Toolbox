@@ -1,4 +1,4 @@
-const CACHE_NAME = 'songwriters-toolbox-v12'; // Incremented to v12
+const CACHE_NAME = 'songwriters-toolbox-v13'; // Incremented to v13
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -19,6 +19,8 @@ const ASSETS_TO_CACHE = [
   './modules/songbuilder.js',
   './modules/studio.js',
   './modules/drumsampler.js' // NEW: Added Drum Sampler module
+  './modules/visualizer.js',
+  './modules/lyrics.js',
 ];
 
 // Install Event: Cache files
