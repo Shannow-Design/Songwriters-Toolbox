@@ -9,8 +9,10 @@ import { Sampler } from './sampler.js';
 import { Looper } from './looper.js'; 
 import { SongBuilder } from './songbuilder.js'; 
 import { Studio } from './studio.js'; 
-import { DrumSampler } from './drumsampler.js'; // Ensure casing matches your file!
-import { VocalGenerator } from './vocal.js';    // NEW Import
+import { DrumSampler } from './drumsampler.js'; 
+import { VocalGenerator } from './vocal.js';    
+import { Visualizer } from './visualizer.js';   
+import { LyricPad } from './lyrics.js';         
 import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
 import { CircleOfFifths } from './circle.js'; 
 
@@ -38,12 +40,20 @@ const cbBass = document.getElementById('cb-bass');
 const cbTuner = document.getElementById('cb-tuner');
 const cbKeyboard = document.getElementById('cb-keyboard');
 const cbSequencer = document.getElementById('cb-sequencer');
-const cbVocal = document.getElementById('cb-vocal'); // NEW
+const cbVocal = document.getElementById('cb-vocal');
+const cbVisualizer = document.getElementById('cb-visualizer');
+const cbLyrics = document.getElementById('cb-lyrics');
 const cbSampler = document.getElementById('cb-sampler');
 const cbSongBuilder = document.getElementById('cb-songbuilder'); 
 const cbLooper = document.getElementById('cb-looper');
 const cbStudio = document.getElementById('cb-studio');
 const cbDrumSampler = document.getElementById('cb-drum-sampler');
+
+// Layout Controls
+const layoutModeSelect = document.getElementById('sel-layout-mode');
+const layoutColsSelect = document.getElementById('sel-layout-cols');
+const moduleContainer = document.getElementById('module-layout-container');
+const visualizerWrapper = document.getElementById('wrapper-visualizer');
 
 // Wrappers
 const wrapperButtons = document.getElementById('wrapper-buttons');
@@ -54,7 +64,9 @@ const wrapperBass = document.getElementById('wrapper-bass');
 const wrapperTuner = document.getElementById('wrapper-tuner');
 const wrapperKeyboard = document.getElementById('wrapper-keyboard');
 const wrapperSequencer = document.getElementById('wrapper-sequencer');
-const wrapperVocal = document.getElementById('wrapper-vocal'); // NEW
+const wrapperVocal = document.getElementById('wrapper-vocal'); 
+const wrapperVisualizer = document.getElementById('wrapper-visualizer'); 
+const wrapperLyrics = document.getElementById('wrapper-lyrics'); 
 const wrapperSampler = document.getElementById('wrapper-sampler');
 const wrapperSongBuilder = document.getElementById('wrapper-songbuilder');
 const wrapperLooper = document.getElementById('wrapper-looper');
@@ -73,12 +85,13 @@ const sampler = new Sampler('sampler-container');
 const drumSampler = new DrumSampler('drum-sampler-container');
 const looper = new Looper('looper-module'); 
 
-// 1. Initialize Sequencer FIRST
+// NEW MODULES
+const visualizer = new Visualizer('visualizer-module');
+const lyricPad = new LyricPad('lyrics-module');
+
+// 1. Initialize Sequencer
 const sequencer = new Sequencer('sequencer-container', 
-    // 1. Get Data Callback
     () => { return { key: keySelect.value, scale: scaleSelect.value }; },
-    
-    // 2. Chord Change Callback
     (chordIndex) => {
         if (chordIndex === -1) {
             chordRenderer.clearHighlights();
@@ -94,149 +107,79 @@ const sequencer = new Sequencer('sequencer-container',
             }
         }
     },
-
-    // 3. Preset Load Callback
     (presetData) => {
         keySelect.value = presetData.key;
         scaleSelect.value = presetData.scale;
         keyboard.clearHighlights(); 
         updateFretboards([], null);
         updateDisplay();
-        
-        if (presetData.looper) {
-            looper.applySettings(presetData.looper);
-        }
-
+        if (presetData.looper) { looper.applySettings(presetData.looper); }
         document.body.style.transition = "background 0.1s";
         document.body.style.background = "#222";
         setTimeout(() => document.body.style.background = "", 100);
     },
-
-    // 4. Step Callback (Pulse for Looper & Song Builder & Vocals)
     (step, progIndex, progLength, cycleCount, time) => {
         looper.onStep(step, progIndex, progLength, cycleCount, time);
         if (songBuilder) songBuilder.onStep(step, time);
-        
-        // --- NEW: Trigger Vocal Generator ---
         if (vocalGenerator) vocalGenerator.onStep(step, progIndex, progLength, cycleCount, time);
     },
-
-    // 5. Stop Callback
-    () => {
-        looper.stopAll();
-    },
-    
-    // 6. Callback to GET looper data
-    () => {
-        return looper.getSettings();
-    }
+    () => { looper.stopAll(); },
+    () => { return looper.getSettings(); }
 );
 
-// 2. Initialize Vocal Generator (Requires sequencer)
 const vocalGenerator = new VocalGenerator('vocal-module', sequencer);
-
-// 3. Initialize SongBuilder
 const songBuilder = new SongBuilder('songbuilder-module', sequencer);
-
-// 4. Initialize Studio
 const studio = new Studio('studio-module', sequencer, songBuilder);
 
-
-// --- INITIALIZE CIRCLE OF FIFTHS ---
 const circle = new CircleOfFifths('circle-container', (newKey) => {
     let optionFound = false;
     for(let i=0; i<keySelect.options.length; i++) {
-        if(keySelect.options[i].value === newKey) {
-            keySelect.selectedIndex = i;
-            optionFound = true;
-            break;
-        }
+        if(keySelect.options[i].value === newKey) { keySelect.selectedIndex = i; optionFound = true; break; }
     }
     if(!optionFound) {
         const enharmonics = {'Db':'C#', 'Eb':'D#', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#', 'C#':'Db', 'D#':'Eb', 'F#':'Gb', 'G#':'Ab', 'A#':'Bb'};
-        if(enharmonics[newKey]) {
-             for(let i=0; i<keySelect.options.length; i++) {
-                if(keySelect.options[i].value === enharmonics[newKey]) {
-                    keySelect.selectedIndex = i;
-                    break;
-                }
-            }
-        }
+        if(enharmonics[newKey]) { for(let i=0; i<keySelect.options.length; i++) { if(keySelect.options[i].value === enharmonics[newKey]) { keySelect.selectedIndex = i; break; } } }
     }
     keySelect.dispatchEvent(new Event('change'));
 });
 
-// STATE
 let currentActiveChordNotes = []; 
 let currentActiveChordRoot = null; 
 
-// Sync BPM
 const originalOnStep = looper.onStep.bind(looper);
 looper.onStep = (step, progIndex, progLength, cycleCount, time) => {
     looper.setBpm(sequencer.bpm);
     originalOnStep(step, progIndex, progLength, cycleCount, time);
 };
 
-// --- Core Logic ---
-
-function getActiveNotes() {
-    return generateScale(keySelect.value, scaleSelect.value);
-}
+function getActiveNotes() { return generateScale(keySelect.value, scaleSelect.value); }
 
 function updateFretboards(chordNotes, chordRoot = null) {
     currentActiveChordNotes = chordNotes; 
     currentActiveChordRoot = chordRoot;
-    
     const scaleNotes = getActiveNotes();
-    
     let gTuning = ['E','A','D','G','B','E'];
     if (TUNINGS[tuningSelect.value]) gTuning = TUNINGS[tuningSelect.value].notes;
-    else if (TUNINGS.standard) gTuning = TUNINGS.standard.notes;
-
     let bTuning = ['E','A','D','G'];
-    if (TUNINGS[bassTuningSelect.value]) {
-        bTuning = TUNINGS[bassTuningSelect.value].notes;
-    }
-
+    if (TUNINGS[bassTuningSelect.value]) { bTuning = TUNINGS[bassTuningSelect.value].notes; }
     const capo = parseInt(capoSelect.value || 0);
-
     guitar.render(scaleNotes, keySelect.value, gTuning, capo, currentActiveChordNotes, currentActiveChordRoot);
     bass.render(scaleNotes, keySelect.value, bTuning, 0, currentActiveChordNotes, currentActiveChordRoot); 
 }
 
 function init() {
-    getNotes().forEach(note => {
-        const option = document.createElement('option');
-        option.value = note;
-        option.textContent = note;
-        keySelect.appendChild(option);
-    });
+    getNotes().forEach(note => { const option = document.createElement('option'); option.value = note; option.textContent = note; keySelect.appendChild(option); });
     keySelect.value = 'C'; 
-
-    for (const [key, value] of Object.entries(SCALES)) {
-        const option = document.createElement('option');
-        option.value = key;
-        option.textContent = value.name;
-        scaleSelect.appendChild(option);
-    }
+    for (const [key, value] of Object.entries(SCALES)) { const option = document.createElement('option'); option.value = key; option.textContent = value.name; scaleSelect.appendChild(option); }
     scaleSelect.value = 'major';
-
     for (const [key, value] of Object.entries(TUNINGS)) {
-        const option = document.createElement('option');
-        option.value = key;
-        option.textContent = value.name;
-        
-        if (value.notes.length === 6) {
-            tuningSelect.appendChild(option);
-        }
-        else if (value.notes.length === 4 || value.notes.length === 5) {
-            bassTuningSelect.appendChild(option);
-        }
+        const option = document.createElement('option'); option.value = key; option.textContent = value.name;
+        if (value.notes.length === 6) tuningSelect.appendChild(option);
+        else if (value.notes.length === 4 || value.notes.length === 5) bassTuningSelect.appendChild(option);
     }
     tuningSelect.value = 'standard';
     bassTuningSelect.value = 'bass_standard';
 
-    // Logic Listeners
     keySelect.addEventListener('change', () => { keyboard.clearHighlights(); updateFretboards([], null); updateDisplay(); });
     scaleSelect.addEventListener('change', () => { keyboard.clearHighlights(); updateFretboards([], null); updateDisplay(); });
     tuningSelect.addEventListener('change', () => updateDisplay());
@@ -254,44 +197,30 @@ function init() {
     }
 
     // --- DISPLAY OPTIONS LISTENERS ---
-    cbButtons.addEventListener('change', () => { wrapperButtons.style.display = cbButtons.checked ? 'block' : 'none'; });
+    const toggleModule = (cb, wrapper) => {
+        if(cb && wrapper) {
+            cb.addEventListener('change', () => { wrapper.style.display = cb.checked ? 'block' : 'none'; });
+        }
+    };
+
+    toggleModule(cbButtons, wrapperButtons);
+    if(cbCircle) toggleModule(cbCircle, wrapperCircle);
+    toggleModule(cbChords, wrapperChords);
+    toggleModule(cbGuitar, wrapperGuitar);
+    toggleModule(cbBass, wrapperBass);
+    toggleModule(cbKeyboard, wrapperKeyboard);
+    toggleModule(cbSequencer, wrapperSequencer);
+    toggleModule(cbVocal, wrapperVocal);
+    toggleModule(cbLyrics, wrapperLyrics);
+    toggleModule(cbSampler, wrapperSampler);
+    if(cbSongBuilder) toggleModule(cbSongBuilder, wrapperSongBuilder);
+    if(cbLooper) toggleModule(cbLooper, wrapperLooper);
+    if(cbStudio) toggleModule(cbStudio, wrapperStudio);
     
-    if(cbCircle) {
-        cbCircle.addEventListener('change', () => {
-            wrapperCircle.style.display = cbCircle.checked ? 'block' : 'none';
-        });
-    }
-
-    cbChords.addEventListener('change', () => { wrapperChords.style.display = cbChords.checked ? 'block' : 'none'; });
-    cbGuitar.addEventListener('change', () => { wrapperGuitar.style.display = cbGuitar.checked ? 'block' : 'none'; });
-    cbBass.addEventListener('change', () => { wrapperBass.style.display = cbBass.checked ? 'block' : 'none'; });
-    cbKeyboard.addEventListener('change', () => { wrapperKeyboard.style.display = cbKeyboard.checked ? 'block' : 'none'; });
-    cbSequencer.addEventListener('change', () => { wrapperSequencer.style.display = cbSequencer.checked ? 'block' : 'none'; });
-    
-    // NEW: Vocal Listener
-    if(cbVocal) {
-        cbVocal.addEventListener('change', () => {
-            wrapperVocal.style.display = cbVocal.checked ? 'block' : 'none';
-        });
-    }
-
-    cbSampler.addEventListener('change', () => { wrapperSampler.style.display = cbSampler.checked ? 'block' : 'none'; });
-    
-    if(cbSongBuilder) {
-        cbSongBuilder.addEventListener('change', () => { 
-            wrapperSongBuilder.style.display = cbSongBuilder.checked ? 'block' : 'none'; 
-        });
-    }
-
-    if(cbLooper) {
-        cbLooper.addEventListener('change', () => {
-            wrapperLooper.style.display = cbLooper.checked ? 'block' : 'none';
-        });
-    }
-
-    if(cbStudio) {
-        cbStudio.addEventListener('change', () => {
-            wrapperStudio.style.display = cbStudio.checked ? 'block' : 'none';
+    if(cbVisualizer) {
+        cbVisualizer.addEventListener('change', () => {
+            wrapperVisualizer.style.display = cbVisualizer.checked ? 'block' : 'none';
+            if(cbVisualizer.checked) visualizer.resume(); else visualizer.stop();
         });
     }
     
@@ -306,6 +235,43 @@ function init() {
         if (cbTuner.checked) { wrapperTuner.style.display = 'block'; } else { wrapperTuner.style.display = 'none'; tuner.stop(); } 
     });
 
+    // --- UPDATED: Layout Switching Logic ---
+    const updateLayout = () => {
+        const mode = layoutModeSelect.value; // single, grid, masonry
+        const cols = layoutColsSelect.value; // 2, 3, 4
+
+        let containerClasses = "w-full gap-6 transition-all duration-300 ";
+        let visualizerClasses = "bg-gray-900 border border-gray-800 p-4 rounded-xl transition-all duration-300 ";
+
+        if (mode === 'single') {
+            // Single Column
+            containerClasses += "max-w-5xl flex flex-col";
+            visualizerClasses += "w-full max-w-5xl";
+            
+            layoutColsSelect.disabled = true;
+            layoutColsSelect.style.opacity = 0.5;
+        } else {
+            // Wide Mode
+            containerClasses += "max-w-[98%] ";
+            visualizerClasses += "w-full max-w-[98%]";
+            
+            layoutColsSelect.disabled = false;
+            layoutColsSelect.style.opacity = 1;
+
+            if (mode === 'masonry') {
+                containerClasses += `columns-${cols}`; // Masonry
+            } else {
+                containerClasses += `grid grid-cols-${cols} items-start`; // Grid
+            }
+        }
+
+        moduleContainer.className = containerClasses;
+        visualizerWrapper.className = visualizerClasses;
+    };
+
+    layoutModeSelect.addEventListener('change', updateLayout);
+    layoutColsSelect.addEventListener('change', updateLayout);
+
     loadSavedSamples().then(() => { sampler.updateStatus(); });
 
     updateDisplay();
@@ -314,17 +280,13 @@ function init() {
 function updateDisplay() {
     const activeNotes = getActiveNotes();
     updateFretboards(currentActiveChordNotes, currentActiveChordRoot);
-    
     if(circle) circle.update(keySelect.value);
-
     keyboard.render(activeNotes, keySelect.value); 
     renderNoteButtons(activeNotes);
-
     const chordsList = getDiatonicChords(keySelect.value, scaleSelect.value);
     const capoValue = parseInt(capoSelect.value || 0); 
     let currentTuningNotes = ['E','A','D','G','B','E'];
     if(TUNINGS[tuningSelect.value]) currentTuningNotes = TUNINGS[tuningSelect.value].notes;
-
     chordRenderer.render(
         chordsList, 
         capoValue, 
@@ -352,42 +314,32 @@ function renderNoteButtons(scaleNotes) {
     const intervals = ['R', '2', '3', '4', '5', '6', '7'];
     let currentOctave = 3; 
     let lastNoteIndex = -1;
-
     scaleNotes.forEach((note, index) => {
         const noteIndex = getNoteIndex(note);
         if (noteIndex < lastNoteIndex) currentOctave++;
         lastNoteIndex = noteIndex;
         const buttonOctave = currentOctave;
-
         const btn = document.createElement('div');
         btn.className = 'note-btn';
         btn.dataset.note = note; 
         if (index === 0) btn.classList.add('root');
-
         const noteName = document.createElement('span');
         noteName.className = 'note-name';
         noteName.textContent = note;
         const noteInterval = document.createElement('span');
         noteInterval.className = 'note-interval';
         noteInterval.textContent = (scaleNotes.length === 7) ? intervals[index] : '';
-
         btn.appendChild(noteName);
         btn.appendChild(noteInterval);
-        
         btn.addEventListener('click', () => {
             playSingleNote(note, buttonOctave); 
-            
             keyboard.highlightNotes([note], note, note); 
             updateFretboards([note], note);
-            
             chordRenderer.clearHighlights();
             btn.style.transition = "transform 0.1s, border-color 0.1s";
             btn.style.borderColor = "#00e5ff";
             btn.style.transform = "scale(1.05)";
-            setTimeout(() => {
-                btn.style.borderColor = ""; 
-                btn.style.transform = "";
-            }, 200);
+            setTimeout(() => { btn.style.borderColor = ""; btn.style.transform = ""; }, 200);
         });
         noteButtonsDisplay.appendChild(btn);
     });

@@ -12,6 +12,11 @@ export const SAMPLE_BANKS = new Array(8).fill(null);
 export const DRUM_SAMPLES = new Array(5).fill(null);
 export const DRUM_VOLUMES = new Array(5).fill(1.0); 
 
+// --- OPTIMIZED: Reduced FFT Size for Performance ---
+export const masterAnalyser = ctx.createAnalyser();
+masterAnalyser.fftSize = 2048; // Was 4096. 2048 is standard and much faster.
+masterAnalyser.smoothingTimeConstant = 0.85; 
+
 const DRUM_MAP = { 'kick': 0, 'snare': 1, 'hihat': 2, 'tom': 3, 'crash': 4 };
 
 const recordingDest = ctx.createMediaStreamDestination();
@@ -42,11 +47,13 @@ function createImpulse(duration, decay) {
 }
 reverbNode.buffer = createImpulse(2.0, 2.0);
 
+// Routing
 masterCompressor.connect(masterGain);
 reverbNode.connect(reverbGain);
 reverbGain.connect(masterGain);
 
-masterGain.connect(ctx.destination);
+masterGain.connect(masterAnalyser);
+masterAnalyser.connect(ctx.destination);
 masterGain.connect(recordingDest); 
 
 export function createVocalChain() {
@@ -132,7 +139,7 @@ export function startStudioRecording() {
 }
 
 // --- TRACK MIXER ---
-const tracks = ['chords', 'bass', 'lead', 'drums', 'samples', 'looper', 'vocal']; // Added 'vocal'
+const tracks = ['chords', 'bass', 'lead', 'drums', 'samples', 'looper', 'vocal'];
 const mixer = {};
 tracks.forEach(name => {
     const input = ctx.createGain();
@@ -248,7 +255,8 @@ export function playSample(slotIndex, time, freq = null, track = 'lead', bufferO
         source.playbackRate.value = rate;
     }
     const gainNode = ctx.createGain();
-    gainNode.gain.value = volume;
+    gainNode.gain.setValueAtTime(0, time);
+    gainNode.gain.linearRampToValueAtTime(volume, time + 0.01); 
     const dest = customDest || (mixer[track] ? mixer[track].input : mixer.lead.input);
     source.connect(gainNode);
     gainNode.connect(dest);
@@ -293,7 +301,6 @@ export const INSTRUMENTS = {
     'Strings':         { type: 'sawtooth', attack: 0.4, decay: 0.5, sustain: 0.7, release: 1.2, filter: 2000 },
     'Marimba':         { type: 'sine', attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
     '8-Bit / NES':     { type: 'square', attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.1 },
-    // --- NEW VOCAL INSTRUMENT ---
     'Vocal Lead':      { type: 'sine', attack: 0.15, decay: 0.2, sustain: 0.9, release: 0.3 }
 };
 for(let i=1; i<=8; i++) INSTRUMENTS[`Sampler ${i}`] = { type: 'sampler', slot: i-1 };
@@ -304,41 +311,63 @@ export function startNote(freq, midiNote, instName = 'Lead Synth', start = null,
     if (ctx.state === 'suspended') ctx.resume();
     if (midiNote > 0 && activeOscillators[midiNote]) stopNote(midiNote);
     if (allRunningVoices.length >= MAX_VOICES) { const oldest = allRunningVoices.shift(); try { oldest.gain.disconnect(); oldest.osc.stop(); } catch(e) { } }
-    if (instName.startsWith('Sampler')) {
-        const slot = parseInt(instName.split(' ')[1]) - 1;
+    
+    const recipe = INSTRUMENTS[instName] || INSTRUMENTS['Lead Synth'];
+    const isSampler = (recipe.type === 'sampler') || (instName && instName.startsWith('Sampler'));
+
+    if (isSampler) {
+        let slot = recipe.slot;
+        if (slot === undefined && instName.startsWith('Sampler')) {
+            slot = parseInt(instName.split(' ')[1]) - 1;
+        }
         const voice = playSample(slot, start || ctx.currentTime, freq, track);
         if (midiNote > 0 && voice) activeOscillators[midiNote] = voice;
+        return voice; 
+    } 
+    else {
+        const t = start || ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = recipe.type; osc.frequency.value = freq;
+        let outputNode = gain;
+        if (recipe.filter) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = recipe.filter; gain.connect(f); outputNode = f; }
+        outputNode.connect(mixer[track] ? mixer[track].input : mixer.lead.input);
+        osc.connect(gain);
+        const peakGain = 0.15; 
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(peakGain, t + recipe.attack); 
+        gain.gain.setTargetAtTime(peakGain * (recipe.sustain !== undefined ? recipe.sustain : 0.6), t + recipe.attack, recipe.decay / 3);
+        if (dur) {
+            const releaseTail = recipe.release || 0.2;
+            if (recipe.sustain === 0) { osc.start(t); osc.stop(t + recipe.decay + releaseTail + 1.0); } 
+            else { gain.gain.setTargetAtTime(0, t + dur, 0.1); osc.start(t); osc.stop(t + dur + releaseTail); }
+        } else { osc.start(t); }
+        const voice = { osc, gain, type: 'synth' }; allRunningVoices.push(voice);
+        osc.onended = () => { const idx = allRunningVoices.indexOf(voice); if (idx > -1) allRunningVoices.splice(idx, 1); };
+        if (midiNote > 0) activeOscillators[midiNote] = voice;
         return voice;
     }
-    const t = start || ctx.currentTime;
-    const recipe = INSTRUMENTS[instName] || INSTRUMENTS['Lead Synth'];
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = recipe.type; osc.frequency.value = freq;
-    let outputNode = gain;
-    if (recipe.filter) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = recipe.filter; gain.connect(f); outputNode = f; }
-    outputNode.connect(mixer[track] ? mixer[track].input : mixer.lead.input);
-    osc.connect(gain);
-    const peakGain = 0.15; 
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(peakGain, t + recipe.attack); 
-    gain.gain.setTargetAtTime(peakGain * (recipe.sustain !== undefined ? recipe.sustain : 0.6), t + recipe.attack, recipe.decay / 3);
-    if (dur) {
-        const releaseTail = recipe.release || 0.2;
-        if (recipe.sustain === 0) { osc.start(t); osc.stop(t + recipe.decay + releaseTail + 1.0); } 
-        else { gain.gain.setTargetAtTime(0, t + dur, 0.1); osc.start(t); osc.stop(t + dur + releaseTail); }
-    } else { osc.start(t); }
-    const voice = { osc, gain, type: 'synth' }; allRunningVoices.push(voice);
-    osc.onended = () => { const idx = allRunningVoices.indexOf(voice); if (idx > -1) allRunningVoices.splice(idx, 1); };
-    if (midiNote > 0) activeOscillators[midiNote] = voice;
-    return voice;
 }
 
 export function stopNote(midiNote) {
     const voice = activeOscillators[midiNote];
     if (voice) {
-        if (voice.type === 'synth') { const now = ctx.currentTime; voice.gain.gain.cancelScheduledValues(now); voice.gain.gain.setValueAtTime(voice.gain.gain.value, now); voice.gain.gain.linearRampToValueAtTime(0, now + 0.1); voice.osc.stop(now + 0.1); } 
-        else if (voice.type === 'sampler') { try { voice.osc.stop(); } catch(e){} }
+        if (voice.type === 'synth') { 
+            const now = ctx.currentTime; 
+            voice.gain.gain.cancelScheduledValues(now); 
+            voice.gain.gain.setValueAtTime(voice.gain.gain.value, now); 
+            voice.gain.gain.linearRampToValueAtTime(0, now + 0.1); 
+            voice.osc.stop(now + 0.1); 
+        } 
+        else if (voice.type === 'sampler') { 
+            try { 
+                const now = ctx.currentTime;
+                voice.gain.gain.cancelScheduledValues(now);
+                voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
+                voice.gain.gain.linearRampToValueAtTime(0, now + 0.3); 
+                voice.osc.stop(now + 0.35);
+            } catch(e){} 
+        }
         delete activeOscillators[midiNote];
     }
 }
@@ -353,8 +382,6 @@ export function playStrum(freqs, time, instName, step = 0) {
 export function playDrum(type, time) {
     const t = time || ctx.currentTime;
     const dest = mixer.drums.input; 
-    
-    // Volume logic
     const drumIndex = DRUM_MAP[type];
     const vol = (drumIndex !== undefined) ? DRUM_VOLUMES[drumIndex] : 1.0;
 
