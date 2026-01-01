@@ -5,7 +5,9 @@ import { SampleStorage } from './storage.js';
 export class Looper {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
-        this.banks = Array(4).fill(0).map((_, i) => ({ 
+        
+        // --- UPDATED: 8 Banks instead of 4 ---
+        this.banks = Array(8).fill(0).map((_, i) => ({ 
             id: i,
             buffer: null, 
             name: `Loop ${i+1}`,
@@ -20,6 +22,7 @@ export class Looper {
         
         this.banks.forEach(b => {
             b.gainNode.gain.value = 1.0;
+            // All loops route to the single 'looper' track mixer channel
             b.gainNode.connect(getTrackInput('looper'));
         });
 
@@ -29,7 +32,7 @@ export class Looper {
         this.render();
         this.startMeterLoop();
         this.loadLoops(); 
-        this.bindEvents(); // Bind events immediately
+        this.bindEvents(); 
     }
 
     setBpm(bpm) {
@@ -70,9 +73,10 @@ export class Looper {
         }
 
         // Restore Banks
-        const settings = data.banks || data; // Handle legacy format
+        const settings = data.banks || data; 
         if (Array.isArray(settings)) {
             settings.forEach((s, i) => {
+                // Check if bank exists (in case saving from 4-bank version)
                 const bank = this.banks[i];
                 if (bank) {
                     const shouldMute = s.muted; 
@@ -95,7 +99,8 @@ export class Looper {
     }
 
     async loadLoops() {
-        for(let i=0; i<4; i++) {
+        // --- UPDATED: Iterate up to 8 ---
+        for(let i=0; i<8; i++) {
             const entry = await SampleStorage.loadSample(i, ctx, 'loop');
             if (entry && entry.buffer) {
                 const faded = applyFades(entry.buffer);
@@ -271,7 +276,6 @@ export class Looper {
         }
     }
 
-    // --- NEW: Auto Latency Test ---
     async runLatencyTest() {
         const btn = this.container.querySelector('#btn-auto-latency');
         const originalText = btn.textContent;
@@ -328,13 +332,11 @@ export class Looper {
             if (rms > 0.05) {
                 found = true;
                 const endTime = performance.now();
-                // 20ms offset for JS frame overhead
                 let lag = Math.round(endTime - startTime) - 20; 
                 if(lag < 0) lag = 0;
 
                 this.latencyMs = lag;
                 
-                // Update UI
                 const slider = this.container.querySelector('#latency-slider');
                 const val = this.container.querySelector('#latency-val');
                 if(slider) slider.value = lag;
@@ -434,7 +436,8 @@ export class Looper {
 
             .looper-grid { 
                 display: grid; 
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+                /* UPDATED: Allows flexible wrapping for 8 items */
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); 
                 gap: 10px; 
             }
             
@@ -471,8 +474,6 @@ export class Looper {
             .btn-loop-arm:hover, .btn-loop-play:hover { background: #444; color: #fff; }
 
             .btn-loop-arm.armed { background: #ff0055; color: white; box-shadow: 0 0 8px rgba(255, 0, 85, 0.4); }
-            
-            /* Play Button Logic: Green when Playing (Unmuted), Grey when Muted */
             .btn-loop-play.playing { background: var(--primary-cyan); color: #000; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); }
 
             .loop-vol-slider { width: 80%; height: 3px; accent-color: var(--primary-cyan); cursor: pointer; }
@@ -562,7 +563,6 @@ export class Looper {
             btnArm.textContent = '● ARM';
         }
 
-        // Play Button: Green when Playing (Unmuted), Grey when Muted
         if (!bank.isMuted) {
             btnPlay.classList.add('playing'); 
         } else {
