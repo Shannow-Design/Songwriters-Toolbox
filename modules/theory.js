@@ -55,12 +55,11 @@ function shouldUseFlats(rootIndex, scaleType) {
 
 // --- UPDATED: Crash-Proof Scale Generation ---
 export function generateScale(root, scaleType) {
-    // 1. Safety Check: If old save file requests missing scale, default to Major
     let scaleObj = SCALES[scaleType];
     if (!scaleObj) {
         console.warn(`Scale '${scaleType}' not found. Defaulting to Major.`);
         scaleObj = SCALES['major'];
-        scaleType = 'major'; // Update type so flat/sharp logic works
+        scaleType = 'major'; 
     }
 
     const rootIndex = RAW_NOTES.indexOf(root);
@@ -78,38 +77,44 @@ export function getDiatonicChords(root, scaleType) {
     const scaleNotes = generateScale(root, scaleType);
     const chords = [];
 
-    // Safety: If scale generation failed (empty), return empty
     if (!scaleNotes || scaleNotes.length === 0) return [];
 
     for (let i = 0; i < scaleNotes.length; i++) {
         const rootNote = scaleNotes[i];
-        // Diatonic stacking: 1, 3, 5
+        // Stack thirds (skip a note)
         const third = scaleNotes[(i + 2) % scaleNotes.length];
         const fifth = scaleNotes[(i + 4) % scaleNotes.length];
         
         const rootIndex = getNoteIndex(rootNote);
         const thirdIndex = getNoteIndex(third);
+        const fifthIndex = getNoteIndex(fifth);
         
-        let semitones = (thirdIndex - rootIndex + 12) % 12;
+        let interval3 = (thirdIndex - rootIndex + 12) % 12;
+        let interval5 = (fifthIndex - rootIndex + 12) % 12;
         
         let suffix = "";
         let quality = "Major";
 
-        if (semitones === 4) {
-            suffix = ""; 
-            quality = "Major";
-        } else if (semitones === 3) {
-            const fifthIndex = getNoteIndex(fifth);
-            const fifthInterval = (fifthIndex - rootIndex + 12) % 12;
-            if (fifthInterval === 6) {
-                suffix = "dim";
-                quality = "Diminished";
-            } else {
-                suffix = "m";
-                quality = "Minor";
-            }
-        } else {
-            // Fallback for strange scales (e.g. Locrian/Blues)
+        // --- IMPROVED INTERVAL LOGIC FOR PENTATONICS/BLUES ---
+        if (interval3 === 4) { // Major 3rd
+            if (interval5 === 7) { suffix = ""; quality = "Major"; }
+            else if (interval5 === 8 || interval5 === 9) { suffix = "6"; quality = "Major 6"; } // Pentatonic often implies 6th
+            else { suffix = ""; quality = "Major"; }
+        } 
+        else if (interval3 === 3) { // Minor 3rd
+            if (interval5 === 6) { suffix = "dim"; quality = "Diminished"; }
+            else { suffix = "m"; quality = "Minor"; }
+        } 
+        else if (interval3 === 5) { // Perfect 4th -> Sus4
+            suffix = "sus4";
+            quality = "Suspended";
+        } 
+        else if (interval3 === 2) { // Major 2nd -> Sus2
+            suffix = "sus2";
+            quality = "Suspended";
+        } 
+        else {
+            // Fallback
             suffix = "?";
             quality = "Other";
         }

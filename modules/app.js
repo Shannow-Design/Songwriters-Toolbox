@@ -143,8 +143,10 @@ const circle = new CircleOfFifths('circle-container', (newKey) => {
     keySelect.dispatchEvent(new Event('change'));
 });
 
+// --- STATE ---
 let currentActiveChordNotes = []; 
 let currentActiveChordRoot = null; 
+let currentActiveChordShape = null; // NEW: Tracks the exact fingering shape
 
 const originalOnStep = looper.onStep.bind(looper);
 looper.onStep = (step, progIndex, progLength, cycleCount, time) => {
@@ -154,17 +156,25 @@ looper.onStep = (step, progIndex, progLength, cycleCount, time) => {
 
 function getActiveNotes() { return generateScale(keySelect.value, scaleSelect.value); }
 
-function updateFretboards(chordNotes, chordRoot = null) {
+// --- UPDATED: Accepts chordShape ---
+function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
     currentActiveChordNotes = chordNotes; 
     currentActiveChordRoot = chordRoot;
+    currentActiveChordShape = chordShape; // Store it for redraws
+
     const scaleNotes = getActiveNotes();
     let gTuning = ['E','A','D','G','B','E'];
     if (TUNINGS[tuningSelect.value]) gTuning = TUNINGS[tuningSelect.value].notes;
     let bTuning = ['E','A','D','G'];
     if (TUNINGS[bassTuningSelect.value]) { bTuning = TUNINGS[bassTuningSelect.value].notes; }
+    
     const capo = parseInt(capoSelect.value || 0);
-    guitar.render(scaleNotes, keySelect.value, gTuning, capo, currentActiveChordNotes, currentActiveChordRoot);
-    bass.render(scaleNotes, keySelect.value, bTuning, 0, currentActiveChordNotes, currentActiveChordRoot); 
+    
+    // Pass the Shape to the Guitar Renderer
+    guitar.render(scaleNotes, keySelect.value, gTuning, capo, currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
+    
+    // Bass ignores chord shapes (usually just plays root/notes)
+    bass.render(scaleNotes, keySelect.value, bTuning, 0, currentActiveChordNotes, currentActiveChordRoot, null); 
 }
 
 function init() {
@@ -235,7 +245,7 @@ function init() {
         if (cbTuner.checked) { wrapperTuner.style.display = 'block'; } else { wrapperTuner.style.display = 'none'; tuner.stop(); } 
     });
 
-    // --- UPDATED: Layout Switching Logic ---
+    // --- LAYOUT SWITCHING LOGIC ---
     const updateLayout = () => {
         const mode = layoutModeSelect.value; // single, grid, masonry
         const cols = layoutColsSelect.value; // 2, 3, 4
@@ -279,7 +289,9 @@ function init() {
 
 function updateDisplay() {
     const activeNotes = getActiveNotes();
-    updateFretboards(currentActiveChordNotes, currentActiveChordRoot);
+    // Pass the saved shape to the redraw function
+    updateFretboards(currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
+    
     if(circle) circle.update(keySelect.value);
     keyboard.render(activeNotes, keySelect.value); 
     renderNoteButtons(activeNotes);
@@ -287,22 +299,20 @@ function updateDisplay() {
     const capoValue = parseInt(capoSelect.value || 0); 
     let currentTuningNotes = ['E','A','D','G','B','E'];
     if(TUNINGS[tuningSelect.value]) currentTuningNotes = TUNINGS[tuningSelect.value].notes;
+    
     chordRenderer.render(
         chordsList, 
         capoValue, 
         currentTuningNotes, 
-        (notes) => {
-            const clickedChord = chordsList.find(c => JSON.stringify(c.notes) === JSON.stringify(notes));
-            const chordName = clickedChord ? clickedChord.name : notes.join(' ');
-            const root = clickedChord ? clickedChord.root : notes[0];
+        (notes, chordName, shape) => { // Receive Shape from Click
+            const root = notes[0];
             keyboard.highlightNotes(notes, chordName, root); 
-            if (clickedChord) {
-                updateFretboards(notes, clickedChord.root);
-                const index = chordsList.indexOf(clickedChord);
-                chordRenderer.highlightChord(index);
-            } else {
-                updateFretboards(notes, notes[0]);
-            }
+            // Highlight the card
+            const chordIndex = chordsList.findIndex(c => c.name === chordName);
+            if (chordIndex !== -1) chordRenderer.highlightChord(chordIndex);
+            
+            // Pass notes, root, AND shape to Fretboard
+            updateFretboards(notes, root, shape);
         },
         keySelect.value 
     );
