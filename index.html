@@ -14,7 +14,7 @@
 </head>
 <body class="min-h-screen flex flex-col items-center p-6 gap-6 bg-[#111] text-gray-300">
 
-    <div id="wrapper-visualizer" class="w-full max-w-[98%] bg-gray-900 border border-gray-800 p-4 rounded-xl transition-all duration-300">
+    <div id="wrapper-visualizer" class="w-full max-w-[98%] sticky top-4 z-50 bg-gray-900/95 backdrop-blur-md border border-gray-800 p-4 rounded-xl transition-all duration-300 shadow-xl">
         <div id="visualizer-module" class="w-full h-32"></div>
     </div>
 
@@ -115,18 +115,6 @@
                     <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-studio" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Studio</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-lyrics" class="accent-cyan-400 bg-gray-700"><span class="text-xs">Lyrics</span></label></div>
                 </div>
-
-                <div class="h-px bg-gray-700 my-1"></div>
-
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-2 text-xs text-gray-500">
-                        <span>MIDI</span>
-                        <span id="midi-status-light" class="w-2 h-2 rounded-full bg-gray-600 transition-colors"></span>
-                    </div>
-                    <button id="play-btn" class="bg-cyan-400 hover:bg-cyan-300 text-gray-900 font-bold py-2 px-4 rounded text-xs shadow-lg shadow-cyan-400/20 transition active:scale-95">
-                        Play Scale
-                    </button>
-                </div>
             </div>
         </div>
 
@@ -136,7 +124,12 @@
         </div>
 
         <div id="wrapper-buttons" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
-            <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Scale Notes</h3>
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-gray-500 font-bold text-sm tracking-wider uppercase m-0">Scale Notes</h3>
+                <button id="play-btn" class="bg-cyan-400 hover:bg-cyan-300 text-gray-900 font-bold py-1 px-3 rounded text-xs shadow-lg shadow-cyan-400/20 transition active:scale-95">
+                    ▶ Play Scale
+                </button>
+            </div>
             <section id="note-buttons-display" class="flex gap-4 justify-center flex-wrap"></section>
         </div>
 
@@ -149,6 +142,11 @@
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-gray-500 font-bold text-sm tracking-wider uppercase">Keyboard (C3-C5)</h3>
                 <div class="flex gap-4 items-center">
+                    <div class="flex items-center gap-2 text-xs text-gray-500 border border-gray-700 rounded px-2 py-1 bg-gray-800" title="MIDI Activity">
+                        <span>MIDI</span>
+                        <span id="midi-status-light" class="w-2 h-2 rounded-full bg-gray-600 transition-colors"></span>
+                    </div>
+                    
                     <select id="keyboard-instrument-select" class="bg-gray-800 text-white text-xs p-1 rounded border border-gray-700"></select>
                     <div id="keyboard-info" class="text-cyan-400 font-mono text-sm">Ready</div>
                 </div>
