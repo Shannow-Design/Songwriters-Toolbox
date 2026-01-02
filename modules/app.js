@@ -146,7 +146,7 @@ const circle = new CircleOfFifths('circle-container', (newKey) => {
 // --- STATE ---
 let currentActiveChordNotes = []; 
 let currentActiveChordRoot = null; 
-let currentActiveChordShape = null; // NEW: Tracks the exact fingering shape
+let currentActiveChordShape = null; 
 
 const originalOnStep = looper.onStep.bind(looper);
 looper.onStep = (step, progIndex, progLength, cycleCount, time) => {
@@ -156,11 +156,10 @@ looper.onStep = (step, progIndex, progLength, cycleCount, time) => {
 
 function getActiveNotes() { return generateScale(keySelect.value, scaleSelect.value); }
 
-// --- UPDATED: Accepts chordShape ---
 function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
     currentActiveChordNotes = chordNotes; 
     currentActiveChordRoot = chordRoot;
-    currentActiveChordShape = chordShape; // Store it for redraws
+    currentActiveChordShape = chordShape; 
 
     const scaleNotes = getActiveNotes();
     let gTuning = ['E','A','D','G','B','E'];
@@ -170,10 +169,7 @@ function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
     
     const capo = parseInt(capoSelect.value || 0);
     
-    // Pass the Shape to the Guitar Renderer
     guitar.render(scaleNotes, keySelect.value, gTuning, capo, currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
-    
-    // Bass ignores chord shapes (usually just plays root/notes)
     bass.render(scaleNotes, keySelect.value, bTuning, 0, currentActiveChordNotes, currentActiveChordRoot, null); 
 }
 
@@ -229,7 +225,7 @@ function init() {
     
     if(cbVisualizer) {
         cbVisualizer.addEventListener('change', () => {
-            wrapperVisualizer.style.display = cbVisualizer.checked ? 'block' : 'none';
+            visualizerWrapper.style.display = cbVisualizer.checked ? 'block' : 'none';
             if(cbVisualizer.checked) visualizer.resume(); else visualizer.stop();
         });
     }
@@ -247,21 +243,21 @@ function init() {
 
     // --- LAYOUT SWITCHING LOGIC ---
     const updateLayout = () => {
-        const mode = layoutModeSelect.value; // single, grid, masonry
-        const cols = layoutColsSelect.value; // 2, 3, 4
+        const mode = layoutModeSelect.value; 
+        const cols = layoutColsSelect.value; 
 
         let containerClasses = "w-full gap-6 transition-all duration-300 ";
-        let visualizerClasses = "bg-gray-900 border border-gray-800 p-4 rounded-xl transition-all duration-300 ";
+        
+        // FIXED: Sticky header persists in JS logic
+        let visualizerClasses = "sticky top-4 z-50 bg-gray-900/95 backdrop-blur-md border border-gray-800 p-4 rounded-xl transition-all duration-300 shadow-xl ";
 
         if (mode === 'single') {
-            // Single Column
             containerClasses += "max-w-5xl flex flex-col";
             visualizerClasses += "w-full max-w-5xl";
             
             layoutColsSelect.disabled = true;
             layoutColsSelect.style.opacity = 0.5;
         } else {
-            // Wide Mode
             containerClasses += "max-w-[98%] ";
             visualizerClasses += "w-full max-w-[98%]";
             
@@ -269,9 +265,9 @@ function init() {
             layoutColsSelect.style.opacity = 1;
 
             if (mode === 'masonry') {
-                containerClasses += `columns-${cols}`; // Masonry
+                containerClasses += `columns-${cols}`; 
             } else {
-                containerClasses += `grid grid-cols-${cols} items-start`; // Grid
+                containerClasses += `grid grid-cols-${cols} items-start`; 
             }
         }
 
@@ -289,7 +285,6 @@ function init() {
 
 function updateDisplay() {
     const activeNotes = getActiveNotes();
-    // Pass the saved shape to the redraw function
     updateFretboards(currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
     
     if(circle) circle.update(keySelect.value);
@@ -304,14 +299,11 @@ function updateDisplay() {
         chordsList, 
         capoValue, 
         currentTuningNotes, 
-        (notes, chordName, shape) => { // Receive Shape from Click
+        (notes, chordName, shape) => { 
             const root = notes[0];
             keyboard.highlightNotes(notes, chordName, root); 
-            // Highlight the card
             const chordIndex = chordsList.findIndex(c => c.name === chordName);
             if (chordIndex !== -1) chordRenderer.highlightChord(chordIndex);
-            
-            // Pass notes, root, AND shape to Fretboard
             updateFretboards(notes, root, shape);
         },
         keySelect.value 
@@ -343,7 +335,11 @@ function renderNoteButtons(scaleNotes) {
         btn.appendChild(noteInterval);
         btn.addEventListener('click', () => {
             playSingleNote(note, buttonOctave); 
-            keyboard.highlightNotes([note], note, note); 
+            
+            // --- FIX: Pass the entire scale so it doesn't "disappear" ---
+            // The 3rd argument 'note' tells the keyboard to color that specific key as Root/Gold
+            keyboard.highlightNotes(scaleNotes, note, note); 
+            
             updateFretboards([note], note);
             chordRenderer.clearHighlights();
             btn.style.transition = "transform 0.1s, border-color 0.1s";
