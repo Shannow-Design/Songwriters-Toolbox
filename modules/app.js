@@ -13,6 +13,7 @@ import { DrumSampler } from './drumsampler.js';
 import { VocalGenerator } from './vocal.js';    
 import { Visualizer } from './visualizer.js';   
 import { LyricPad } from './lyrics.js';         
+import { KeyFinder } from './keyfinder.js'; // IMPORT KEYFINDER
 import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
 import { CircleOfFifths } from './circle.js'; 
 
@@ -32,6 +33,7 @@ const playBtn = document.getElementById('play-btn');
 const noteButtonsDisplay = document.getElementById('note-buttons-display');
 
 // Checkboxes
+const cbKeyFinder = document.getElementById('cb-keyfinder'); // NEW
 const cbButtons = document.getElementById('cb-buttons');
 const cbCircle = document.getElementById('cb-circle'); 
 const cbChords = document.getElementById('cb-chords');
@@ -56,6 +58,7 @@ const moduleContainer = document.getElementById('module-layout-container');
 const visualizerWrapper = document.getElementById('wrapper-visualizer');
 
 // Wrappers
+const wrapperKeyFinder = document.getElementById('wrapper-keyfinder'); // NEW
 const wrapperButtons = document.getElementById('wrapper-buttons');
 const wrapperCircle = document.getElementById('wrapper-circle'); 
 const wrapperChords = document.getElementById('wrapper-chords');
@@ -88,6 +91,18 @@ const looper = new Looper('looper-module');
 // NEW MODULES
 const visualizer = new Visualizer('visualizer-module');
 const lyricPad = new LyricPad('lyrics-module');
+
+// INIT KEYFINDER with Callback
+const keyFinder = new KeyFinder('keyfinder-module', (root, scale) => {
+    // 1. Set values
+    keySelect.value = root;
+    scaleSelect.value = scale;
+    // 2. Trigger updates
+    keySelect.dispatchEvent(new Event('change'));
+    scaleSelect.dispatchEvent(new Event('change'));
+    // 3. Optional: Scroll to top to see change
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 
 // 1. Initialize Sequencer
 const sequencer = new Sequencer('sequencer-container', 
@@ -173,6 +188,34 @@ function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
     bass.render(scaleNotes, keySelect.value, bTuning, 0, currentActiveChordNotes, currentActiveChordRoot, null); 
 }
 
+// --- NEW: Add "Span" Button to Module Headers ---
+function addSpanToggle(wrapperId) {
+    const wrapper = document.getElementById(wrapperId);
+    if(!wrapper) return;
+    
+    const header = wrapper.querySelector('h3');
+    if(!header) return;
+
+    const btn = document.createElement('button');
+    btn.textContent = "↔ Span";
+    btn.className = "btn-span-toggle";
+    btn.title = "Toggle Full Width in Grid Mode";
+    btn.style.cssText = `
+        float: right; font-size: 0.6rem; background: #333; border: 1px solid #555; 
+        color: #888; padding: 2px 6px; border-radius: 3px; cursor: pointer; margin-left: 10px;
+        text-transform: none; letter-spacing: 0; font-weight: normal;
+    `;
+    
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        const isSpanned = wrapper.classList.toggle('col-span-full');
+        btn.style.color = isSpanned ? '#00e5ff' : '#888';
+        btn.style.borderColor = isSpanned ? '#00e5ff' : '#555';
+    };
+
+    header.appendChild(btn);
+}
+
 function init() {
     getNotes().forEach(note => { const option = document.createElement('option'); option.value = note; option.textContent = note; keySelect.appendChild(option); });
     keySelect.value = 'C'; 
@@ -209,6 +252,7 @@ function init() {
         }
     };
 
+    toggleModule(cbKeyFinder, wrapperKeyFinder); // NEW
     toggleModule(cbButtons, wrapperButtons);
     if(cbCircle) toggleModule(cbCircle, wrapperCircle);
     toggleModule(cbChords, wrapperChords);
@@ -225,7 +269,7 @@ function init() {
     
     if(cbVisualizer) {
         cbVisualizer.addEventListener('change', () => {
-            visualizerWrapper.style.display = cbVisualizer.checked ? 'block' : 'none';
+            visualizerWrapper.style.display = cbVisualizer.checked ? 'flex' : 'none'; 
             if(cbVisualizer.checked) visualizer.resume(); else visualizer.stop();
         });
     }
@@ -241,28 +285,27 @@ function init() {
         if (cbTuner.checked) { wrapperTuner.style.display = 'block'; } else { wrapperTuner.style.display = 'none'; tuner.stop(); } 
     });
 
-    // --- LAYOUT SWITCHING LOGIC ---
     const updateLayout = () => {
         const mode = layoutModeSelect.value; 
         const cols = layoutColsSelect.value; 
 
         let containerClasses = "w-full gap-6 transition-all duration-300 ";
-        
-        // FIXED: Sticky header persists in JS logic
-        let visualizerClasses = "sticky top-4 z-50 bg-gray-900/95 backdrop-blur-md border border-gray-800 p-4 rounded-xl transition-all duration-300 shadow-xl ";
+        let visualizerClasses = "sticky top-4 z-50 bg-gray-900/95 backdrop-blur-md border border-gray-800 p-2 rounded-xl transition-all duration-300 shadow-xl flex gap-4 items-center ";
 
+        const spanBtns = document.querySelectorAll('.btn-span-toggle');
+        
         if (mode === 'single') {
             containerClasses += "max-w-5xl flex flex-col";
             visualizerClasses += "w-full max-w-5xl";
-            
             layoutColsSelect.disabled = true;
             layoutColsSelect.style.opacity = 0.5;
+            spanBtns.forEach(b => b.style.display = 'none');
         } else {
             containerClasses += "max-w-[98%] ";
             visualizerClasses += "w-full max-w-[98%]";
-            
             layoutColsSelect.disabled = false;
             layoutColsSelect.style.opacity = 1;
+            spanBtns.forEach(b => b.style.display = 'inline-block');
 
             if (mode === 'masonry') {
                 containerClasses += `columns-${cols}`; 
@@ -280,7 +323,30 @@ function init() {
 
     loadSavedSamples().then(() => { sampler.updateStatus(); });
 
+    // --- ADD SPAN BUTTONS ---
+    addSpanToggle('wrapper-guitar');
+    addSpanToggle('wrapper-bass');
+    addSpanToggle('wrapper-keyfinder'); // NEW: KeyFinder benefits from spanning
+
+    setTimeout(() => {
+        const vocalHeader = document.querySelector('.vocal-header');
+        if(vocalHeader) {
+            const btn = document.createElement('button');
+            btn.textContent = "↔ Span";
+            btn.className = "btn-span-toggle";
+            btn.style.cssText = "font-size:0.6rem; background:#333; border:1px solid #555; color:#888; padding:2px 6px; border-radius:3px; cursor:pointer; margin-left:10px;";
+            btn.onclick = () => {
+                const wrapper = document.getElementById('wrapper-vocal');
+                const isSpanned = wrapper.classList.toggle('col-span-full');
+                btn.style.color = isSpanned ? '#00e5ff' : '#888';
+                btn.style.borderColor = isSpanned ? '#00e5ff' : '#555';
+            };
+            vocalHeader.insertBefore(btn, vocalHeader.lastElementChild);
+        }
+    }, 500);
+
     updateDisplay();
+    initOutputMonitor(); 
 }
 
 function updateDisplay() {
@@ -335,11 +401,7 @@ function renderNoteButtons(scaleNotes) {
         btn.appendChild(noteInterval);
         btn.addEventListener('click', () => {
             playSingleNote(note, buttonOctave); 
-            
-            // --- FIX: Pass the entire scale so it doesn't "disappear" ---
-            // The 3rd argument 'note' tells the keyboard to color that specific key as Root/Gold
             keyboard.highlightNotes(scaleNotes, note, note); 
-            
             updateFretboards([note], note);
             chordRenderer.clearHighlights();
             btn.style.transition = "transform 0.1s, border-color 0.1s";
@@ -349,6 +411,41 @@ function renderNoteButtons(scaleNotes) {
         });
         noteButtonsDisplay.appendChild(btn);
     });
+}
+
+function initOutputMonitor() {
+    const elHP = document.getElementById('ind-headphones');
+    const elSP = document.getElementById('ind-speakers');
+    const elAny = document.getElementById('ind-any');
+
+    setInterval(() => {
+        let requireHeadphones = false;
+        let requireSpeakers = false;
+
+        if (looper && looper.isRecordingOrArmed()) requireHeadphones = true;
+        if (vocalGenerator && vocalGenerator.isPracticeMode) requireHeadphones = true;
+        if (studio && studio.isRecording) requireHeadphones = true;
+
+        if (looper && looper.isLatencyTesting) requireSpeakers = true;
+
+        if(elHP) elHP.className = "monitor-item opacity-30 transition-all duration-300";
+        if(elSP) elSP.className = "monitor-item opacity-30 transition-all duration-300";
+        if(elAny) elAny.className = "monitor-item opacity-30 transition-all duration-300";
+
+        if (requireSpeakers) {
+            elSP.classList.remove('opacity-30');
+            elSP.classList.add('monitor-active-sp'); 
+        } 
+        else if (requireHeadphones) {
+            elHP.classList.remove('opacity-30');
+            elHP.classList.add('monitor-active-hp'); 
+        } 
+        else {
+            elAny.classList.remove('opacity-30');
+            elAny.classList.add('monitor-active-any'); 
+        }
+
+    }, 100); 
 }
 
 init();

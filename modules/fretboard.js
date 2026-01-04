@@ -77,40 +77,37 @@ export class Fretboard {
             const y = 30 + (s * 30);
 
             for (let f = 0; f <= numFrets; f++) {
-                // Calculate absolute pitch at this physical fret
-                // Note: Capo affects the 'open' string pitch calculation for Scale Logic, 
-                // but for 'Shape Logic', we map visual shapes relative to the capo.
-                
-                // Effective pitch at this fret (regardless of capo, this is the physics of the string)
                 const currentNoteIndex = (openNoteIndex + f) % 12;
                 const noteName = allNotes[currentNoteIndex];
                 
-                // Determine visibility
                 let isVisible = false;
-                let isRoot = (noteName === key);
+                
+                // --- FIX: Dynamic Root Logic ---
+                // If a chord is playing, the "Root" is the chord root (activeChordRoot).
+                // If just browsing the scale, the "Root" is the Key (key).
+                let isRoot = false;
+                if (activeChordRoot) {
+                    isRoot = (noteName === activeChordRoot);
+                } else {
+                    isRoot = (noteName === key);
+                }
+
                 let isChordTone = false;
                 
-                // --- SHAPE LOGIC (Chord Card Clicked) ---
+                // --- SHAPE LOGIC (Guitar Chords) ---
                 if (activeShape) {
-                    const shapeFret = activeShape[stringIndex]; // Fret relative to Capo (0, 1, 2...)
-                    
-                    // The physical fret we want to light up is (shapeFret + capo)
-                    // If shapeFret is -1 (mute), we skip
+                    const shapeFret = activeShape[stringIndex]; 
                     if (shapeFret !== -1) {
                         const targetPhysicalFret = shapeFret + capo;
-                        
                         if (targetPhysicalFret === f) {
                             isVisible = true;
-                            // Recalculate root status based on the chord root, not the key
-                            if (noteName === activeChordRoot) isRoot = true;
-                            else isRoot = false;
+                            // Root logic is already handled above, but double check shape context
+                            // (Usually activeChordRoot is correct)
                         }
                     }
                 } 
-                // --- SCALE / GENERIC CHORD LOGIC ---
+                // --- SCALE / GENERIC CHORD LOGIC (Bass / Sequencer) ---
                 else {
-                    // For general scale display, we treat the Capo as the new "0".
-                    // Notes behind the capo are usually not relevant unless open.
                     if (f < capo) continue; 
 
                     if (this.displayMode === 'scale') {
@@ -118,7 +115,6 @@ export class Fretboard {
                     }
                     
                     if (activeChordNotes && activeChordNotes.includes(noteName)) {
-                        // In generic chord mode (no shape), we highlight ALL chord tones
                         isChordTone = true;
                         if (this.displayMode === 'chord') isVisible = true;
                     } else if (this.displayMode === 'chord') {
@@ -133,21 +129,25 @@ export class Fretboard {
                     let radius = 9;
                     let textColor = '#aaa';
                     
-                    if (activeShape) {
-                        if (isRoot) { fillColor = colorRoot; textColor = '#000'; }
-                        else { fillColor = colorChord; textColor = '#000'; }
-                    } 
-                    else {
-                        if (isRoot) { fillColor = colorRoot; textColor = '#000'; }
-                        else if (isChordTone) { fillColor = colorChord; textColor = '#000'; }
-                        else { fillColor = colorNote; textColor = '#000'; radius = 7; } 
+                    // Priority Coloring: Root > Chord Tone > Scale Note
+                    if (isRoot) { 
+                        fillColor = colorRoot; 
+                        textColor = '#000'; 
+                    }
+                    else if (isChordTone || activeShape) { 
+                        fillColor = colorChord; 
+                        textColor = '#000'; 
+                    }
+                    else { 
+                        fillColor = colorNote; 
+                        textColor = '#000'; 
+                        radius = 7; 
                     }
 
                     svg += `<circle cx="${x}" cy="${y}" r="${radius}" fill="${fillColor}" stroke="#111" stroke-width="1" />`;
                     
-                    if (isRoot || isChordTone || activeShape) {
-                        svg += `<text x="${x}" y="${y + 3}" text-anchor="middle" font-size="9" font-family="sans-serif" fill="${textColor}" font-weight="bold">${noteName}</text>`;
-                    }
+                    // Show Note Name
+                    svg += `<text x="${x}" y="${y + 3}" text-anchor="middle" font-size="9" font-family="sans-serif" fill="${textColor}" font-weight="bold">${noteName}</text>`;
                 }
             }
         }
