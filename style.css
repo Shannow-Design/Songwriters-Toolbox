@@ -20,6 +20,12 @@ body {
     font-family: 'Inter', sans-serif;
 }
 
+/* --- LAYOUT HELPERS (UPDATED) --- */
+.col-span-full {
+    grid-column: 1 / -1; /* Works in Grid Mode */
+    column-span: all;    /* Works in Masonry Mode */
+}
+
 /* --- CHROMATIC TUNER STYLES --- */
 .tuner-display {
     display: flex;
@@ -33,7 +39,7 @@ body {
     width: 200px;
     height: 100px;
     background: linear-gradient(to bottom, #222, #111);
-    border-radius: 100px 100px 0 0; /* Semi-circle */
+    border-radius: 100px 100px 0 0; 
     border: 2px solid #444;
     border-bottom: none;
     overflow: hidden;
@@ -112,6 +118,34 @@ body {
     border-color: var(--primary-cyan);
 }
 
+/* --- OUTPUT MONITOR INDICATORS --- */
+.monitor-item {
+    display: flex;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 4px;
+    /* Removed border-bottom styling */
+}
+
+/* Updated active states to remove border-bottom */
+.monitor-active-hp { 
+    opacity: 1 !important; 
+    color: #ff0055; 
+    text-shadow: 0 0 10px #ff0055; 
+}
+
+.monitor-active-sp { 
+    opacity: 1 !important; 
+    color: #00e5ff; 
+    text-shadow: 0 0 10px #00e5ff; 
+}
+
+.monitor-active-any { 
+    opacity: 1 !important; 
+    color: #00ff55; 
+    text-shadow: 0 0 10px #00ff55; 
+}
+
 /* --- CHORD CARDS --- */
 .chord-card {
     background: #222;
@@ -186,7 +220,7 @@ body {
     100% { border-color: #ff0055; }
 }
 
-/* --- SEQUENCER MODULE (RESTORED) --- */
+/* --- SEQUENCER MODULE --- */
 .sequencer-controls {
     display: flex;
     flex-direction: column;
@@ -355,6 +389,22 @@ input[type=range] {
 .btn-new:hover { border-color: var(--primary-cyan); }
 
 .btn-delete-custom { background: #330000; color: #ff5555; border: 1px solid #550000; cursor: pointer; border-radius: 2px; }
+
+/* --- VOCAL GENERATOR --- */
+.vocal-score-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.note-readout {
+    font-family: monospace; font-size: 0.9rem; font-weight: bold;
+    color: #555; min-width: 40px; text-align: center;
+    margin-right: 10px;
+}
+.in-scale { color: #00ff55; text-shadow: 0 0 5px rgba(0,255,85,0.5); }
+.out-scale { color: #ff5555; }
+.perfect-hit { color: #00e5ff; text-shadow: 0 0 8px #00e5ff; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; }

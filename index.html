@@ -14,15 +14,26 @@
 </head>
 <body class="min-h-screen flex flex-col items-center p-6 gap-6 bg-[#111] text-gray-300">
 
-    <div id="wrapper-visualizer" class="w-full max-w-[98%] sticky top-4 z-50 bg-gray-900/95 backdrop-blur-md border border-gray-800 p-4 rounded-xl transition-all duration-300 shadow-xl">
-        <div id="visualizer-module" class="w-full h-32"></div>
+    <div id="wrapper-visualizer" class="w-full max-w-[98%] sticky top-4 z-50 bg-gray-900/95 backdrop-blur-md border border-gray-800 p-2 rounded-xl transition-all duration-300 shadow-xl flex gap-4 items-stretch">
+        <div id="visualizer-module" class="flex-grow h-32 relative rounded-lg overflow-hidden"></div>
+        <div id="output-monitor" class="w-32 h-32 flex flex-col justify-evenly items-center bg-gray-950 border border-gray-800 rounded-lg p-2 shrink-0">
+            <div class="text-[0.6rem] text-gray-500 font-bold uppercase tracking-widest text-center">Audio Output</div>
+            <div id="ind-headphones" class="monitor-item opacity-30 transition-all duration-300 w-full">
+                <div class="flex items-center justify-center gap-2"><span class="text-lg">🎧</span><span class="text-xs font-bold">Headphones</span></div>
+            </div>
+            <div id="ind-speakers" class="monitor-item opacity-30 transition-all duration-300 w-full">
+                <div class="flex items-center justify-center gap-2"><span class="text-lg">🔊</span><span class="text-xs font-bold">Speakers</span></div>
+            </div>
+            <div id="ind-any" class="monitor-item opacity-100 transition-all duration-300 w-full">
+                <div class="flex items-center justify-center gap-2"><span class="text-lg">🟢</span><span class="text-xs font-bold">Any</span></div>
+            </div>
+        </div>
     </div>
 
     <div id="module-layout-container" class="w-full max-w-5xl flex flex-col gap-6 transition-all duration-300">
 
         <div id="wrapper-settings" class="bg-gray-900 border border-gray-800 p-6 rounded-xl break-inside-avoid mb-6">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Global Settings</h3>
-            
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label for="key-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Root Key</label>
@@ -32,7 +43,6 @@
                     <label for="scale-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Scale</label>
                     <select id="scale-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none"></select>
                 </div>
-                
                 <div>
                     <label for="tuning-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Guitar Tuning</label>
                     <select id="tuning-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none mb-2"></select>
@@ -41,33 +51,18 @@
                         <option value="chord">Show Chord Only</option>
                     </select>
                 </div>
-
                 <div>
                     <label for="capo-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Guitar Capo</label>
                     <select id="capo-select" class="w-full bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none">
-                        <option value="0">None (Open)</option>
-                        <option value="1">Fret 1</option>
-                        <option value="2">Fret 2</option>
-                        <option value="3">Fret 3</option>
-                        <option value="4">Fret 4</option>
-                        <option value="5">Fret 5</option>
-                        <option value="6">Fret 6</option>
-                        <option value="7">Fret 7</option>
-                        <option value="8">Fret 8</option>
-                        <option value="9">Fret 9</option>
-                        <option value="10">Fret 10</option>
-                        <option value="11">Fret 11</option>
-                        <option value="12">Fret 12</option>
+                        <option value="0">None (Open)</option><option value="1">Fret 1</option><option value="2">Fret 2</option><option value="3">Fret 3</option><option value="4">Fret 4</option><option value="5">Fret 5</option><option value="6">Fret 6</option><option value="7">Fret 7</option><option value="8">Fret 8</option><option value="9">Fret 9</option><option value="10">Fret 10</option><option value="11">Fret 11</option><option value="12">Fret 12</option>
                     </select>
                 </div>
-
                 <div class="sm:col-span-2">
                     <label for="bass-tuning-select" class="block text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Bass Tuning</label>
                     <div class="flex gap-2">
                         <select id="bass-tuning-select" class="flex-1 bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:border-cyan-500 focus:outline-none"></select>
                         <select id="bass-display-mode" class="w-32 bg-gray-900 border border-gray-700 text-gray-400 text-xs rounded p-1">
-                            <option value="scale">Show Scale</option>
-                            <option value="chord">Show Chord Only</option>
+                            <option value="scale">Show Scale</option><option value="chord">Show Chord Only</option>
                         </select>
                     </div>
                 </div>
@@ -76,28 +71,23 @@
 
         <div id="wrapper-display" class="bg-gray-900 border border-gray-800 p-6 rounded-xl break-inside-avoid mb-6">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Display & Layout</h3>
-            
             <div class="flex flex-col gap-4">
                 <div class="p-3 bg-gray-800 rounded border border-gray-700 flex flex-col gap-2">
                     <div class="flex justify-between items-center">
                         <label class="text-xs font-bold text-gray-400">Mode</label>
                         <select id="sel-layout-mode" class="bg-gray-900 border border-gray-600 text-xs rounded p-1 text-cyan-400 w-28">
-                            <option value="single">Single</option>
-                            <option value="grid">Grid (Fast)</option>
-                            <option value="masonry">Masonry</option>
+                            <option value="single">Single</option><option value="grid">Grid (Fast)</option><option value="masonry">Masonry</option>
                         </select>
                     </div>
                     <div class="flex justify-between items-center">
                         <label class="text-xs font-bold text-gray-400">Columns</label>
                         <select id="sel-layout-cols" class="bg-gray-900 border border-gray-600 text-xs rounded p-1 text-cyan-400 w-16" disabled>
-                            <option value="2">2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
+                            <option value="2">2</option><option value="3">3</option><option value="4">4</option>
                         </select>
                     </div>
                 </div>
-
                 <div class="grid grid-cols-2 gap-2">
+                    <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-keyfinder" class="accent-cyan-400 bg-gray-700"><span class="text-xs">Key Finder</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-tuner" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Tuner</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-buttons" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Buttons</span></label></div>
                     <div class="checkbox-group"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="cb-circle" checked class="accent-cyan-400 bg-gray-700"><span class="text-xs">Circle 5ths</span></label></div>
@@ -118,6 +108,11 @@
             </div>
         </div>
 
+        <div id="wrapper-keyfinder" class="bg-gray-900 border border-gray-800 p-6 rounded-xl break-inside-avoid mb-6" style="display:none;">
+            <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Key / Scale Finder</h3>
+            <section id="keyfinder-module" class="display-area"></section>
+        </div>
+
         <div id="wrapper-tuner" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <h3 class="text-gray-500 mb-4 font-bold text-sm tracking-wider uppercase">Chromatic Tuner</h3>
             <section id="tuner-container" class="flex flex-col items-center justify-center min-h-[150px]"></section>
@@ -126,9 +121,7 @@
         <div id="wrapper-buttons" class="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-6 break-inside-avoid">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-gray-500 font-bold text-sm tracking-wider uppercase m-0">Scale Notes</h3>
-                <button id="play-btn" class="bg-cyan-400 hover:bg-cyan-300 text-gray-900 font-bold py-1 px-3 rounded text-xs shadow-lg shadow-cyan-400/20 transition active:scale-95">
-                    ▶ Play Scale
-                </button>
+                <button id="play-btn" class="bg-cyan-400 hover:bg-cyan-300 text-gray-900 font-bold py-1 px-3 rounded text-xs shadow-lg shadow-cyan-400/20 transition active:scale-95">▶ Play Scale</button>
             </div>
             <section id="note-buttons-display" class="flex gap-4 justify-center flex-wrap"></section>
         </div>
@@ -143,10 +136,8 @@
                 <h3 class="text-gray-500 font-bold text-sm tracking-wider uppercase">Keyboard (C3-C5)</h3>
                 <div class="flex gap-4 items-center">
                     <div class="flex items-center gap-2 text-xs text-gray-500 border border-gray-700 rounded px-2 py-1 bg-gray-800" title="MIDI Activity">
-                        <span>MIDI</span>
-                        <span id="midi-status-light" class="w-2 h-2 rounded-full bg-gray-600 transition-colors"></span>
+                        <span>MIDI</span><span id="midi-status-light" class="w-2 h-2 rounded-full bg-gray-600 transition-colors"></span>
                     </div>
-                    
                     <select id="keyboard-instrument-select" class="bg-gray-800 text-white text-xs p-1 rounded border border-gray-700"></select>
                     <div id="keyboard-info" class="text-cyan-400 font-mono text-sm">Ready</div>
                 </div>
@@ -207,6 +198,12 @@
         </div>
 
     </div>
+
+    <style>
+        .monitor-active-hp { opacity: 1 !important; color: #ff0055; text-shadow: 0 0 10px #ff0055; }
+        .monitor-active-sp { opacity: 1 !important; color: #00e5ff; text-shadow: 0 0 10px #00e5ff; }
+        .monitor-active-any { opacity: 1 !important; color: #00ff55; text-shadow: 0 0 10px #00ff55; }
+    </style>
 
     <script type="module" src="modules/app.js"></script>
 
