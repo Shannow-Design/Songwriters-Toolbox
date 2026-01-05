@@ -1,4 +1,4 @@
-const CACHE_NAME = 'songwriters-toolbox-v14'; // Incremented to v14
+const CACHE_NAME = 'songwriters-toolbox-v15'; // Incremented to v15
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
