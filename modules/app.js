@@ -13,8 +13,9 @@ import { DrumSampler } from './drumsampler.js';
 import { VocalGenerator } from './vocal.js';    
 import { Visualizer } from './visualizer.js';   
 import { LyricPad } from './lyrics.js';         
-import { KeyFinder } from './keyfinder.js'; // IMPORT KEYFINDER
-import { playScaleSequence, playSingleNote, loadSavedSamples } from './audio.js';
+import { KeyFinder } from './keyfinder.js';
+import { ProjectManager } from './project.js'; // IMPORT
+import { playScaleSequence, playSingleNote, loadSavedSamples, stopAllSounds } from './audio.js';
 import { CircleOfFifths } from './circle.js'; 
 
 // --- DOM Elements ---
@@ -33,7 +34,7 @@ const playBtn = document.getElementById('play-btn');
 const noteButtonsDisplay = document.getElementById('note-buttons-display');
 
 // Checkboxes
-const cbKeyFinder = document.getElementById('cb-keyfinder'); // NEW
+const cbKeyFinder = document.getElementById('cb-keyfinder'); 
 const cbButtons = document.getElementById('cb-buttons');
 const cbCircle = document.getElementById('cb-circle'); 
 const cbChords = document.getElementById('cb-chords');
@@ -58,7 +59,7 @@ const moduleContainer = document.getElementById('module-layout-container');
 const visualizerWrapper = document.getElementById('wrapper-visualizer');
 
 // Wrappers
-const wrapperKeyFinder = document.getElementById('wrapper-keyfinder'); // NEW
+const wrapperKeyFinder = document.getElementById('wrapper-keyfinder');
 const wrapperButtons = document.getElementById('wrapper-buttons');
 const wrapperCircle = document.getElementById('wrapper-circle'); 
 const wrapperChords = document.getElementById('wrapper-chords');
@@ -92,15 +93,12 @@ const looper = new Looper('looper-module');
 const visualizer = new Visualizer('visualizer-module');
 const lyricPad = new LyricPad('lyrics-module');
 
-// INIT KEYFINDER with Callback
+// INIT KEYFINDER
 const keyFinder = new KeyFinder('keyfinder-module', (root, scale) => {
-    // 1. Set values
     keySelect.value = root;
     scaleSelect.value = scale;
-    // 2. Trigger updates
     keySelect.dispatchEvent(new Event('change'));
     scaleSelect.dispatchEvent(new Event('change'));
-    // 3. Optional: Scroll to top to see change
     window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
@@ -146,6 +144,9 @@ const vocalGenerator = new VocalGenerator('vocal-module', sequencer);
 const songBuilder = new SongBuilder('songbuilder-module', sequencer);
 const studio = new Studio('studio-module', sequencer, songBuilder);
 
+// --- PROJECT MANAGER ---
+const projectManager = new ProjectManager(sequencer, songBuilder, looper, studio, sampler);
+
 const circle = new CircleOfFifths('circle-container', (newKey) => {
     let optionFound = false;
     for(let i=0; i<keySelect.options.length; i++) {
@@ -157,6 +158,38 @@ const circle = new CircleOfFifths('circle-container', (newKey) => {
     }
     keySelect.dispatchEvent(new Event('change'));
 });
+
+// --- GLOBAL TRANSPORT CONTROLS ---
+document.getElementById('btn-global-seq').addEventListener('click', () => {
+    if(songBuilder && songBuilder.isPlaying) songBuilder.togglePlay();
+    if(sequencer) sequencer.togglePlay();
+});
+
+document.getElementById('btn-global-song').addEventListener('click', () => {
+    if(sequencer && sequencer.isPlaying) sequencer.togglePlay();
+    if(songBuilder) songBuilder.togglePlay();
+});
+
+document.getElementById('btn-global-stop').addEventListener('click', () => {
+    if(sequencer && sequencer.isPlaying) sequencer.togglePlay();
+    if(songBuilder && songBuilder.isPlaying) songBuilder.togglePlay();
+    if(looper) looper.stopAll();
+    if(vocalGenerator) vocalGenerator.isMuted = true; 
+    stopAllSounds();
+});
+
+// --- PROJECT IO ---
+const btnExport = document.getElementById('btn-project-export');
+const btnImport = document.getElementById('btn-project-import');
+const inputImport = document.getElementById('input-project-import');
+
+if(btnExport) btnExport.addEventListener('click', () => projectManager.exportProject());
+if(btnImport && inputImport) {
+    btnImport.addEventListener('click', () => inputImport.click());
+    inputImport.addEventListener('change', (e) => {
+        if(e.target.files.length > 0) projectManager.importProject(e.target.files[0]);
+    });
+}
 
 // --- STATE ---
 let currentActiveChordNotes = []; 
@@ -188,7 +221,6 @@ function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
     bass.render(scaleNotes, keySelect.value, bTuning, 0, currentActiveChordNotes, currentActiveChordRoot, null); 
 }
 
-// --- NEW: Add "Span" Button to Module Headers ---
 function addSpanToggle(wrapperId) {
     const wrapper = document.getElementById(wrapperId);
     if(!wrapper) return;
@@ -245,14 +277,13 @@ function init() {
         });
     }
 
-    // --- DISPLAY OPTIONS LISTENERS ---
     const toggleModule = (cb, wrapper) => {
         if(cb && wrapper) {
             cb.addEventListener('change', () => { wrapper.style.display = cb.checked ? 'block' : 'none'; });
         }
     };
 
-    toggleModule(cbKeyFinder, wrapperKeyFinder); // NEW
+    toggleModule(cbKeyFinder, wrapperKeyFinder);
     toggleModule(cbButtons, wrapperButtons);
     if(cbCircle) toggleModule(cbCircle, wrapperCircle);
     toggleModule(cbChords, wrapperChords);
@@ -323,10 +354,10 @@ function init() {
 
     loadSavedSamples().then(() => { sampler.updateStatus(); });
 
-    // --- ADD SPAN BUTTONS ---
     addSpanToggle('wrapper-guitar');
     addSpanToggle('wrapper-bass');
-    addSpanToggle('wrapper-keyfinder'); // NEW: KeyFinder benefits from spanning
+    addSpanToggle('wrapper-keyfinder');
+    addSpanToggle('wrapper-keyboard'); 
 
     setTimeout(() => {
         const vocalHeader = document.querySelector('.vocal-header');

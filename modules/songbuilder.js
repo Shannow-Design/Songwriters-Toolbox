@@ -9,15 +9,25 @@ export class SongBuilder {
         this.savedSongs = JSON.parse(localStorage.getItem('songbuilder_saved_songs')) || {};
         
         // Playback State
-        this.isActive = false;
+        this.isActive = false; // Changed from isPlaying to match original intent but keep consistent naming
+        this.isPlaying = false; // Added this property because app.js checks for it
         this.currentBlockIndex = 0;
         this.currentRepeatCount = 0;
 
         this.render();
     }
 
+    // --- FIX: Added togglePlay method for Global Transport ---
+    togglePlay() {
+        if (this.isPlaying) {
+            this.stopSong();
+        } else {
+            this.playSong();
+        }
+    }
+
     onStep(stepNumber) {
-        if (!this.isActive || this.playlist.length === 0) return;
+        if (!this.isPlaying || this.playlist.length === 0) return;
 
         // Check at the END of the bar (Step 15) to prep for next bar
         if (stepNumber === 15) {
@@ -28,6 +38,12 @@ export class SongBuilder {
     handleBarEnd() {
         this.currentRepeatCount++;
         const currentBlock = this.playlist[this.currentBlockIndex];
+        
+        // Safety check if block was deleted while playing
+        if (!currentBlock) {
+            this.stopSong();
+            return;
+        }
         
         if (this.currentRepeatCount >= currentBlock.repeats) {
             this.advanceToNextBlock();
@@ -58,7 +74,7 @@ export class SongBuilder {
     playSong() {
         if (this.playlist.length === 0) return alert("Add some blocks to your song first!");
         
-        this.isActive = true;
+        this.isPlaying = true; // Set flag
         this.currentBlockIndex = 0;
         this.currentRepeatCount = 0;
         
@@ -70,6 +86,7 @@ export class SongBuilder {
 
         this.highlightActiveBlock(0);
         
+        // Start the sequencer engine if not running
         if (!this.sequencer.isPlaying) {
             this.sequencer.togglePlay();
         }
@@ -78,11 +95,12 @@ export class SongBuilder {
     }
 
     stopSong() {
-        this.isActive = false;
+        this.isPlaying = false; // Reset flag
         this.currentBlockIndex = 0;
         this.currentRepeatCount = 0;
         this.clearHighlights();
         
+        // Stop sequencer if running
         if (this.sequencer.isPlaying) {
             this.sequencer.togglePlay(); 
         }
@@ -190,7 +208,7 @@ export class SongBuilder {
 
     updatePlayButtonUI() {
         const btn = this.container.querySelector('#btn-song-play');
-        if (this.isActive) {
+        if (this.isPlaying) {
             btn.textContent = "⏹ STOP SONG";
             btn.classList.add('active');
         } else {
@@ -265,9 +283,7 @@ export class SongBuilder {
 
         // Bind Events
         this.container.querySelector('#btn-add-block').addEventListener('click', () => this.addBlock());
-        this.container.querySelector('#btn-song-play').addEventListener('click', () => {
-            if(this.isActive) this.stopSong(); else this.playSong();
-        });
+        this.container.querySelector('#btn-song-play').addEventListener('click', () => this.togglePlay());
         
         // Load/Save Events
         this.container.querySelector('#btn-song-save').addEventListener('click', () => this.saveSong());

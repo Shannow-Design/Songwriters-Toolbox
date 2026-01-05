@@ -9,6 +9,7 @@ export class Studio {
 
         // State
         this.isRecording = false;
+        this.isBouncing = false; 
         this.isCountingDown = false; 
         this.recorder = null;
         this.timerInterval = null;
@@ -30,7 +31,8 @@ export class Studio {
             <div class="studio-panel">
                 <div class="studio-controls-top">
                     <div class="transport-group">
-                        <button id="btn-studio-rec" class="btn-transport rec" title="Record New Track">● REC NEW</button>
+                        <button id="btn-studio-rec" class="btn-transport rec" title="Record Microphone">● REC NEW</button>
+                        <button id="btn-studio-bounce" class="btn-transport bounce" title="Record Sequencer/Song to Audio Track">⚡ BOUNCE SONG</button>
                         <button id="btn-studio-play" class="btn-transport play" title="Play All">▶ PLAY MIX</button>
                         <button id="btn-studio-stop" class="btn-transport stop" title="Stop All">■ STOP</button>
                     </div>
@@ -48,7 +50,11 @@ export class Studio {
                 </div>
 
                 <div class="track-list-container" id="track-list">
-                    <div class="empty-state">No tracks recorded yet. Select a Sync source and hit REC.</div>
+                    <div class="empty-state">
+                        No tracks yet.<br>
+                        <span style="color:#00e5ff">⚡ BOUNCE SONG</span> to import your backing track.<br>
+                        <span style="color:#ff0055">● REC NEW</span> to record vocals.
+                    </div>
                 </div>
 
                 <div class="studio-footer">
@@ -82,18 +88,22 @@ export class Studio {
             /* TRANSPORT */
             .studio-controls-top { 
                 display: flex; justify-content: space-between; align-items: center; 
-                padding-bottom: 15px; border-bottom: 1px solid #333;
+                padding-bottom: 15px; border-bottom: 1px solid #333; flex-wrap: wrap; gap: 10px;
             }
-            .transport-group { display: flex; gap: 10px; }
+            .transport-group { display: flex; gap: 5px; flex-wrap: wrap; }
             .btn-transport { 
-                border: none; border-radius: 4px; padding: 10px 15px; font-weight: bold; cursor: pointer; color: white;
-                font-family: monospace; font-size: 0.9rem; transition: all 0.2s;
+                border: none; border-radius: 4px; padding: 10px 12px; font-weight: bold; cursor: pointer; color: white;
+                font-family: monospace; font-size: 0.8rem; transition: all 0.2s; white-space: nowrap;
             }
             .btn-transport.rec { background: #aa0033; }
             .btn-transport.rec:hover { background: #ff0055; }
             .btn-transport.rec.recording { background: #ff0055; animation: pulse 1s infinite; }
             .btn-transport.rec.counting { background: #ffaa00; color: #000; } 
             
+            .btn-transport.bounce { background: #005566; color: #00e5ff; border: 1px solid #004455; }
+            .btn-transport.bounce:hover { background: #0088aa; color: #fff; }
+            .btn-transport.bounce.recording { background: #00e5ff; color: #000; animation: pulse 1s infinite; }
+
             .btn-transport.play { background: #222; border: 1px solid #444; }
             .btn-transport.play:hover { background: #00e5ff; color: #000; border-color: #00e5ff; }
             .btn-transport.stop { background: #222; border: 1px solid #444; }
@@ -106,7 +116,7 @@ export class Studio {
                 flex-grow: 1; background: #111; border: 1px inset #222; border-radius: 4px; 
                 padding: 10px; overflow-y: auto; max-height: 250px; min-height: 100px;
             }
-            .empty-state { color: #555; text-align: center; margin-top: 30px; font-style: italic; font-size: 0.8rem; }
+            .empty-state { color: #555; text-align: center; margin-top: 30px; font-style: italic; font-size: 0.8rem; line-height: 1.6; }
 
             .track-row { 
                 display: flex; align-items: center; gap: 10px; background: #222; 
@@ -151,6 +161,7 @@ export class Studio {
 
     bindEvents() {
         this.container.querySelector('#btn-studio-rec').addEventListener('click', () => this.handleRecordButton());
+        this.container.querySelector('#btn-studio-bounce').addEventListener('click', () => this.handleBounceButton());
         this.container.querySelector('#btn-studio-play').addEventListener('click', () => this.playMix());
         this.container.querySelector('#btn-studio-stop').addEventListener('click', () => this.stopAll());
         this.container.querySelector('#btn-export-mix').addEventListener('click', () => this.exportMix());
@@ -158,6 +169,51 @@ export class Studio {
         this.container.querySelector('#cb-vocal-fx').addEventListener('change', (e) => Microphone.setFxEnabled(e.target.checked));
     }
 
+    // --- BOUNCE (INTERNAL RECORDING) ---
+    async handleBounceButton() {
+        if (this.isBouncing) {
+            this.stopAll();
+            return;
+        }
+
+        const btn = this.container.querySelector('#btn-studio-bounce');
+        btn.textContent = "■ FINISH";
+        btn.classList.add('recording');
+        this.isBouncing = true;
+
+        // 1. Ensure Microphone is DISCONNECTED so we don't record room noise
+        Microphone.disconnectFromStudio();
+
+        // 2. Start Recording (captures master output)
+        if (ctx.state === 'suspended') await ctx.resume();
+        this.recorder = startStudioRecording();
+        this.startTime = Date.now();
+
+        // 3. Start Playback (Song or Sequencer)
+        // Prefer SongBuilder if it has content, otherwise Sequencer
+        if (this.songBuilder && this.songBuilder.playlist.length > 0) {
+            if (this.songBuilder.togglePlay) this.songBuilder.playSong();
+        } else if (this.sequencer) {
+            if (!this.sequencer.isPlaying) this.sequencer.togglePlay();
+        }
+
+        // 4. Timer & Auto-Stop Check
+        this.timerInterval = setInterval(() => {
+            const elapsed = Date.now() - this.startTime;
+            const secs = Math.floor(elapsed / 1000) % 60;
+            const mins = Math.floor(elapsed / 60000);
+            this.container.querySelector('#studio-timer').textContent = 
+                `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+            // Auto-stop if SongBuilder finishes
+            // FIX: Check isPlaying instead of isActive to match SongBuilder update
+            if (this.songBuilder && !this.songBuilder.isPlaying && this.isBouncing && elapsed > 1000) {
+                this.stopAll(); // Song finished naturally
+            }
+        }, 500);
+    }
+
+    // --- MICROPHONE RECORDING ---
     handleRecordButton() {
         if (this.isRecording || this.isCountingDown) {
             this.stopAll(); 
@@ -202,7 +258,10 @@ export class Studio {
         const btn = this.container.querySelector('#btn-studio-rec');
         const syncSource = this.container.querySelector('#sel-studio-sync').value;
 
+        // 1. Connect Mic
         await Microphone.init();
+        Microphone.connectToStudio(); // Ensure connected
+        
         if (ctx.state === 'suspended') await ctx.resume();
 
         this.recorder = startStudioRecording();
@@ -215,7 +274,7 @@ export class Studio {
         if (syncSource === 'sequencer' && this.sequencer) {
             if (!this.sequencer.isPlaying) this.sequencer.togglePlay();
         } else if (syncSource === 'songbuilder' && this.songBuilder) {
-            if(this.songBuilder.togglePlay) this.songBuilder.togglePlay();
+            if(this.songBuilder.playSong) this.songBuilder.playSong();
             else if(!this.sequencer.isPlaying) this.sequencer.togglePlay(); 
         }
 
@@ -229,37 +288,56 @@ export class Studio {
     }
 
     async stopRecording() {
-        const btn = this.container.querySelector('#btn-studio-rec');
+        // Handle BOTH Mic recording AND Bounce recording cleanup here
+        const btnRec = this.container.querySelector('#btn-studio-rec');
+        const btnBounce = this.container.querySelector('#btn-studio-bounce');
         
+        const wasBouncing = this.isBouncing;
+
         this.isRecording = false;
-        clearInterval(this.timerInterval);
-        btn.textContent = "● REC NEW";
-        btn.classList.remove('recording');
+        this.isBouncing = false;
         
-        const syncSource = this.container.querySelector('#sel-studio-sync').value;
-        if ((syncSource === 'sequencer' || syncSource === 'songbuilder') && this.sequencer && this.sequencer.isPlaying) {
+        clearInterval(this.timerInterval);
+        
+        btnRec.textContent = "● REC NEW";
+        btnRec.classList.remove('recording');
+        
+        btnBounce.textContent = "⚡ BOUNCE SONG";
+        btnBounce.classList.remove('recording');
+        
+        // Stop playback if it was auto-started
+        if (this.sequencer && this.sequencer.isPlaying) {
              this.sequencer.togglePlay(); 
+        }
+        // FIX: Check isPlaying instead of isActive
+        if (this.songBuilder && this.songBuilder.isPlaying) {
+             this.songBuilder.stopSong();
         }
 
         if (this.recorder) {
             const blob = await this.recorder.stop();
-            await this.addTrackFromBlob(blob);
+            // If we were bouncing, name it "Backing Track"
+            const name = wasBouncing ? "Backing Track" : `Track ${this.trackCounter++}`;
+            await this.addTrackFromBlob(blob, name);
             this.recorder = null;
         }
+
+        // Cleanup: Disconnect mic if we were using it, or ensure it stays disconnected if bouncing
+        Microphone.disconnectFromStudio();
     }
 
-    async addTrackFromBlob(blob) {
+    async addTrackFromBlob(blob, defaultName) {
         const arrayBuffer = await blob.arrayBuffer();
         const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
         
         const newTrack = {
             id: Date.now(),
-            name: `Track ${this.trackCounter++}`,
+            name: defaultName,
             buffer: audioBuffer,
             volume: 0.8,
             muted: false,
             blob: blob,
-            _activeGain: null // Placeholder for live gain node
+            _activeGain: null 
         };
         
         this.tracks.push(newTrack);
@@ -272,7 +350,7 @@ export class Studio {
         list.innerHTML = '';
 
         if (this.tracks.length === 0) {
-            list.innerHTML = '<div class="empty-state">No tracks recorded yet. Select a Sync source and hit REC.</div>';
+            list.innerHTML = '<div class="empty-state">No tracks yet.<br><span style="color:#00e5ff">⚡ BOUNCE SONG</span> to import your backing track.<br><span style="color:#ff0055">● REC NEW</span> to record vocals.</div>';
             return;
         }
 
@@ -294,11 +372,9 @@ export class Studio {
             div.querySelector('.track-name').addEventListener('blur', (e) => { track.name = e.target.textContent; });
             div.querySelector('.btn-mute').addEventListener('click', () => { track.muted = !track.muted; this.renderTrackList(); });
             
-            // --- FIXED: Real-time volume update ---
             div.querySelector('.track-vol-slider').addEventListener('input', (e) => { 
                 const newVol = parseFloat(e.target.value);
                 track.volume = newVol; 
-                // If this track is currently playing, update the gain node immediately
                 if (track._activeGain) {
                     track._activeGain.gain.setTargetAtTime(newVol, ctx.currentTime, 0.05);
                 }
@@ -323,8 +399,6 @@ export class Studio {
             
             const gainNode = ctx.createGain();
             gainNode.gain.value = track.volume;
-            
-            // Store reference so slider can access it
             track._activeGain = gainNode;
 
             source.connect(gainNode);
@@ -334,14 +408,14 @@ export class Studio {
             
             source.onended = () => {
                 this.activeSources = this.activeSources.filter(s => s !== source);
-                track._activeGain = null; // Clean up reference
+                track._activeGain = null; 
                 if(this.activeSources.length === 0) this.stopAll();
             };
         });
     }
 
     stopAll() {
-        if (this.isRecording) {
+        if (this.isRecording || this.isBouncing) {
             this.stopRecording();
             return; 
         }
@@ -362,8 +436,6 @@ export class Studio {
         
         this.activeSources.forEach(src => { try { src.stop(); } catch(e) {} });
         this.activeSources = [];
-        
-        // Clean up all gain references
         this.tracks.forEach(t => t._activeGain = null);
     }
 

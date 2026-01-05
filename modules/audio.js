@@ -12,9 +12,13 @@ export const SAMPLE_BANKS = new Array(8).fill(null);
 export const DRUM_SAMPLES = new Array(5).fill(null);
 export const DRUM_VOLUMES = new Array(5).fill(1.0); 
 
-// --- OPTIMIZED: Reduced FFT Size for Performance ---
+// --- GLOBAL FX STATE ---
+let globalPitchBend = 0; 
+let globalModulation = 0; 
+let activeSynthNodes = []; 
+
 export const masterAnalyser = ctx.createAnalyser();
-masterAnalyser.fftSize = 2048; // Was 4096. 2048 is standard and much faster.
+masterAnalyser.fftSize = 2048; 
 masterAnalyser.smoothingTimeConstant = 0.85; 
 
 const DRUM_MAP = { 'kick': 0, 'snare': 1, 'hihat': 2, 'tom': 3, 'crash': 4 };
@@ -56,6 +60,52 @@ masterGain.connect(masterAnalyser);
 masterAnalyser.connect(ctx.destination);
 masterGain.connect(recordingDest); 
 
+// --- BASE64 AUDIO HELPERS (NEW) ---
+
+export async function audioBufferToBase64(buffer) {
+    const wavBlob = bufferToWav(buffer);
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result); // Returns data:audio/wav;base64,...
+        reader.onerror = reject;
+        reader.readAsDataURL(wavBlob);
+    });
+}
+
+export async function base64ToAudioBuffer(base64String) {
+    try {
+        const response = await fetch(base64String);
+        const arrayBuffer = await response.arrayBuffer();
+        return await ctx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+        console.error("Base64 Decode Error", e);
+        return null;
+    }
+}
+
+// --- PITCH BEND & MODULATION ---
+
+export function setGlobalPitchBend(value) {
+    globalPitchBend = value;
+    const now = ctx.currentTime;
+    activeSynthNodes.forEach(node => {
+        if(node.source && node.baseDetune !== undefined) {
+            const bendCents = value * 200; 
+            node.source.detune.setTargetAtTime(node.baseDetune + bendCents, now, 0.05);
+        }
+    });
+}
+
+export function setGlobalModulation(value) {
+    globalModulation = value;
+    const now = ctx.currentTime;
+    activeSynthNodes.forEach(node => {
+        if(node.lfoGain) {
+            node.lfoGain.gain.setTargetAtTime(value * 50, now, 0.05);
+        }
+    });
+}
+
 export function createVocalChain() {
     const lowCut = ctx.createBiquadFilter();
     lowCut.type = 'highpass';
@@ -96,8 +146,7 @@ export const Microphone = {
             this.gainNode.connect(this.analyserNode);
             this.stream = rawStream; 
             this.isInitialized = true;
-            console.log("Microphone Initialized");
-        } catch (err) { console.error("Microphone Init Failed:", err); throw err; }
+        } catch (err) { console.error("Mic Init Failed:", err); throw err; }
     },
     setGain(val) { if(this.gainNode && isFinite(val)) this.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.02); },
     setReverbAmount(val) { if(this.fxChain && isFinite(val)) this.fxChain.reverbSend.gain.setTargetAtTime(val, ctx.currentTime, 0.02); },
@@ -269,27 +318,64 @@ export async function decodeAudioFile(file) {
 }
 
 export function bufferToWav(buffer) {
-    const numChannels = 1; const sampleRate = buffer.sampleRate; const format = 1; const bitDepth = 16;
-    const data = buffer.getChannelData(0);
-    const byteRate = sampleRate * numChannels * bitDepth / 8;
-    const blockAlign = numChannels * bitDepth / 8;
-    const dataSize = data.length * numChannels * bitDepth / 8;
-    const bufferLen = 44 + dataSize;
-    const wav = new ArrayBuffer(bufferLen);
-    const view = new DataView(wav);
-    const writeString = (view, offset, string) => { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); };
-    writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true); view.setUint16(20, format, true); view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true); view.setUint16(34, bitDepth, true); writeString(view, 36, 'data');
-    view.setUint32(40, dataSize, true);
-    let offset = 44;
-    for (let i = 0; i < data.length; i++) {
-        let sample = Math.max(-1, Math.min(1, data[i]));
-        sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-        view.setInt16(offset, sample, true);
-        offset += 2;
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    let result;
+    if (numChannels === 2) {
+        result = interleave(buffer.getChannelData(0), buffer.getChannelData(1));
+    } else {
+        result = buffer.getChannelData(0);
     }
+    return encodeWAV(result, numChannels, sampleRate);
+}
+
+function interleave(inputL, inputR) {
+    const length = inputL.length + inputR.length;
+    const result = new Float32Array(length);
+    let index = 0;
+    let inputIndex = 0;
+    while (index < length) {
+        result[index++] = inputL[inputIndex];
+        result[index++] = inputR[inputIndex];
+        inputIndex++;
+    }
+    return result;
+}
+
+function encodeWAV(samples, numChannels, sampleRate) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+
+    const writeString = (view, offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    };
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    floatTo16BitPCM(view, 44, samples);
+
     return new Blob([view], { type: 'audio/wav' });
+}
+
+function floatTo16BitPCM(output, offset, input) {
+    for (let i = 0; i < input.length; i++, offset += 2) {
+        const s = Math.max(-1, Math.min(1, input[i]));
+        output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
 }
 
 export const INSTRUMENTS = {
@@ -321,14 +407,34 @@ export function startNote(freq, midiNote, instName = 'Lead Synth', start = null,
             slot = parseInt(instName.split(' ')[1]) - 1;
         }
         const voice = playSample(slot, start || ctx.currentTime, freq, track);
-        if (midiNote > 0 && voice) activeOscillators[midiNote] = voice;
+        if (midiNote > 0 && voice) {
+            voice.midi = midiNote;
+            voice.baseDetune = 0;
+            activeOscillators[midiNote] = voice;
+            activeSynthNodes.push(voice);
+        }
         return voice; 
     } 
     else {
         const t = start || ctx.currentTime;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = recipe.type; osc.frequency.value = freq;
+        
+        // --- NEW: LFO & PITCH BEND ---
+        const lfo = ctx.createOscillator();
+        const lfoGain = ctx.createGain();
+        lfo.frequency.value = 5; 
+        lfoGain.gain.value = globalModulation * 50; 
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.detune);
+        lfo.start(t);
+
+        osc.type = recipe.type; 
+        osc.frequency.value = freq;
+        
+        const baseDetune = 0;
+        osc.detune.value = baseDetune + (globalPitchBend * 200);
+
         let outputNode = gain;
         if (recipe.filter) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = recipe.filter; gain.connect(f); outputNode = f; }
         outputNode.connect(mixer[track] ? mixer[track].input : mixer.lead.input);
@@ -337,14 +443,21 @@ export function startNote(freq, midiNote, instName = 'Lead Synth', start = null,
         gain.gain.setValueAtTime(0, t);
         gain.gain.linearRampToValueAtTime(peakGain, t + recipe.attack); 
         gain.gain.setTargetAtTime(peakGain * (recipe.sustain !== undefined ? recipe.sustain : 0.6), t + recipe.attack, recipe.decay / 3);
+        
+        const voice = { osc, gain, lfoGain, baseDetune, source: osc, type: 'synth', midi: midiNote }; 
+        allRunningVoices.push(voice);
+
         if (dur) {
             const releaseTail = recipe.release || 0.2;
             if (recipe.sustain === 0) { osc.start(t); osc.stop(t + recipe.decay + releaseTail + 1.0); } 
             else { gain.gain.setTargetAtTime(0, t + dur, 0.1); osc.start(t); osc.stop(t + dur + releaseTail); }
         } else { osc.start(t); }
-        const voice = { osc, gain, type: 'synth' }; allRunningVoices.push(voice);
+        
         osc.onended = () => { const idx = allRunningVoices.indexOf(voice); if (idx > -1) allRunningVoices.splice(idx, 1); };
-        if (midiNote > 0) activeOscillators[midiNote] = voice;
+        if (midiNote > 0) {
+            activeOscillators[midiNote] = voice;
+            activeSynthNodes.push(voice);
+        }
         return voice;
     }
 }
@@ -358,6 +471,10 @@ export function stopNote(midiNote) {
             voice.gain.gain.setValueAtTime(voice.gain.gain.value, now); 
             voice.gain.gain.linearRampToValueAtTime(0, now + 0.1); 
             voice.osc.stop(now + 0.1); 
+            
+            // Remove from active pitch bend list
+            const idx = activeSynthNodes.indexOf(voice);
+            if(idx > -1) activeSynthNodes.splice(idx, 1);
         } 
         else if (voice.type === 'sampler') { 
             try { 
@@ -366,6 +483,10 @@ export function stopNote(midiNote) {
                 voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
                 voice.gain.gain.linearRampToValueAtTime(0, now + 0.3); 
                 voice.osc.stop(now + 0.35);
+                
+                // Remove from active list
+                const idx = activeSynthNodes.indexOf(voice);
+                if(idx > -1) activeSynthNodes.splice(idx, 1);
             } catch(e){} 
         }
         delete activeOscillators[midiNote];
@@ -393,7 +514,7 @@ export function playDrum(type, time) {
     if (type === 'kick') {
         const osc = ctx.createOscillator(); const gain = ctx.createGain();
         osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(0.01, t + 0.5);
-        gain.gain.setValueAtTime(1 * vol, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+        gain.gain.setValueAtTime(1 * vol, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
         osc.connect(gain); gain.connect(dest); osc.start(t); osc.stop(t + 0.5);
     } 
     else if (type === 'snare') {
@@ -436,6 +557,9 @@ export function stopAllSounds() {
     masterGain.gain.cancelScheduledValues(ctx.currentTime);
     masterGain.gain.setValueAtTime(0, ctx.currentTime);
     setTimeout(() => masterGain.gain.linearRampToValueAtTime(0.5, ctx.currentTime+0.1), 100);
+    // NEW: Stop synth nodes too
+    activeSynthNodes.forEach(n => { try { n.source.stop(); } catch(e){} });
+    activeSynthNodes = [];
 }
 
 function getFrequency(noteName, octave) {
