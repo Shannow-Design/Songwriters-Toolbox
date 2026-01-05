@@ -28,7 +28,165 @@ let checkBoxes = {};
 let theory, guitar, bass, chordRenderer, extraChordRenderer, tuner, keyboard, sampler, drumSampler, looper, visualizer, lyricPad, keyFinder;
 let sequencer, vocalGenerator, songBuilder, studio, projectManager, circle;
 
-// --- SAVE / LOAD SETTINGS ---
+// State Variables
+let currentActiveChordNotes = []; 
+let currentActiveChordRoot = null; 
+let currentActiveChordShape = null; 
+
+// --- HELPER FUNCTIONS (Must be defined before init usage) ---
+
+function getActiveNotes() { 
+    if(!keySelect || !scaleSelect) return [];
+    return generateScale(keySelect.value, scaleSelect.value); 
+}
+
+function addSpanToggle(wrapperId) {
+    const wrapper = document.getElementById(wrapperId);
+    if(!wrapper) return;
+    
+    const header = wrapper.querySelector('h3');
+    if(!header) return;
+
+    // Prevent duplicate buttons
+    if(header.querySelector('.btn-span-toggle')) return;
+
+    const btn = document.createElement('button');
+    btn.textContent = "↔ Span";
+    btn.className = "btn-span-toggle";
+    btn.title = "Toggle Full Width in Grid Mode";
+    btn.style.cssText = `
+        float: right; font-size: 0.6rem; background: #333; border: 1px solid #555; 
+        color: #888; padding: 2px 6px; border-radius: 3px; cursor: pointer; margin-left: 10px;
+        text-transform: none; letter-spacing: 0; font-weight: normal;
+    `;
+    
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        const isSpanned = wrapper.classList.toggle('col-span-full');
+        btn.style.color = isSpanned ? '#00e5ff' : '#888';
+        btn.style.borderColor = isSpanned ? '#00e5ff' : '#555';
+    };
+
+    header.appendChild(btn);
+}
+
+function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
+    currentActiveChordNotes = chordNotes; 
+    currentActiveChordRoot = chordRoot;
+    currentActiveChordShape = chordShape; 
+
+    const scaleNotes = getActiveNotes();
+    let gTuning = ['E','A','D','G','B','E'];
+    if (TUNINGS[tuningSelect.value]) gTuning = TUNINGS[tuningSelect.value].notes;
+    let bTuning = ['E','A','D','G'];
+    if (TUNINGS[bassTuningSelect.value]) { bTuning = TUNINGS[bassTuningSelect.value].notes; }
+    
+    const capo = parseInt(capoSelect.value || 0);
+    
+    if(guitar) guitar.render(scaleNotes, keySelect.value, gTuning, capo, currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
+    if(bass) bass.render(scaleNotes, keySelect.value, bTuning, 0, currentActiveChordNotes, currentActiveChordRoot, null); 
+}
+
+function updateDisplay() {
+    if(!keySelect || !scaleSelect) return;
+
+    const activeNotes = getActiveNotes();
+    updateFretboards(currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
+    
+    if(circle) circle.update(keySelect.value);
+    if(keyboard) keyboard.render(activeNotes, keySelect.value); 
+    renderNoteButtons(activeNotes);
+    
+    const diatonicChords = getDiatonicChords(keySelect.value, scaleSelect.value);
+    const borrowedChords = getBorrowedChords(keySelect.value, scaleSelect.value);
+    const allChords = getAllChords(keySelect.value, scaleSelect.value); 
+
+    const capoValue = parseInt(capoSelect.value || 0); 
+    let currentTuningNotes = ['E','A','D','G','B','E'];
+    if(TUNINGS[tuningSelect.value]) currentTuningNotes = TUNINGS[tuningSelect.value].notes;
+    
+    const diatonicWithIndex = diatonicChords.map((c, i) => ({...c, index: i}));
+    
+    if(chordRenderer) {
+        chordRenderer.render(
+            diatonicWithIndex, 
+            capoValue, 
+            currentTuningNotes, 
+            (notes, chordName, shape) => { 
+                const root = notes[0];
+                keyboard.highlightNotes(notes, chordName, root); 
+                const globalIndex = allChords.findIndex(c => c.name === chordName);
+                if (globalIndex !== -1) {
+                    chordRenderer.highlightChord(globalIndex);
+                    extraChordRenderer.highlightChord(globalIndex);
+                }
+                updateFretboards(notes, root, shape);
+            },
+            keySelect.value 
+        );
+    }
+
+    const offset = diatonicChords.length; 
+    const borrowedWithIndex = borrowedChords.map((c, i) => ({...c, index: offset + i}));
+
+    if(extraChordRenderer) {
+        extraChordRenderer.render(
+            borrowedWithIndex, 
+            capoValue, 
+            currentTuningNotes, 
+            (notes, chordName, shape) => { 
+                const root = notes[0];
+                keyboard.highlightNotes(notes, chordName, root); 
+                const globalIndex = allChords.findIndex(c => c.name === chordName);
+                if (globalIndex !== -1) {
+                    chordRenderer.highlightChord(globalIndex);
+                    extraChordRenderer.highlightChord(globalIndex);
+                }
+                updateFretboards(notes, root, shape);
+            },
+            keySelect.value 
+        );
+    }
+}
+
+function renderNoteButtons(scaleNotes) {
+    if(!noteButtonsDisplay) return;
+    noteButtonsDisplay.innerHTML = '';
+    const intervals = ['R', '2', '3', '4', '5', '6', '7'];
+    let currentOctave = 3; 
+    let lastNoteIndex = -1;
+    scaleNotes.forEach((note, index) => {
+        const noteIndex = getNoteIndex(note);
+        if (noteIndex < lastNoteIndex) currentOctave++;
+        lastNoteIndex = noteIndex;
+        const buttonOctave = currentOctave;
+        const btn = document.createElement('div');
+        btn.className = 'note-btn';
+        btn.dataset.note = note; 
+        if (index === 0) btn.classList.add('root');
+        const noteName = document.createElement('span');
+        noteName.className = 'note-name';
+        noteName.textContent = note;
+        const noteInterval = document.createElement('span');
+        noteInterval.className = 'note-interval';
+        noteInterval.textContent = (scaleNotes.length === 7) ? intervals[index] : '';
+        btn.appendChild(noteName);
+        btn.appendChild(noteInterval);
+        btn.addEventListener('click', () => {
+            playSingleNote(note, buttonOctave); 
+            keyboard.highlightNotes(scaleNotes, note, note); 
+            updateFretboards([note], note);
+            chordRenderer.clearHighlights();
+            extraChordRenderer.clearHighlights();
+            btn.style.transition = "transform 0.1s, border-color 0.1s";
+            btn.style.borderColor = "#00e5ff";
+            btn.style.transform = "scale(1.05)";
+            setTimeout(() => { btn.style.borderColor = ""; btn.style.transform = ""; }, 200);
+        });
+        noteButtonsDisplay.appendChild(btn);
+    });
+}
+
 function saveLayoutSettings() {
     if (!btnSaveLayout) return;
 
@@ -44,7 +202,6 @@ function saveLayoutSettings() {
     
     localStorage.setItem('songwriter_layout_settings', JSON.stringify(settings));
     
-    // Visual Feedback
     const originalText = btnSaveLayout.textContent;
     btnSaveLayout.textContent = "✔ SAVED!";
     btnSaveLayout.style.color = "#00ff55";
@@ -63,26 +220,22 @@ function loadLayoutSettings() {
     try {
         const settings = JSON.parse(saved);
         
-        // Restore Layout Mode
         if (settings.mode && layoutModeSelect) {
             layoutModeSelect.value = settings.mode;
             layoutModeSelect.dispatchEvent(new Event('change')); 
         }
         
-        // Restore Columns
         if (settings.cols && layoutColsSelect) {
             layoutColsSelect.value = settings.cols;
-            // Layout change event handles re-applying this, but we set it just in case
             if (settings.mode !== 'single') layoutColsSelect.disabled = false;
         }
         
-        // Restore Visibility
         if (settings.checkboxes) {
             for (const [id, isChecked] of Object.entries(settings.checkboxes)) {
                 const cb = checkBoxes[id];
                 if (cb) {
                     cb.checked = isChecked;
-                    cb.dispatchEvent(new Event('change')); // Trigger visibility toggle
+                    cb.dispatchEvent(new Event('change')); 
                 }
             }
         }
@@ -91,9 +244,30 @@ function loadLayoutSettings() {
     }
 }
 
+function initOutputMonitor() {
+    const elHP = document.getElementById('ind-headphones');
+    const elSP = document.getElementById('ind-speakers');
+    const elAny = document.getElementById('ind-any');
+
+    setInterval(() => {
+        let requireHeadphones = false;
+        let requireSpeakers = false;
+        if (looper && looper.isRecordingOrArmed()) requireHeadphones = true;
+        if (vocalGenerator && vocalGenerator.isPracticeMode) requireHeadphones = true;
+        if (studio && studio.isRecording) requireHeadphones = true;
+        if (looper && looper.isLatencyTesting) requireSpeakers = true;
+        if(elHP) elHP.className = "monitor-item opacity-30 transition-all duration-300";
+        if(elSP) elSP.className = "monitor-item opacity-30 transition-all duration-300";
+        if(elAny) elAny.className = "monitor-item opacity-30 transition-all duration-300";
+        if (requireSpeakers) { elSP.classList.remove('opacity-30'); elSP.classList.add('monitor-active-sp'); } 
+        else if (requireHeadphones) { elHP.classList.remove('opacity-30'); elHP.classList.add('monitor-active-hp'); } 
+        else { elAny.classList.remove('opacity-30'); elAny.classList.add('monitor-active-any'); }
+    }, 100); 
+}
+
 // --- INITIALIZATION ---
 function init() {
-    // 1. Grab DOM Elements (safely inside init)
+    // 1. Grab DOM Elements
     keySelect = document.getElementById('key-select');
     scaleSelect = document.getElementById('scale-select');
     tuningSelect = document.getElementById('tuning-select');
@@ -255,7 +429,6 @@ function init() {
         toggleModule(checkBoxes[id], wrapperId);
     }
 
-    // Special cases
     if(checkBoxes['cb-visualizer']) {
         checkBoxes['cb-visualizer'].addEventListener('change', () => {
             visualizerWrapper.style.display = checkBoxes['cb-visualizer'].checked ? 'flex' : 'none'; 
@@ -317,7 +490,7 @@ function init() {
 
     // 9. Load Saved Audio & Settings
     loadSavedSamples().then(() => { sampler.updateStatus(); });
-    loadLayoutSettings(); // RESTORE LAYOUT HERE
+    loadLayoutSettings(); 
 
     // 10. Add Span Buttons
     addSpanToggle('wrapper-guitar');
@@ -361,120 +534,6 @@ function init() {
 
     updateDisplay();
     initOutputMonitor(); 
-}
-
-function updateDisplay() {
-    const activeNotes = getActiveNotes();
-    updateFretboards(currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
-    if(circle) circle.update(keySelect.value);
-    keyboard.render(activeNotes, keySelect.value); 
-    renderNoteButtons(activeNotes);
-    
-    const diatonicChords = getDiatonicChords(keySelect.value, scaleSelect.value);
-    const borrowedChords = getBorrowedChords(keySelect.value, scaleSelect.value);
-    const allChords = getAllChords(keySelect.value, scaleSelect.value); 
-
-    const capoValue = parseInt(capoSelect.value || 0); 
-    let currentTuningNotes = ['E','A','D','G','B','E'];
-    if(TUNINGS[tuningSelect.value]) currentTuningNotes = TUNINGS[tuningSelect.value].notes;
-    
-    const diatonicWithIndex = diatonicChords.map((c, i) => ({...c, index: i}));
-    
-    chordRenderer.render(
-        diatonicWithIndex, 
-        capoValue, 
-        currentTuningNotes, 
-        (notes, chordName, shape) => { 
-            const root = notes[0];
-            keyboard.highlightNotes(notes, chordName, root); 
-            const globalIndex = allChords.findIndex(c => c.name === chordName);
-            if (globalIndex !== -1) {
-                chordRenderer.highlightChord(globalIndex);
-                extraChordRenderer.highlightChord(globalIndex);
-            }
-            updateFretboards(notes, root, shape);
-        },
-        keySelect.value 
-    );
-
-    const offset = diatonicChords.length; 
-    const borrowedWithIndex = borrowedChords.map((c, i) => ({...c, index: offset + i}));
-
-    extraChordRenderer.render(
-        borrowedWithIndex, 
-        capoValue, 
-        currentTuningNotes, 
-        (notes, chordName, shape) => { 
-            const root = notes[0];
-            keyboard.highlightNotes(notes, chordName, root); 
-            const globalIndex = allChords.findIndex(c => c.name === chordName);
-            if (globalIndex !== -1) {
-                chordRenderer.highlightChord(globalIndex);
-                extraChordRenderer.highlightChord(globalIndex);
-            }
-            updateFretboards(notes, root, shape);
-        },
-        keySelect.value 
-    );
-}
-
-function renderNoteButtons(scaleNotes) {
-    if(!noteButtonsDisplay) return;
-    noteButtonsDisplay.innerHTML = '';
-    const intervals = ['R', '2', '3', '4', '5', '6', '7'];
-    let currentOctave = 3; 
-    let lastNoteIndex = -1;
-    scaleNotes.forEach((note, index) => {
-        const noteIndex = getNoteIndex(note);
-        if (noteIndex < lastNoteIndex) currentOctave++;
-        lastNoteIndex = noteIndex;
-        const buttonOctave = currentOctave;
-        const btn = document.createElement('div');
-        btn.className = 'note-btn';
-        btn.dataset.note = note; 
-        if (index === 0) btn.classList.add('root');
-        const noteName = document.createElement('span');
-        noteName.className = 'note-name';
-        noteName.textContent = note;
-        const noteInterval = document.createElement('span');
-        noteInterval.className = 'note-interval';
-        noteInterval.textContent = (scaleNotes.length === 7) ? intervals[index] : '';
-        btn.appendChild(noteName);
-        btn.appendChild(noteInterval);
-        btn.addEventListener('click', () => {
-            playSingleNote(note, buttonOctave); 
-            keyboard.highlightNotes(scaleNotes, note, note); 
-            updateFretboards([note], note);
-            chordRenderer.clearHighlights();
-            extraChordRenderer.clearHighlights();
-            btn.style.transition = "transform 0.1s, border-color 0.1s";
-            btn.style.borderColor = "#00e5ff";
-            btn.style.transform = "scale(1.05)";
-            setTimeout(() => { btn.style.borderColor = ""; btn.style.transform = ""; }, 200);
-        });
-        noteButtonsDisplay.appendChild(btn);
-    });
-}
-
-function initOutputMonitor() {
-    const elHP = document.getElementById('ind-headphones');
-    const elSP = document.getElementById('ind-speakers');
-    const elAny = document.getElementById('ind-any');
-
-    setInterval(() => {
-        let requireHeadphones = false;
-        let requireSpeakers = false;
-        if (looper && looper.isRecordingOrArmed()) requireHeadphones = true;
-        if (vocalGenerator && vocalGenerator.isPracticeMode) requireHeadphones = true;
-        if (studio && studio.isRecording) requireHeadphones = true;
-        if (looper && looper.isLatencyTesting) requireSpeakers = true;
-        if(elHP) elHP.className = "monitor-item opacity-30 transition-all duration-300";
-        if(elSP) elSP.className = "monitor-item opacity-30 transition-all duration-300";
-        if(elAny) elAny.className = "monitor-item opacity-30 transition-all duration-300";
-        if (requireSpeakers) { elSP.classList.remove('opacity-30'); elSP.classList.add('monitor-active-sp'); } 
-        else if (requireHeadphones) { elHP.classList.remove('opacity-30'); elHP.classList.add('monitor-active-hp'); } 
-        else { elAny.classList.remove('opacity-30'); elAny.classList.add('monitor-active-any'); }
-    }, 100); 
 }
 
 init();
