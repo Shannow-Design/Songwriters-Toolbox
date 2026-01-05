@@ -1,136 +1,172 @@
 // modules/theory.js
 
-const RAW_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const FLATS  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-const NOTE_TO_INDEX = {
-    'C': 0, 'C#': 1, 'Db': 1,
-    'D': 2, 'D#': 3, 'Eb': 3,
-    'E': 4, 'F': 5, 'F#': 6, 'Gb': 6,
-    'G': 7, 'G#': 8, 'Ab': 8,
-    'A': 9, 'A#': 10, 'Bb': 10,
-    'B': 11
-};
-
-// --- RESTORED: Full Scale Library ---
 export const SCALES = {
-    major: { name: "Major (Ionian)", intervals: [0, 2, 4, 5, 7, 9, 11] },
-    natural_minor: { name: "Natural Minor (Aeolian)", intervals: [0, 2, 3, 5, 7, 8, 10] },
-    harmonic_minor: { name: "Harmonic Minor", intervals: [0, 2, 3, 5, 7, 8, 11] },
-    melodic_minor: { name: "Melodic Minor", intervals: [0, 2, 3, 5, 7, 9, 11] },
-    dorian: { name: "Dorian", intervals: [0, 2, 3, 5, 7, 9, 10] },
-    phrygian: { name: "Phrygian", intervals: [0, 1, 3, 5, 7, 8, 10] },
-    lydian: { name: "Lydian", intervals: [0, 2, 4, 6, 7, 9, 11] },
-    mixolydian: { name: "Mixolydian", intervals: [0, 2, 4, 5, 7, 9, 10] },
-    locrian: { name: "Locrian", intervals: [0, 1, 3, 5, 6, 8, 10] },
-    major_pentatonic: { name: "Major Pentatonic", intervals: [0, 2, 4, 7, 9] },
-    minor_pentatonic: { name: "Minor Pentatonic", intervals: [0, 3, 5, 7, 10] },
-    blues: { name: "Blues", intervals: [0, 3, 5, 6, 7, 10] }
+    major: { name: 'Major', intervals: [0, 2, 4, 5, 7, 9, 11] },
+    natural_minor: { name: 'Natural Minor', intervals: [0, 2, 3, 5, 7, 8, 10] },
+    harmonic_minor: { name: 'Harmonic Minor', intervals: [0, 2, 3, 5, 7, 8, 11] },
+    melodic_minor: { name: 'Melodic Minor', intervals: [0, 2, 3, 5, 7, 9, 11] },
+    dorian: { name: 'Dorian', intervals: [0, 2, 3, 5, 7, 9, 10] },
+    phrygian: { name: 'Phrygian', intervals: [0, 1, 3, 5, 7, 8, 10] },
+    lydian: { name: 'Lydian', intervals: [0, 2, 4, 6, 7, 9, 11] },
+    mixolydian: { name: 'Mixolydian', intervals: [0, 2, 4, 5, 7, 9, 10] },
+    locrian: { name: 'Locrian', intervals: [0, 1, 3, 5, 6, 8, 10] },
+    pentatonic_major: { name: 'Major Pentatonic', intervals: [0, 2, 4, 7, 9] },
+    pentatonic_minor: { name: 'Minor Pentatonic', intervals: [0, 3, 5, 7, 10] },
+    blues: { name: 'Blues', intervals: [0, 3, 5, 6, 7, 10] }
 };
 
-// --- RESTORED: Tunings + 5-String Bass ---
 export const TUNINGS = {
-    standard: { name: "Guitar: Standard", notes: ['E', 'A', 'D', 'G', 'B', 'E'] },
-    drop_d: { name: "Guitar: Drop D", notes: ['D', 'A', 'D', 'G', 'B', 'E'] },
-    dadgad: { name: "Guitar: DADGAD", notes: ['D', 'A', 'D', 'G', 'A', 'D'] },
-    open_g: { name: "Guitar: Open G", notes: ['D', 'G', 'D', 'G', 'B', 'D'] },
-    bass_standard: { name: "Bass: Standard (4)", notes: ['E', 'A', 'D', 'G'] },
-    bass_drop_d: { name: "Bass: Drop D (4)", notes: ['D', 'A', 'D', 'G'] },
-    // 5-String Support
-    bass_5_string: { name: 'Bass: Standard (5)', notes: ['B', 'E', 'A', 'D', 'G'] }
+    standard: { name: 'Standard (E)', notes: ['E', 'A', 'D', 'G', 'B', 'E'] },
+    drop_d: { name: 'Drop D', notes: ['D', 'A', 'D', 'G', 'B', 'E'] },
+    dadgad: { name: 'DADGAD', notes: ['D', 'A', 'D', 'G', 'A', 'D'] },
+    open_g: { name: 'Open G', notes: ['D', 'G', 'D', 'G', 'B', 'D'] },
+    bass_standard: { name: 'Standard (E)', notes: ['E', 'A', 'D', 'G'] },
+    bass_drop_d: { name: 'Drop D', notes: ['D', 'A', 'D', 'G'] }
 };
 
-export function getNotes() { return RAW_NOTES; }
-export function getNoteIndex(noteName) { return NOTE_TO_INDEX[noteName]; }
-
-function shouldUseFlats(rootIndex, scaleType) {
-    const flatRoots = [5, 10, 3, 8, 1]; 
-    const flatMinorRoots = [0, 7, 2, 5, 10, 3]; 
-    if (scaleType.includes('minor') || scaleType.includes('dorian') || scaleType.includes('phrygian') || scaleType.includes('locrian')) {
-        return flatMinorRoots.includes(rootIndex);
-    }
-    return flatRoots.includes(rootIndex);
+export class TheoryEngine {
+    constructor() {}
 }
 
-// --- UPDATED: Crash-Proof Scale Generation ---
-export function generateScale(root, scaleType) {
-    let scaleObj = SCALES[scaleType];
-    if (!scaleObj) {
-        console.warn(`Scale '${scaleType}' not found. Defaulting to Major.`);
-        scaleObj = SCALES['major'];
-        scaleType = 'major'; 
-    }
+export function getNotes() { return NOTES; }
 
-    const rootIndex = RAW_NOTES.indexOf(root);
-    const intervals = scaleObj.intervals;
-    const useFlats = shouldUseFlats(rootIndex, scaleType);
-    const sourceScale = useFlats ? FLATS : SHARPS;
+export function getNoteIndex(note) {
+    const enharmonics = { 'Db':'C#', 'Eb':'D#', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#' };
+    let n = note;
+    if (enharmonics[n]) n = enharmonics[n];
+    return NOTES.indexOf(n);
+}
 
-    return intervals.map(interval => {
-        const noteIndex = (rootIndex + interval) % 12;
-        return sourceScale[noteIndex];
+export function generateScale(root, scaleKey) {
+    const rootIdx = getNoteIndex(root);
+    const scale = SCALES[scaleKey];
+    if (!scale) return [];
+    
+    return scale.intervals.map(interval => {
+        return NOTES[(rootIdx + interval) % 12];
     });
 }
 
-export function getDiatonicChords(root, scaleType) {
-    const scaleNotes = generateScale(root, scaleType);
+function getChordType(root, third, fifth) {
+    const r = getNoteIndex(root);
+    const t = getNoteIndex(third);
+    const f = getNoteIndex(fifth);
+    
+    let thirdInt = (t - r + 12) % 12;
+    let fifthInt = (f - r + 12) % 12;
+    
+    if (thirdInt === 4 && fifthInt === 7) return 'maj';
+    if (thirdInt === 3 && fifthInt === 7) return 'min';
+    if (thirdInt === 3 && fifthInt === 6) return 'dim';
+    if (thirdInt === 4 && fifthInt === 8) return 'aug';
+    return 'unk';
+}
+
+export function getDiatonicChords(root, scaleKey) {
+    const notes = generateScale(root, scaleKey);
+    if (notes.length < 7) return []; 
+
+    return notes.map((note, i) => {
+        const rootNote = notes[i];
+        const thirdNote = notes[(i + 2) % notes.length];
+        const fifthNote = notes[(i + 4) % notes.length];
+        
+        const type = getChordType(rootNote, thirdNote, fifthNote);
+        let suffix = '';
+        let roman = '';
+        
+        const numerals = ['I','II','III','IV','V','VI','VII'];
+        let num = numerals[i];
+        
+        if (type === 'min') { suffix = 'm'; roman = num.toLowerCase(); }
+        else if (type === 'dim') { suffix = '°'; roman = num.toLowerCase() + '°'; }
+        else if (type === 'maj') { suffix = ''; roman = num; }
+        else if (type === 'aug') { suffix = '+'; roman = num + '+'; }
+        
+        return {
+            root: rootNote,
+            name: rootNote + suffix,
+            type: type,
+            roman: roman,
+            notes: [rootNote, thirdNote, fifthNote]
+        };
+    });
+}
+
+// --- EXTENDED: Non-Diatonic / Borrowed Chords ---
+export function getBorrowedChords(root, scaleKey) {
+    const rootIdx = getNoteIndex(root);
     const chords = [];
 
-    if (!scaleNotes || scaleNotes.length === 0) return [];
-
-    for (let i = 0; i < scaleNotes.length; i++) {
-        const rootNote = scaleNotes[i];
-        // Stack thirds (skip a note)
-        const third = scaleNotes[(i + 2) % scaleNotes.length];
-        const fifth = scaleNotes[(i + 4) % scaleNotes.length];
+    const buildChord = (interval, type, roman) => {
+        const chordRoot = NOTES[(rootIdx + interval) % 12];
+        let thirdInterval = (type === 'maj') ? 4 : 3;
+        let fifthInterval = 7;
+        if (type === 'dim') { fifthInterval = 6; }
         
-        const rootIndex = getNoteIndex(rootNote);
-        const thirdIndex = getNoteIndex(third);
-        const fifthIndex = getNoteIndex(fifth);
+        const third = NOTES[(getNoteIndex(chordRoot) + thirdInterval) % 12];
+        const fifth = NOTES[(getNoteIndex(chordRoot) + fifthInterval) % 12];
         
-        let interval3 = (thirdIndex - rootIndex + 12) % 12;
-        let interval5 = (fifthIndex - rootIndex + 12) % 12;
+        let suffix = '';
+        if (type === 'min') suffix = 'm';
+        else if (type === 'dim') suffix = '°';
         
-        let suffix = "";
-        let quality = "Major";
+        return {
+            root: chordRoot,
+            name: chordRoot + suffix,
+            type: type,
+            roman: roman,
+            notes: [chordRoot, third, fifth],
+            isBorrowed: true
+        };
+    };
 
-        // --- IMPROVED INTERVAL LOGIC FOR PENTATONICS/BLUES ---
-        if (interval3 === 4) { // Major 3rd
-            if (interval5 === 7) { suffix = ""; quality = "Major"; }
-            else if (interval5 === 8 || interval5 === 9) { suffix = "6"; quality = "Major 6"; } // Pentatonic often implies 6th
-            else { suffix = ""; quality = "Major"; }
-        } 
-        else if (interval3 === 3) { // Minor 3rd
-            if (interval5 === 6) { suffix = "dim"; quality = "Diminished"; }
-            else { suffix = "m"; quality = "Minor"; }
-        } 
-        else if (interval3 === 5) { // Perfect 4th -> Sus4
-            suffix = "sus4";
-            quality = "Suspended";
-        } 
-        else if (interval3 === 2) { // Major 2nd -> Sus2
-            suffix = "sus2";
-            quality = "Suspended";
-        } 
-        else {
-            // Fallback
-            suffix = "?";
-            quality = "Other";
-        }
+    if (scaleKey === 'major') {
+        // --- SECONDARY DOMINANTS ---
+        // V/vi (E major in C) -> Pushes to Am
+        chords.push(buildChord(4, 'maj', 'III (V/vi)'));
+        // V/ii (A major in C) -> Pushes to Dm
+        chords.push(buildChord(9, 'maj', 'VI (V/ii)'));
+        // V/V (D major in C) -> Pushes to G
+        chords.push(buildChord(2, 'maj', 'II (V/V)'));
+        // V/iii (B major in C) -> Pushes to Em
+        chords.push(buildChord(11, 'maj', 'VII (V/iii)'));
 
-        chords.push({
-            name: rootNote + suffix,
-            root: rootNote,
-            quality: quality,
-            notes: [rootNote, third, fifth]
-        });
+        // --- BORROWED FROM MINOR (MODE MIXTURE) ---
+        // bIII (Eb major in C)
+        chords.push(buildChord(3, 'maj', 'bIII')); 
+        // iv (F minor in C)
+        chords.push(buildChord(5, 'min', 'iv'));   
+        // v (G minor in C - Mixolydian feel)
+        chords.push(buildChord(7, 'min', 'v'));
+        // bVI (Ab major in C)
+        chords.push(buildChord(8, 'maj', 'bVI'));  
+        // bVII (Bb major in C)
+        chords.push(buildChord(10, 'maj', 'bVII'));
+
+        // --- DRAMATIC ---
+        // bII (Neapolitan - Db major in C)
+        chords.push(buildChord(1, 'maj', 'bII'));
+
+    } else if (scaleKey === 'natural_minor') {
+        // --- MINOR KEY VARIATIONS ---
+        // V (Major Dominant - Harmonic Minor feel) - G major in Cm
+        chords.push(buildChord(7, 'maj', 'V'));    
+        // I (Picardy Third - End on major) - C major in Cm
+        chords.push(buildChord(0, 'maj', 'I'));    
+        // IV (Dorian IV) - F major in Cm
+        chords.push(buildChord(5, 'maj', 'IV'));   
+        // bII (Neapolitan) - Db major in Cm
+        chords.push(buildChord(1, 'maj', 'bII'));
     }
+
     return chords;
 }
 
-export class TheoryEngine {
-    constructor() {
-        this.cache = {};
-    }
+export function getAllChords(root, scaleKey) {
+    const diatonic = getDiatonicChords(root, scaleKey);
+    const borrowed = getBorrowedChords(root, scaleKey);
+    return [...diatonic, ...borrowed];
 }

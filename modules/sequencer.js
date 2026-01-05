@@ -1,150 +1,29 @@
 // modules/sequencer.js
 import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb } from './audio.js';
-import { getDiatonicChords, generateScale } from './theory.js';
+import { getAllChords, generateScale } from './theory.js'; 
 
-// --- EXPANDED DRUM PATTERNS ---
 const DRUM_PATTERNS = {
-    // --- ROCK & POP ---
-    'Basic Rock': { 
-        kick:  [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], 
-        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], 
-        hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Four on Floor': { 
-        kick:  [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], 
-        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], 
-        hihat: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0],
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Indie Disco': {
-        kick:  [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
-        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
-        hihat: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], 
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Hard Rock': {
-        kick:  [1,0,0,1, 0,0,1,0, 1,0,0,0, 0,0,1,0],
-        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
-        hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Punk': { 
-        kick:  [1,0,0,1, 0,1,0,0, 1,0,0,1, 0,1,0,0], 
-        snare: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], 
-        hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0]
-    },
-    'Half-Time Shuffle': { // Think 'Rosanna' or 'Purdie'
-        kick:  [1,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0], 
-        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], 
-        hihat: [1,0,1,1, 0,1,1,0, 1,0,1,1, 0,1,1,0], 
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-
-    // --- URBAN / GROOVE ---
-    'Hip Hop': { 
-        kick:  [1,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0], 
-        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], 
-        hihat: [1,0,1,0, 1,1,1,0, 1,0,1,0, 1,0,1,1],
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0],
-        crash: [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Funk Break': { 
-        kick:  [1,0,0,1, 0,0,1,0, 0,0,0,1, 0,1,0,0], 
-        snare: [0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0], 
-        hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0],
-        crash: [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Trap': { 
-        kick:  [1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0], 
-        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], 
-        hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], // Usually needs faster subdivision (32nds)
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-
-    // --- LATIN / BALLROOM ---
-    'Bossa Nova': {
-        kick:  [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0], // Clave-ish pattern
-        snare: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], // Often Rim click
-        hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], 
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Samba': {
-        kick:  [1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], 
-        snare: [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], 
-        hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], 
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Cha Cha': {
-        kick:  [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], // 1, 2, 3
-        snare: [0,0,0,0, 0,0,0,0, 0,0,1,0, 1,0,0,0], // 4-and-1
-        hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], // Cowbell usually
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Tango': {
-        kick:  [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], // Strong beats
-        snare: [1,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0], // Specific accent
-        hihat: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    'Reggae': { 
-        kick:  [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], // One Drop
-        snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], 
-        hihat: [0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1],
-        tom:   [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-        crash: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
-    },
-    
-    // --- EMPTY ---
-    'Empty': { 
-        kick: Array(16).fill(0), snare: Array(16).fill(0), hihat: Array(16).fill(0),
-        tom: Array(16).fill(0), crash: Array(16).fill(0)
-    }
+    'Basic Rock': { kick:[1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Four on Floor': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Indie Disco': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Hard Rock': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Punk': { kick:[1,0,0,1, 0,1,0,0, 1,0,0,1, 0,1,0,0], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0] },
+    'Half-Time Shuffle': { kick:[1,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,1, 0,1,1,0, 1,0,1,1, 0,1,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Hip Hop': { kick:[1,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,1,1,0, 1,0,1,0, 1,0,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Funk Break': { kick:[1,0,0,1, 0,0,1,0, 0,0,0,1, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Trap': { kick:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Bossa Nova': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0], snare:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Samba': { kick:[1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Cha Cha': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 0,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Tango': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[1,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0], hihat:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Reggae': { kick:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Empty': { kick:Array(16).fill(0), snare:Array(16).fill(0), hihat:Array(16).fill(0), tom:Array(16).fill(0), crash:Array(16).fill(0) }
 };
 
-const BASS_PATTERNS = {
-    'Root Notes':    ['1',null,null,null, '1',null,null,null, '1',null,null,null, '1',null,null,null],
-    'Root & Fifth':  ['1',null,null,null, '5',null,null,null, '1',null,null,null, '5',null,null,null],
-    'Walking':       ['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null],
-    'Disco Octaves': ['1',null,'8',null, '1',null,'8',null, '1',null,'8',null, '1',null,'8',null],
-    'Offbeat Pump':  [null,'1',null,'1', null,'1',null,'1', null,'1',null,'1', null,'1',null,'1'],
-    'Running 8ths':  ['1',null,'1',null, '1',null,'1',null, '1',null,'1',null, '1',null,'1',null],
-    'Empty':         Array(16).fill(null)
-};
-
-const MELODY_PATTERNS = {
-    'Arp Up (8ths)':     ['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null],
-    'Arp Down (8ths)':   ['8',null,'5',null, '3',null,'1',null, '8',null,'5',null, '3',null,'1',null],
-    'Fast Arp (16ths)':  ['1','3','5','8', '5','3','1','3', '5','8','1','3', '5','8','5','3'],
-    'Alberti':           ['1',null,'5',null, '3',null,'5',null, '1',null,'5',null, '3',null,'5',null],
-    'Staircase':         ['1',null,'3',null, '1',null,'5',null, '1',null,'8',null, '1',null,'5',null],
-    'Pedal Point':       ['8',null,'3',null, '8',null,'5',null, '8',null,'1',null, '8',null,'5',null],
-    'Empty':             Array(16).fill(null)
-};
-
-const SAMPLES_PATTERNS = {
-    'Whole Note (Drone)': ['1',null,null,null, null,null,null,null, null,null,null,null, null,null,null,null],
-    'Half Notes (1 & 3)': ['1',null,null,null, null,null,null,null, '1',null,null,null, null,null,null,null],
-    'Backbeat Stab':      [null,null,null,null, '1',null,null,null, null,null,null,null, '1',null,null,null],
-    'Dotted Quarter':     ['1',null,null,null, null,null,'1',null, null,null,null,null, '1',null,null,null],
-    'Offbeat 8ths':       [null,null,'1',null, null,null,'1',null, null,null,'1',null, null,null,'1',null],
-    'Slow Arp (Halves)':  ['1',null,null,null, null,null,null,null, '5',null,null,null, null,null,null,null],
-    'Charleston':         ['1',null,null,null, null,null,'1',null, null,null,null,null, null,null,null,null],
-    'Empty':              Array(16).fill(null)
-};
+const BASS_PATTERNS = { 'Root Notes':['1',null,null,null, '1',null,null,null, '1',null,null,null, '1',null,null,null], 'Root & Fifth':['1',null,null,null, '5',null,null,null, '1',null,null,null, '5',null,null,null], 'Walking':['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null], 'Disco Octaves':['1',null,'8',null, '1',null,'8',null, '1',null,'8',null, '1',null,'8',null], 'Offbeat Pump':[null,'1',null,'1', null,'1',null,'1', null,'1',null,'1', null,'1',null,'1'], 'Running 8ths':['1',null,'1',null, '1',null,'1',null, '1',null,'1',null, '1',null,'1',null], 'Empty':Array(16).fill(null) };
+const MELODY_PATTERNS = { 'Arp Up (8ths)':['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null], 'Arp Down (8ths)':['8',null,'5',null, '3',null,'1',null, '8',null,'5',null, '3',null,'1',null], 'Fast Arp (16ths)':['1','3','5','8', '5','3','1','3', '5','8','1','3', '5','8','5','3'], 'Alberti':['1',null,'5',null, '3',null,'5',null, '1',null,'5',null, '3',null,'5',null], 'Staircase':['1',null,'3',null, '1',null,'5',null, '1',null,'8',null, '1',null,'5',null], 'Pedal Point':['8',null,'3',null, '8',null,'5',null, '8',null,'1',null, '8',null,'5',null], 'Empty':Array(16).fill(null) };
+const SAMPLES_PATTERNS = { 'Whole Note (Drone)':['1',null,null,null, null,null,null,null, null,null,null,null, null,null,null,null], 'Half Notes (1 & 3)':['1',null,null,null, null,null,null,null, '1',null,null,null, null,null,null,null], 'Backbeat Stab':[null,null,null,null, '1',null,null,null, null,null,null,null, '1',null,null,null], 'Dotted Quarter':['1',null,null,null, null,null,'1',null, null,null,null,null, '1',null,null,null], 'Offbeat 8ths':[null,null,'1',null, null,null,'1',null, null,null,'1',null, null,null,'1',null], 'Slow Arp (Halves)':['1',null,null,null, null,null,null,null, '5',null,null,null, null,null,null,null], 'Charleston':['1',null,null,null, null,null,'1',null, null,null,null,null, null,null,null,null], 'Empty':Array(16).fill(null) };
+const RHYTHM_PATTERNS = { 'Whole Notes':[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], 'Quarter Strum':[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], 'Driving 8ths':[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], 'Syncopated':[1,0,0,1, 0,0,1,0, 0,0,1,0, 0,0,0,0], 'Reggae Skank':[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], 'Gallop':[1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], 'Charleston':[1,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0] };
 
 const DEFAULT_PROGRESSIONS = {
     'Pop Hit (I-V-vi-IV)': [0, 4, 5, 3],
@@ -158,20 +37,19 @@ const DEFAULT_PROGRESSIONS = {
     'Circle of 5ths':      [0, 3, 6, 2, 5, 1, 4, 0]
 };
 
-const RHYTHM_PATTERNS = {
-    'Whole Notes':     [1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0],
-    'Quarter Strum':   [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
-    'Driving 8ths':    [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
-    'Syncopated':      [1,0,0,1, 0,0,1,0, 0,0,1,0, 0,0,0,0],
-    'Reggae Skank':    [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0],
-    'Gallop':          [1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1],
-    'Charleston':      [1,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0] 
-};
+// --- UPDATED: Full List of Selectable Chords ---
+const ROMAN_NUMERALS = [
+    // Diatonic (0-6)
+    'I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°',
+    // Secondary Dominants (7-10)
+    'III (V/vi)', 'VI (V/ii)', 'II (V/V)', 'VII (V/iii)',
+    // Borrowed / Mode Mixture (11-15)
+    'bIII', 'iv', 'v', 'bVI', 'bVII',
+    // Neapolitan (16)
+    'bII'
+];
 
-const ROMAN_NUMERALS = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
 const SCALE_OPTIONS = [null, '1', '2', '3', '4', '5', '6', '7', '8'];
-
-// --- SEQUENCER CLASS ---
 
 export class Sequencer {
     constructor(containerId, getScaleDataCallback, onChordChangeCallback, onPresetLoadCallback, onStepCallback, onStopCallback, getLooperDataCallback) {
@@ -193,7 +71,6 @@ export class Sequencer {
         this.timerID = null;
         this.lookahead = 25.0; 
         this.scheduleAheadTime = 0.1; 
-        
         this.progressionCycles = 0; 
 
         // Load Data
@@ -248,6 +125,7 @@ export class Sequencer {
     }
 
     renderUI() {
+        // --- Same Render Logic as before ---
         const createSliderGroup = (idPrefix, label, val) => `
             <div style="display:flex; flex-direction:column; margin-bottom:5px;">
                 <label style="font-size:0.65rem; color:#888;">${label}</label>
@@ -263,7 +141,6 @@ export class Sequencer {
                 </div>
             </div>
         `;
-        
         const createOctaveControl = (track) => `
             <div style="display:flex; flex-direction:column; margin-left:5px; width:50px;">
                 <label style="font-size:0.65rem; color:#888;">Octave</label>
@@ -318,14 +195,7 @@ export class Sequencer {
                         ${createSliderGroup('verb-chords', 'Space', this.settings.reverbs.chords)}
                     </div>
                     <div class="control-group"><label>Sound</label><select id="sel-instrument"></select></div>
-                    <div class="control-group">
-                        ${createHeader('Rhythm', 'rhythm')}
-                        <select id="sel-rhythm"></select>
-                        <div style="display:flex; align-items:center; margin-top:5px; cursor:pointer;" title="Alternating Up/Down strums">
-                            <input type="checkbox" id="cb-alt-strum" style="width:12px; height:12px; accent-color:var(--primary-cyan);" checked>
-                            <label for="cb-alt-strum" style="font-size:0.7rem; color:#888; margin-left:5px; cursor:pointer;">Alt Strum</label>
-                        </div>
-                    </div>
+                    <div class="control-group">${createHeader('Rhythm', 'rhythm')}<select id="sel-rhythm"></select><div style="display:flex; align-items:center; margin-top:5px; cursor:pointer;" title="Alternating Up/Down strums"><input type="checkbox" id="cb-alt-strum" style="width:12px; height:12px; accent-color:var(--primary-cyan);" checked><label for="cb-alt-strum" style="font-size:0.7rem; color:#888; margin-left:5px; cursor:pointer;">Alt Strum</label></div></div>
                     ${createOctaveControl('chords')}
                 </div>
 
@@ -678,7 +548,20 @@ export class Sequencer {
     }
 
     openProgressionModal() { document.getElementById('prog-modal').style.display = 'flex'; document.getElementById('new-prog-name').value = ''; document.getElementById('chord-selectors-container').innerHTML = ''; for(let i=0; i<4; i++) this.addProgStep(); }
-    addProgStep() { const cont = document.getElementById('chord-selectors-container'); const sel = document.createElement('select'); sel.className = 'prog-step-select'; sel.style.width = '50px'; sel.style.margin='2px'; ROMAN_NUMERALS.forEach((r, i) => sel.add(new Option(r, i))); cont.appendChild(sel); }
+    
+    // --- UPDATED: Use extended ROMAN_NUMERALS array ---
+    addProgStep() { 
+        const cont = document.getElementById('chord-selectors-container'); 
+        const sel = document.createElement('select'); 
+        sel.className = 'prog-step-select'; 
+        sel.style.width = '70px'; // Slightly wider for longer names
+        sel.style.margin='2px'; 
+        sel.style.fontSize='0.8rem';
+        
+        ROMAN_NUMERALS.forEach((r, i) => sel.add(new Option(r, i))); 
+        cont.appendChild(sel); 
+    }
+    
     saveCustomProgression() { const name = document.getElementById('new-prog-name').value.trim() || "My Prog"; const sels = document.querySelectorAll('.prog-step-select'); const indices = Array.from(sels).map(s => parseInt(s.value)); this.customData.progressions[name] = indices; this.libraries.progression[name] = indices; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); this.container.querySelector('#sel-progression').value = name; this.state.progressionName = name; document.getElementById('prog-modal').style.display = 'none'; }
     deleteCurrentProgression() { if(confirm(`Delete ${this.state.progressionName}?`)) { delete this.customData.progressions[this.state.progressionName]; delete this.libraries.progression[this.state.progressionName]; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); } }
     
@@ -699,7 +582,6 @@ export class Sequencer {
         const p = this.savedPresets[name]; if(!p) return; 
         this.bpm = p.bpm; this.settings = p.settings; 
         
-        // --- FIXED: Merge defaults to prevent crash from missing keys in old presets ---
         const defaultState = {
             progressionName: 'Pop Hit (I-V-vi-IV)',
             rhythmName: 'Whole Notes',
@@ -709,7 +591,6 @@ export class Sequencer {
             samplesName: 'Whole Note (Drone)'
         };
         this.state = { ...defaultState, ...p.state }; 
-        // -------------------------------------------------------------------------------
 
         this.container.querySelector('#bpm-slider').value = this.bpm; 
         this.container.querySelector('#bpm-val').textContent = this.bpm; 
@@ -826,7 +707,7 @@ export class Sequencer {
         }
 
         const { key, scale } = this.getScaleData();
-        const chords = getDiatonicChords(key, scale);
+        const chords = getAllChords(key, scale); 
         const fullScale = generateScale(key, scale); 
         
         if (!prog || !chords) return;
@@ -860,7 +741,9 @@ export class Sequencer {
             const playScaleNote = (instruction, instrument, octSetting, octDrop, trackType, defaultDur) => {
                 if (!instruction) return;
                 const rootIndex = fullScale.indexOf(chord.root); 
-                if(rootIndex === -1) return;
+                // Diatonic check: if root not in scale, skip melody generation for that note
+                // or fallback to root note (index 0 relative to chord root)
+                if(rootIndex === -1) return; 
 
                 let interval = 0; 
                 let isOctave = false;

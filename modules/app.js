@@ -1,5 +1,5 @@
 // modules/app.js
-import { getNotes, SCALES, TUNINGS, generateScale, getNoteIndex, getDiatonicChords, TheoryEngine } from './theory.js';
+import { getNotes, SCALES, TUNINGS, generateScale, getNoteIndex, getDiatonicChords, getBorrowedChords, getAllChords, TheoryEngine } from './theory.js';
 import { Fretboard } from './fretboard.js';
 import { ChordRenderer } from './chords.js';
 import { Tuner } from './tuner.js';
@@ -14,7 +14,7 @@ import { VocalGenerator } from './vocal.js';
 import { Visualizer } from './visualizer.js';   
 import { LyricPad } from './lyrics.js';         
 import { KeyFinder } from './keyfinder.js';
-import { ProjectManager } from './project.js'; // IMPORT
+import { ProjectManager } from './project.js';
 import { playScaleSequence, playSingleNote, loadSavedSamples, stopAllSounds } from './audio.js';
 import { CircleOfFifths } from './circle.js'; 
 
@@ -25,11 +25,8 @@ const tuningSelect = document.getElementById('tuning-select');
 const bassTuningSelect = document.getElementById('bass-tuning-select'); 
 const capoSelect = document.getElementById('capo-select');
 
-// Mode Selectors
 const guitarModeSelect = document.getElementById('guitar-display-mode');
 const bassModeSelect = document.getElementById('bass-display-mode');
-
-// Buttons & Displays
 const playBtn = document.getElementById('play-btn');
 const noteButtonsDisplay = document.getElementById('note-buttons-display');
 
@@ -38,6 +35,7 @@ const cbKeyFinder = document.getElementById('cb-keyfinder');
 const cbButtons = document.getElementById('cb-buttons');
 const cbCircle = document.getElementById('cb-circle'); 
 const cbChords = document.getElementById('cb-chords');
+const cbExtraChords = document.getElementById('cb-extra-chords'); // NEW
 const cbGuitar = document.getElementById('cb-guitar');
 const cbBass = document.getElementById('cb-bass');
 const cbTuner = document.getElementById('cb-tuner');
@@ -52,7 +50,6 @@ const cbLooper = document.getElementById('cb-looper');
 const cbStudio = document.getElementById('cb-studio');
 const cbDrumSampler = document.getElementById('cb-drum-sampler');
 
-// Layout Controls
 const layoutModeSelect = document.getElementById('sel-layout-mode');
 const layoutColsSelect = document.getElementById('sel-layout-cols');
 const moduleContainer = document.getElementById('module-layout-container');
@@ -63,6 +60,7 @@ const wrapperKeyFinder = document.getElementById('wrapper-keyfinder');
 const wrapperButtons = document.getElementById('wrapper-buttons');
 const wrapperCircle = document.getElementById('wrapper-circle'); 
 const wrapperChords = document.getElementById('wrapper-chords');
+const wrapperExtraChords = document.getElementById('wrapper-extra-chords'); // NEW
 const wrapperGuitar = document.getElementById('wrapper-guitar');
 const wrapperBass = document.getElementById('wrapper-bass');
 const wrapperTuner = document.getElementById('wrapper-tuner');
@@ -82,18 +80,18 @@ const theory = new TheoryEngine();
 const guitar = new Fretboard('fretboard-container');
 const bass = new Fretboard('bass-fretboard-container');
 
+// --- CHANGED: Two Renderers ---
 const chordRenderer = new ChordRenderer('chords-container');
+const extraChordRenderer = new ChordRenderer('extra-chords-container');
+
 const tuner = new Tuner('tuner-container');
 const keyboard = new Keyboard('keyboard-container');
 const sampler = new Sampler('sampler-container');
 const drumSampler = new DrumSampler('drum-sampler-container');
 const looper = new Looper('looper-module'); 
-
-// NEW MODULES
 const visualizer = new Visualizer('visualizer-module');
 const lyricPad = new LyricPad('lyrics-module');
 
-// INIT KEYFINDER
 const keyFinder = new KeyFinder('keyfinder-module', (root, scale) => {
     keySelect.value = root;
     scaleSelect.value = scale;
@@ -102,17 +100,23 @@ const keyFinder = new KeyFinder('keyfinder-module', (root, scale) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
-// 1. Initialize Sequencer
+// Sequencer
 const sequencer = new Sequencer('sequencer-container', 
     () => { return { key: keySelect.value, scale: scaleSelect.value }; },
     (chordIndex) => {
         if (chordIndex === -1) {
             chordRenderer.clearHighlights();
+            extraChordRenderer.clearHighlights();
             updateFretboards([], null); 
             keyboard.clearHighlights();
         } else {
+            // Determine which module to highlight based on index
+            // 0-6 = Diatonic (Renderer 1)
+            // 7+  = Borrowed (Renderer 2)
             chordRenderer.highlightChord(chordIndex);
-            const chordsList = getDiatonicChords(keySelect.value, scaleSelect.value);
+            extraChordRenderer.highlightChord(chordIndex); // Pass same index, renderer checks data-index
+
+            const chordsList = getAllChords(keySelect.value, scaleSelect.value);
             if (chordsList && chordsList[chordIndex]) {
                 const chord = chordsList[chordIndex];
                 updateFretboards(chord.notes, chord.root);
@@ -143,8 +147,6 @@ const sequencer = new Sequencer('sequencer-container',
 const vocalGenerator = new VocalGenerator('vocal-module', sequencer);
 const songBuilder = new SongBuilder('songbuilder-module', sequencer);
 const studio = new Studio('studio-module', sequencer, songBuilder);
-
-// --- PROJECT MANAGER ---
 const projectManager = new ProjectManager(sequencer, songBuilder, looper, studio, sampler);
 
 const circle = new CircleOfFifths('circle-container', (newKey) => {
@@ -159,39 +161,19 @@ const circle = new CircleOfFifths('circle-container', (newKey) => {
     keySelect.dispatchEvent(new Event('change'));
 });
 
-// --- GLOBAL TRANSPORT CONTROLS ---
-document.getElementById('btn-global-seq').addEventListener('click', () => {
-    if(songBuilder && songBuilder.isPlaying) songBuilder.togglePlay();
-    if(sequencer) sequencer.togglePlay();
-});
+// Transport
+document.getElementById('btn-global-seq').addEventListener('click', () => { if(songBuilder && songBuilder.isPlaying) songBuilder.togglePlay(); if(sequencer) sequencer.togglePlay(); });
+document.getElementById('btn-global-song').addEventListener('click', () => { if(sequencer && sequencer.isPlaying) sequencer.togglePlay(); if(songBuilder) songBuilder.togglePlay(); });
+document.getElementById('btn-global-stop').addEventListener('click', () => { if(sequencer && sequencer.isPlaying) sequencer.togglePlay(); if(songBuilder && songBuilder.isPlaying) songBuilder.togglePlay(); if(looper) looper.stopAll(); if(vocalGenerator) vocalGenerator.isMuted = true; stopAllSounds(); });
 
-document.getElementById('btn-global-song').addEventListener('click', () => {
-    if(sequencer && sequencer.isPlaying) sequencer.togglePlay();
-    if(songBuilder) songBuilder.togglePlay();
-});
-
-document.getElementById('btn-global-stop').addEventListener('click', () => {
-    if(sequencer && sequencer.isPlaying) sequencer.togglePlay();
-    if(songBuilder && songBuilder.isPlaying) songBuilder.togglePlay();
-    if(looper) looper.stopAll();
-    if(vocalGenerator) vocalGenerator.isMuted = true; 
-    stopAllSounds();
-});
-
-// --- PROJECT IO ---
+// Project IO
 const btnExport = document.getElementById('btn-project-export');
 const btnImport = document.getElementById('btn-project-import');
 const inputImport = document.getElementById('input-project-import');
-
 if(btnExport) btnExport.addEventListener('click', () => projectManager.exportProject());
-if(btnImport && inputImport) {
-    btnImport.addEventListener('click', () => inputImport.click());
-    inputImport.addEventListener('change', (e) => {
-        if(e.target.files.length > 0) projectManager.importProject(e.target.files[0]);
-    });
-}
+if(btnImport && inputImport) { btnImport.addEventListener('click', () => inputImport.click()); inputImport.addEventListener('change', (e) => { if(e.target.files.length > 0) projectManager.importProject(e.target.files[0]); }); }
 
-// --- STATE ---
+// State
 let currentActiveChordNotes = []; 
 let currentActiveChordRoot = null; 
 let currentActiveChordShape = null; 
@@ -208,15 +190,12 @@ function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
     currentActiveChordNotes = chordNotes; 
     currentActiveChordRoot = chordRoot;
     currentActiveChordShape = chordShape; 
-
     const scaleNotes = getActiveNotes();
     let gTuning = ['E','A','D','G','B','E'];
     if (TUNINGS[tuningSelect.value]) gTuning = TUNINGS[tuningSelect.value].notes;
     let bTuning = ['E','A','D','G'];
     if (TUNINGS[bassTuningSelect.value]) { bTuning = TUNINGS[bassTuningSelect.value].notes; }
-    
     const capo = parseInt(capoSelect.value || 0);
-    
     guitar.render(scaleNotes, keySelect.value, gTuning, capo, currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
     bass.render(scaleNotes, keySelect.value, bTuning, 0, currentActiveChordNotes, currentActiveChordRoot, null); 
 }
@@ -224,27 +203,13 @@ function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
 function addSpanToggle(wrapperId) {
     const wrapper = document.getElementById(wrapperId);
     if(!wrapper) return;
-    
     const header = wrapper.querySelector('h3');
     if(!header) return;
-
     const btn = document.createElement('button');
     btn.textContent = "↔ Span";
     btn.className = "btn-span-toggle";
-    btn.title = "Toggle Full Width in Grid Mode";
-    btn.style.cssText = `
-        float: right; font-size: 0.6rem; background: #333; border: 1px solid #555; 
-        color: #888; padding: 2px 6px; border-radius: 3px; cursor: pointer; margin-left: 10px;
-        text-transform: none; letter-spacing: 0; font-weight: normal;
-    `;
-    
-    btn.onclick = (e) => {
-        e.stopPropagation();
-        const isSpanned = wrapper.classList.toggle('col-span-full');
-        btn.style.color = isSpanned ? '#00e5ff' : '#888';
-        btn.style.borderColor = isSpanned ? '#00e5ff' : '#555';
-    };
-
+    btn.style.cssText = `float: right; font-size: 0.6rem; background: #333; border: 1px solid #555; color: #888; padding: 2px 6px; border-radius: 3px; cursor: pointer; margin-left: 10px; text-transform: none; letter-spacing: 0; font-weight: normal;`;
+    btn.onclick = (e) => { e.stopPropagation(); const isSpanned = wrapper.classList.toggle('col-span-full'); btn.style.color = isSpanned ? '#00e5ff' : '#888'; btn.style.borderColor = isSpanned ? '#00e5ff' : '#555'; };
     header.appendChild(btn);
 }
 
@@ -253,11 +218,7 @@ function init() {
     keySelect.value = 'C'; 
     for (const [key, value] of Object.entries(SCALES)) { const option = document.createElement('option'); option.value = key; option.textContent = value.name; scaleSelect.appendChild(option); }
     scaleSelect.value = 'major';
-    for (const [key, value] of Object.entries(TUNINGS)) {
-        const option = document.createElement('option'); option.value = key; option.textContent = value.name;
-        if (value.notes.length === 6) tuningSelect.appendChild(option);
-        else if (value.notes.length === 4 || value.notes.length === 5) bassTuningSelect.appendChild(option);
-    }
+    for (const [key, value] of Object.entries(TUNINGS)) { const option = document.createElement('option'); option.value = key; option.textContent = value.name; if (value.notes.length === 6) tuningSelect.appendChild(option); else if (value.notes.length === 4 || value.notes.length === 5) bassTuningSelect.appendChild(option); }
     tuningSelect.value = 'standard';
     bassTuningSelect.value = 'bass_standard';
 
@@ -277,16 +238,12 @@ function init() {
         });
     }
 
-    const toggleModule = (cb, wrapper) => {
-        if(cb && wrapper) {
-            cb.addEventListener('change', () => { wrapper.style.display = cb.checked ? 'block' : 'none'; });
-        }
-    };
-
+    const toggleModule = (cb, wrapper) => { if(cb && wrapper) { cb.addEventListener('change', () => { wrapper.style.display = cb.checked ? 'block' : 'none'; }); } };
     toggleModule(cbKeyFinder, wrapperKeyFinder);
     toggleModule(cbButtons, wrapperButtons);
     if(cbCircle) toggleModule(cbCircle, wrapperCircle);
     toggleModule(cbChords, wrapperChords);
+    toggleModule(cbExtraChords, wrapperExtraChords); // NEW
     toggleModule(cbGuitar, wrapperGuitar);
     toggleModule(cbBass, wrapperBass);
     toggleModule(cbKeyboard, wrapperKeyboard);
@@ -297,81 +254,35 @@ function init() {
     if(cbSongBuilder) toggleModule(cbSongBuilder, wrapperSongBuilder);
     if(cbLooper) toggleModule(cbLooper, wrapperLooper);
     if(cbStudio) toggleModule(cbStudio, wrapperStudio);
-    
-    if(cbVisualizer) {
-        cbVisualizer.addEventListener('change', () => {
-            visualizerWrapper.style.display = cbVisualizer.checked ? 'flex' : 'none'; 
-            if(cbVisualizer.checked) visualizer.resume(); else visualizer.stop();
-        });
-    }
-    
-    if(cbDrumSampler) {
-        cbDrumSampler.addEventListener('change', () => {
-            wrapperDrumSampler.style.display = cbDrumSampler.checked ? 'block' : 'none';
-            if(cbDrumSampler.checked) drumSampler.updateStatus();
-        });
-    }
-    
-    cbTuner.addEventListener('change', () => { 
-        if (cbTuner.checked) { wrapperTuner.style.display = 'block'; } else { wrapperTuner.style.display = 'none'; tuner.stop(); } 
-    });
+    if(cbVisualizer) { cbVisualizer.addEventListener('change', () => { visualizerWrapper.style.display = cbVisualizer.checked ? 'flex' : 'none'; if(cbVisualizer.checked) visualizer.resume(); else visualizer.stop(); }); }
+    if(cbDrumSampler) { cbDrumSampler.addEventListener('change', () => { wrapperDrumSampler.style.display = cbDrumSampler.checked ? 'block' : 'none'; if(cbDrumSampler.checked) drumSampler.updateStatus(); }); }
+    cbTuner.addEventListener('change', () => { if (cbTuner.checked) { wrapperTuner.style.display = 'block'; } else { wrapperTuner.style.display = 'none'; tuner.stop(); } });
 
     const updateLayout = () => {
-        const mode = layoutModeSelect.value; 
-        const cols = layoutColsSelect.value; 
-
+        const mode = layoutModeSelect.value; const cols = layoutColsSelect.value; 
         let containerClasses = "w-full gap-6 transition-all duration-300 ";
         let visualizerClasses = "sticky top-4 z-50 bg-gray-900/95 backdrop-blur-md border border-gray-800 p-2 rounded-xl transition-all duration-300 shadow-xl flex gap-4 items-center ";
-
         const spanBtns = document.querySelectorAll('.btn-span-toggle');
-        
-        if (mode === 'single') {
-            containerClasses += "max-w-5xl flex flex-col";
-            visualizerClasses += "w-full max-w-5xl";
-            layoutColsSelect.disabled = true;
-            layoutColsSelect.style.opacity = 0.5;
-            spanBtns.forEach(b => b.style.display = 'none');
-        } else {
-            containerClasses += "max-w-[98%] ";
-            visualizerClasses += "w-full max-w-[98%]";
-            layoutColsSelect.disabled = false;
-            layoutColsSelect.style.opacity = 1;
-            spanBtns.forEach(b => b.style.display = 'inline-block');
-
-            if (mode === 'masonry') {
-                containerClasses += `columns-${cols}`; 
-            } else {
-                containerClasses += `grid grid-cols-${cols} items-start`; 
-            }
-        }
-
-        moduleContainer.className = containerClasses;
-        visualizerWrapper.className = visualizerClasses;
+        if (mode === 'single') { containerClasses += "max-w-5xl flex flex-col"; visualizerClasses += "w-full max-w-5xl"; layoutColsSelect.disabled = true; layoutColsSelect.style.opacity = 0.5; spanBtns.forEach(b => b.style.display = 'none'); } 
+        else { containerClasses += "max-w-[98%] "; visualizerClasses += "w-full max-w-[98%]"; layoutColsSelect.disabled = false; layoutColsSelect.style.opacity = 1; spanBtns.forEach(b => b.style.display = 'inline-block'); if (mode === 'masonry') { containerClasses += `columns-${cols}`; } else { containerClasses += `grid grid-cols-${cols} items-start`; } }
+        moduleContainer.className = containerClasses; visualizerWrapper.className = visualizerClasses;
     };
 
     layoutModeSelect.addEventListener('change', updateLayout);
     layoutColsSelect.addEventListener('change', updateLayout);
-
     loadSavedSamples().then(() => { sampler.updateStatus(); });
 
     addSpanToggle('wrapper-guitar');
     addSpanToggle('wrapper-bass');
     addSpanToggle('wrapper-keyfinder');
     addSpanToggle('wrapper-keyboard'); 
+    addSpanToggle('wrapper-extra-chords'); // NEW
 
     setTimeout(() => {
         const vocalHeader = document.querySelector('.vocal-header');
         if(vocalHeader) {
-            const btn = document.createElement('button');
-            btn.textContent = "↔ Span";
-            btn.className = "btn-span-toggle";
-            btn.style.cssText = "font-size:0.6rem; background:#333; border:1px solid #555; color:#888; padding:2px 6px; border-radius:3px; cursor:pointer; margin-left:10px;";
-            btn.onclick = () => {
-                const wrapper = document.getElementById('wrapper-vocal');
-                const isSpanned = wrapper.classList.toggle('col-span-full');
-                btn.style.color = isSpanned ? '#00e5ff' : '#888';
-                btn.style.borderColor = isSpanned ? '#00e5ff' : '#555';
-            };
+            const btn = document.createElement('button'); btn.textContent = "↔ Span"; btn.className = "btn-span-toggle"; btn.style.cssText = "font-size:0.6rem; background:#333; border:1px solid #555; color:#888; padding:2px 6px; border-radius:3px; cursor:pointer; margin-left:10px;";
+            btn.onclick = () => { const wrapper = document.getElementById('wrapper-vocal'); const isSpanned = wrapper.classList.toggle('col-span-full'); btn.style.color = isSpanned ? '#00e5ff' : '#888'; btn.style.borderColor = isSpanned ? '#00e5ff' : '#555'; };
             vocalHeader.insertBefore(btn, vocalHeader.lastElementChild);
         }
     }, 500);
@@ -383,24 +294,60 @@ function init() {
 function updateDisplay() {
     const activeNotes = getActiveNotes();
     updateFretboards(currentActiveChordNotes, currentActiveChordRoot, currentActiveChordShape);
-    
     if(circle) circle.update(keySelect.value);
     keyboard.render(activeNotes, keySelect.value); 
     renderNoteButtons(activeNotes);
-    const chordsList = getDiatonicChords(keySelect.value, scaleSelect.value);
+    
+    // --- UPDATED: Fetch BOTH sets of chords ---
+    const diatonicChords = getDiatonicChords(keySelect.value, scaleSelect.value);
+    const borrowedChords = getBorrowedChords(keySelect.value, scaleSelect.value);
+    const allChords = getAllChords(keySelect.value, scaleSelect.value); // For index matching
+
     const capoValue = parseInt(capoSelect.value || 0); 
     let currentTuningNotes = ['E','A','D','G','B','E'];
     if(TUNINGS[tuningSelect.value]) currentTuningNotes = TUNINGS[tuningSelect.value].notes;
     
+    // 1. Render Main Chords (Diatonic)
+    // We add an 'index' property to match the global sequencer index (0-6)
+    const diatonicWithIndex = diatonicChords.map((c, i) => ({...c, index: i}));
+    
     chordRenderer.render(
-        chordsList, 
+        diatonicWithIndex, 
         capoValue, 
         currentTuningNotes, 
         (notes, chordName, shape) => { 
             const root = notes[0];
             keyboard.highlightNotes(notes, chordName, root); 
-            const chordIndex = chordsList.findIndex(c => c.name === chordName);
-            if (chordIndex !== -1) chordRenderer.highlightChord(chordIndex);
+            // Find global index
+            const globalIndex = allChords.findIndex(c => c.name === chordName);
+            if (globalIndex !== -1) {
+                chordRenderer.highlightChord(globalIndex);
+                extraChordRenderer.highlightChord(globalIndex);
+            }
+            updateFretboards(notes, root, shape);
+        },
+        keySelect.value 
+    );
+
+    // 2. Render Extra Chords (Borrowed)
+    // We start indexing at 7 (since there are usually 7 diatonic chords)
+    // Note: This offset logic assumes standard 7-note scales.
+    const offset = diatonicChords.length; 
+    const borrowedWithIndex = borrowedChords.map((c, i) => ({...c, index: offset + i}));
+
+    extraChordRenderer.render(
+        borrowedWithIndex, 
+        capoValue, 
+        currentTuningNotes, 
+        (notes, chordName, shape) => { 
+            const root = notes[0];
+            keyboard.highlightNotes(notes, chordName, root); 
+            // Find global index
+            const globalIndex = allChords.findIndex(c => c.name === chordName);
+            if (globalIndex !== -1) {
+                chordRenderer.highlightChord(globalIndex);
+                extraChordRenderer.highlightChord(globalIndex);
+            }
             updateFretboards(notes, root, shape);
         },
         keySelect.value 
@@ -435,6 +382,7 @@ function renderNoteButtons(scaleNotes) {
             keyboard.highlightNotes(scaleNotes, note, note); 
             updateFretboards([note], note);
             chordRenderer.clearHighlights();
+            extraChordRenderer.clearHighlights(); // Clear extras too
             btn.style.transition = "transform 0.1s, border-color 0.1s";
             btn.style.borderColor = "#00e5ff";
             btn.style.transform = "scale(1.05)";
@@ -452,30 +400,16 @@ function initOutputMonitor() {
     setInterval(() => {
         let requireHeadphones = false;
         let requireSpeakers = false;
-
         if (looper && looper.isRecordingOrArmed()) requireHeadphones = true;
         if (vocalGenerator && vocalGenerator.isPracticeMode) requireHeadphones = true;
         if (studio && studio.isRecording) requireHeadphones = true;
-
         if (looper && looper.isLatencyTesting) requireSpeakers = true;
-
         if(elHP) elHP.className = "monitor-item opacity-30 transition-all duration-300";
         if(elSP) elSP.className = "monitor-item opacity-30 transition-all duration-300";
         if(elAny) elAny.className = "monitor-item opacity-30 transition-all duration-300";
-
-        if (requireSpeakers) {
-            elSP.classList.remove('opacity-30');
-            elSP.classList.add('monitor-active-sp'); 
-        } 
-        else if (requireHeadphones) {
-            elHP.classList.remove('opacity-30');
-            elHP.classList.add('monitor-active-hp'); 
-        } 
-        else {
-            elAny.classList.remove('opacity-30');
-            elAny.classList.add('monitor-active-any'); 
-        }
-
+        if (requireSpeakers) { elSP.classList.remove('opacity-30'); elSP.classList.add('monitor-active-sp'); } 
+        else if (requireHeadphones) { elHP.classList.remove('opacity-30'); elHP.classList.add('monitor-active-hp'); } 
+        else { elAny.classList.remove('opacity-30'); elAny.classList.add('monitor-active-any'); }
     }, 100); 
 }
 
