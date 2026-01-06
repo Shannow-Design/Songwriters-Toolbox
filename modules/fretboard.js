@@ -49,9 +49,12 @@ export class Fretboard {
         }
 
         // Strings
+        // FIX: i=0 is Top (High Pitch) -> Thin. i=max is Bottom (Low Pitch) -> Thick.
         for (let i = 0; i < stringCount; i++) {
             const y = 30 + (i * 30);
-            svg += `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#888" stroke-width="${1 + (stringCount-i)*0.3}" />`;
+            // Thickness increases as we go down visually
+            const thickness = 1 + (i * 0.4); 
+            svg += `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#888" stroke-width="${thickness}" />`;
         }
 
         // Fret Dots
@@ -82,9 +85,7 @@ export class Fretboard {
                 
                 let isVisible = false;
                 
-                // --- FIX: Dynamic Root Logic ---
-                // If a chord is playing, the "Root" is the chord root (activeChordRoot).
-                // If just browsing the scale, the "Root" is the Key (key).
+                // --- Dynamic Root Logic ---
                 let isRoot = false;
                 if (activeChordRoot) {
                     isRoot = (noteName === activeChordRoot);
@@ -101,8 +102,6 @@ export class Fretboard {
                         const targetPhysicalFret = shapeFret + capo;
                         if (targetPhysicalFret === f) {
                             isVisible = true;
-                            // Root logic is already handled above, but double check shape context
-                            // (Usually activeChordRoot is correct)
                         }
                     }
                 } 

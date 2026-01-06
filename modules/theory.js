@@ -65,7 +65,12 @@ function getChordType(root, third, fifth) {
 }
 
 export function getDiatonicChords(root, scaleKey) {
-    const notes = generateScale(root, scaleKey);
+    // Parent Scale Mapping for Diatonic Generation
+    let effectiveScaleKey = scaleKey;
+    if (scaleKey === 'pentatonic_major') effectiveScaleKey = 'major';
+    else if (scaleKey === 'pentatonic_minor' || scaleKey === 'blues') effectiveScaleKey = 'natural_minor';
+
+    const notes = generateScale(root, effectiveScaleKey);
     if (notes.length < 7) return []; 
 
     return notes.map((note, i) => {
@@ -95,10 +100,16 @@ export function getDiatonicChords(root, scaleKey) {
     });
 }
 
-// --- EXTENDED: Non-Diatonic / Borrowed Chords ---
 export function getBorrowedChords(root, scaleKey) {
     const rootIdx = getNoteIndex(root);
     const chords = [];
+
+    // --- 1. Determine Tonal Family ---
+    let family = 'minor';
+    const majorFamily = ['major', 'lydian', 'mixolydian', 'pentatonic_major'];
+    if (majorFamily.includes(scaleKey)) {
+        family = 'major';
+    }
 
     const buildChord = (interval, type, roman) => {
         const chordRoot = NOTES[(rootIdx + interval) % 12];
@@ -123,43 +134,29 @@ export function getBorrowedChords(root, scaleKey) {
         };
     };
 
-    if (scaleKey === 'major') {
-        // --- SECONDARY DOMINANTS ---
-        // V/vi (E major in C) -> Pushes to Am
-        chords.push(buildChord(4, 'maj', 'III (V/vi)'));
-        // V/ii (A major in C) -> Pushes to Dm
-        chords.push(buildChord(9, 'maj', 'VI (V/ii)'));
-        // V/V (D major in C) -> Pushes to G
-        chords.push(buildChord(2, 'maj', 'II (V/V)'));
-        // V/iii (B major in C) -> Pushes to Em
-        chords.push(buildChord(11, 'maj', 'VII (V/iii)'));
+    if (family === 'major') {
+        // --- MAJOR FAMILY BORROWED ---
+        chords.push(buildChord(4, 'maj', 'III (V/vi)')); // Secondary Dom
+        chords.push(buildChord(9, 'maj', 'VI (V/ii)')); // Secondary Dom
+        chords.push(buildChord(2, 'maj', 'II (V/V)'));  // Secondary Dom
+        chords.push(buildChord(11, 'maj', 'VII (V/iii)')); // Secondary Dom
 
-        // --- BORROWED FROM MINOR (MODE MIXTURE) ---
-        // bIII (Eb major in C)
-        chords.push(buildChord(3, 'maj', 'bIII')); 
-        // iv (F minor in C)
-        chords.push(buildChord(5, 'min', 'iv'));   
-        // v (G minor in C - Mixolydian feel)
-        chords.push(buildChord(7, 'min', 'v'));
-        // bVI (Ab major in C)
-        chords.push(buildChord(8, 'maj', 'bVI'));  
-        // bVII (Bb major in C)
-        chords.push(buildChord(10, 'maj', 'bVII'));
+        chords.push(buildChord(3, 'maj', 'bIII')); // Mode Mixture
+        chords.push(buildChord(5, 'min', 'iv'));   // Mode Mixture
+        chords.push(buildChord(7, 'min', 'v'));    // Mixolydian feel
+        chords.push(buildChord(8, 'maj', 'bVI'));  // Mode Mixture
+        chords.push(buildChord(10, 'maj', 'bVII'));// Mode Mixture
+        
+        chords.push(buildChord(1, 'maj', 'bII'));  // Neapolitan
 
-        // --- DRAMATIC ---
-        // bII (Neapolitan - Db major in C)
-        chords.push(buildChord(1, 'maj', 'bII'));
-
-    } else if (scaleKey === 'natural_minor') {
-        // --- MINOR KEY VARIATIONS ---
-        // V (Major Dominant - Harmonic Minor feel) - G major in Cm
-        chords.push(buildChord(7, 'maj', 'V'));    
-        // I (Picardy Third - End on major) - C major in Cm
-        chords.push(buildChord(0, 'maj', 'I'));    
-        // IV (Dorian IV) - F major in Cm
-        chords.push(buildChord(5, 'maj', 'IV'));   
-        // bII (Neapolitan) - Db major in Cm
-        chords.push(buildChord(1, 'maj', 'bII'));
+    } else {
+        // --- MINOR FAMILY BORROWED ---
+        chords.push(buildChord(7, 'maj', 'V'));    // Harmonic Minor V
+        chords.push(buildChord(0, 'maj', 'I'));    // Picardy Third
+        chords.push(buildChord(5, 'maj', 'IV'));   // Dorian IV
+        chords.push(buildChord(1, 'maj', 'bII'));  // Neapolitan
+        // Optional: V/V works in minor too (II major)
+        chords.push(buildChord(2, 'maj', 'II (V/V)')); 
     }
 
     return chords;
@@ -168,5 +165,15 @@ export function getBorrowedChords(root, scaleKey) {
 export function getAllChords(root, scaleKey) {
     const diatonic = getDiatonicChords(root, scaleKey);
     const borrowed = getBorrowedChords(root, scaleKey);
-    return [...diatonic, ...borrowed];
+    
+    // Filter duplicates (e.g. if Mixolydian already has bVII, don't add it again)
+    // We check chord NAME uniqueness
+    const seen = new Set(diatonic.map(c => c.name));
+    const uniqueBorrowed = borrowed.filter(c => {
+        if (seen.has(c.name)) return false;
+        seen.add(c.name);
+        return true;
+    });
+
+    return [...diatonic, ...uniqueBorrowed];
 }
