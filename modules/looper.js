@@ -7,28 +7,34 @@ export class Looper {
         this.container = document.getElementById(containerId);
         
         // 8 Banks
-        this.banks = Array(8).fill(0).map((_, i) => ({ 
-            id: i,
-            buffer: null, 
-            name: `Loop ${i+1}`,
-            state: 'empty', 
-            isMuted: false, 
-            volume: 1.0,
-            recorder: null,
-            startTime: 0,
-            activeSource: null,
-            gainNode: ctx.createGain() 
-        }));
-        
-        this.banks.forEach(b => {
-            b.gainNode.gain.value = 1.0;
-            b.gainNode.connect(getTrackInput('looper'));
+        this.banks = Array(8).fill(0).map((_, i) => {
+            const gainNode = ctx.createGain();
+            const pannerNode = ctx.createStereoPanner();
+            
+            // Internal Chain: Bank Gain -> Bank Panner -> Looper Track Input
+            gainNode.gain.value = 1.0;
+            pannerNode.pan.value = 0;
+            gainNode.connect(pannerNode);
+            pannerNode.connect(getTrackInput('looper'));
+
+            return { 
+                id: i,
+                buffer: null, 
+                name: `Loop ${i+1}`,
+                state: 'empty', 
+                isMuted: false, 
+                volume: 1.0,
+                pan: 0.0, // NEW: Pan state
+                recorder: null,
+                startTime: 0,
+                activeSource: null,
+                gainNode: gainNode,
+                pannerNode: pannerNode // NEW: Panner Node
+            };
         });
 
         this.bpm = 100; 
         this.latencyMs = 50; 
-        
-        // State flag for visualizer integration
         this.isLatencyTesting = false;
         
         this.render();
@@ -41,7 +47,6 @@ export class Looper {
         this.bpm = bpm;
     }
 
-    // Helper for Global Output Monitor
     isRecordingOrArmed() {
         return this.banks.some(b => b.state === 'recording' || b.state === 'armed');
     }
@@ -49,7 +54,8 @@ export class Looper {
     getSettings() {
         const settings = this.banks.map(b => ({
             muted: b.isMuted,
-            volume: b.volume
+            volume: b.volume,
+            pan: b.pan // Save Pan
         }));
         return {
             banks: settings,
@@ -92,8 +98,14 @@ export class Looper {
                     const newVol = (typeof s.volume === 'number') ? s.volume : 1.0;
                     this.updateVolume(i, newVol);
                     
-                    const slider = this.container.querySelector(`.loop-vol-slider[data-index="${i}"]`);
-                    if(slider) slider.value = newVol;
+                    const volSlider = this.container.querySelector(`.loop-vol-slider[data-index="${i}"]`);
+                    if(volSlider) volSlider.value = newVol;
+
+                    // Restore Pan
+                    const newPan = (typeof s.pan === 'number') ? s.pan : 0.0;
+                    this.updatePan(i, newPan);
+                    const panSlider = this.container.querySelector(`.loop-pan-slider[data-index="${i}"]`);
+                    if(panSlider) panSlider.value = newPan;
                     
                     this.updateBankUI(i);
                 }
@@ -137,6 +149,7 @@ export class Looper {
                     try { bank.activeSource.stop(time); } catch(e){}
                 }
                 const playTime = time || ctx.currentTime;
+                // Pass the gainNode as destination (it connects to Panner -> Track)
                 const result = playSample(-1, playTime, null, 'looper', bank.buffer, bank.gainNode);
                 if (result) bank.activeSource = result.osc; 
             }
@@ -264,6 +277,15 @@ export class Looper {
         bank.volume = val;
         if (bank.gainNode && isFinite(val)) {
             bank.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.05);
+        }
+    }
+
+    // NEW: Pan Update
+    updatePan(index, val) {
+        const bank = this.banks[index];
+        bank.pan = val;
+        if (bank.pannerNode && isFinite(val)) {
+            bank.pannerNode.pan.setTargetAtTime(val, ctx.currentTime, 0.05);
         }
     }
 
@@ -399,8 +421,15 @@ export class Looper {
                             </button>
                         </div>
 
-                        <div style="margin: 5px 0;">
-                            <input type="range" class="loop-vol-slider" data-index="${i}" min="0" max="1" step="0.05" value="${b.volume}" title="Volume">
+                        <div style="display:flex; flex-direction:column; gap:2px; margin-top:5px; background:#181818; padding:4px; border-radius:4px;">
+                            <div style="display:flex; align-items:center; justify-content:space-between;">
+                                <span style="font-size:0.55rem; color:#666; font-weight:bold; width:20px;">VOL</span>
+                                <input type="range" class="loop-vol-slider" data-index="${i}" min="0" max="1" step="0.05" value="${b.volume}" style="width:75%; height:3px; accent-color:var(--primary-cyan);">
+                            </div>
+                            <div style="display:flex; align-items:center; justify-content:space-between;">
+                                <span style="font-size:0.55rem; color:#666; font-weight:bold; width:20px;">PAN</span>
+                                <input type="range" class="loop-pan-slider" data-index="${i}" min="-1" max="1" step="0.1" value="${b.pan}" style="width:75%; height:3px; accent-color:var(--primary-cyan);">
+                            </div>
                         </div>
 
                         <div class="loop-file-controls">
@@ -441,8 +470,7 @@ export class Looper {
             .btn-loop-arm:hover, .btn-loop-play:hover { background: #444; color: #fff; }
             .btn-loop-arm.armed { background: #ff0055; color: white; box-shadow: 0 0 8px rgba(255, 0, 85, 0.4); }
             .btn-loop-play.playing { background: var(--primary-cyan); color: #000; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); }
-            .loop-vol-slider { width: 80%; height: 3px; accent-color: var(--primary-cyan); cursor: pointer; }
-            .loop-file-controls { display: flex; justify-content: center; gap: 15px; border-top: 1px solid #333; padding-top: 8px; }
+            .loop-file-controls { display: flex; justify-content: center; gap: 15px; border-top: 1px solid #333; padding-top: 8px; margin-top:5px; }
             .hidden-loop-input { display: none; }
             .btn-loop-icon { background: transparent; border: none; cursor: pointer; font-size: 1.1rem; opacity: 0.3; transition: opacity 0.2s; }
             .btn-loop-icon:hover { opacity: 1; }
@@ -467,6 +495,13 @@ export class Looper {
         this.container.querySelectorAll('.loop-vol-slider').forEach(inp => {
             inp.addEventListener('input', (e) => {
                 this.updateVolume(parseInt(e.target.dataset.index), parseFloat(e.target.value));
+            });
+        });
+
+        // NEW: Pan Slider Event
+        this.container.querySelectorAll('.loop-pan-slider').forEach(inp => {
+            inp.addEventListener('input', (e) => {
+                this.updatePan(parseInt(e.target.dataset.index), parseFloat(e.target.value));
             });
         });
 

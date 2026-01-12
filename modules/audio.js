@@ -23,7 +23,9 @@ masterAnalyser.smoothingTimeConstant = 0.85;
 
 const DRUM_MAP = { 'kick': 0, 'snare': 1, 'hihat': 2, 'tom': 3, 'crash': 4 };
 
-const recordingDest = ctx.createMediaStreamDestination();
+// --- ROUTING BUSSES ---
+const recordingDest = ctx.createMediaStreamDestination(); // For Bouncing (Internal Mix)
+const micRecordingDest = ctx.createMediaStreamDestination(); // For Overdubbing (Mic Only)
 
 const masterCompressor = ctx.createDynamicsCompressor();
 masterCompressor.threshold.setValueAtTime(-8, ctx.currentTime);
@@ -58,15 +60,14 @@ reverbGain.connect(masterGain);
 
 masterGain.connect(masterAnalyser);
 masterAnalyser.connect(ctx.destination);
-masterGain.connect(recordingDest); 
+masterGain.connect(recordingDest); // Internal Music goes to 'recordingDest'
 
-// --- BASE64 AUDIO HELPERS (NEW) ---
-
+// --- BASE64 AUDIO HELPERS ---
 export async function audioBufferToBase64(buffer) {
     const wavBlob = bufferToWav(buffer);
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result); // Returns data:audio/wav;base64,...
+        reader.onloadend = () => resolve(reader.result); 
         reader.onerror = reject;
         reader.readAsDataURL(wavBlob);
     });
@@ -84,7 +85,6 @@ export async function base64ToAudioBuffer(base64String) {
 }
 
 // --- PITCH BEND & MODULATION ---
-
 export function setGlobalPitchBend(value) {
     globalPitchBend = value;
     const now = ctx.currentTime;
@@ -162,26 +162,48 @@ export const Microphone = {
     connectToStudio() {
         if (!this.gainNode) return;
         this.disconnectFromStudio();
-        if (this.useFx && this.fxChain) { this.gainNode.connect(this.fxChain.input); this.studioConnection = this.fxChain.output.connect(recordingDest); } 
-        else { this.studioConnection = this.gainNode.connect(recordingDest); }
+        // CONNECT TO MIC DESTINATION ONLY (NOT MASTER MIX)
+        if (this.useFx && this.fxChain) { 
+            this.gainNode.connect(this.fxChain.input); 
+            this.studioConnection = this.fxChain.output.connect(micRecordingDest); 
+        } else { 
+            this.studioConnection = this.gainNode.connect(micRecordingDest); 
+        }
     },
     disconnectFromStudio() {
         if (this.gainNode) {
-            try { this.gainNode.disconnect(recordingDest); } catch(e){}
-            if (this.fxChain) { try { this.gainNode.disconnect(this.fxChain.input); } catch(e){} try { this.fxChain.output.disconnect(recordingDest); } catch(e){} }
+            try { this.gainNode.disconnect(micRecordingDest); } catch(e){}
+            if (this.fxChain) { 
+                try { this.gainNode.disconnect(this.fxChain.input); } catch(e){} 
+                try { this.fxChain.output.disconnect(micRecordingDest); } catch(e){} 
+            }
             this.studioConnection = null;
         }
     }
 };
 
-export function startStudioRecording() {
-    Microphone.connectToStudio();
+export function startStudioRecording(sourceType = 'mix') {
+    // Select the correct stream based on mode
+    let targetStream;
+    
+    if (sourceType === 'mic') {
+        Microphone.connectToStudio();
+        targetStream = micRecordingDest.stream;
+    } else {
+        // Bounce mode (mix)
+        targetStream = recordingDest.stream;
+    }
+
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
-    const recorder = new MediaRecorder(recordingDest.stream, { mimeType, audioBitsPerSecond: 256000 });
+    const recorder = new MediaRecorder(targetStream, { mimeType, audioBitsPerSecond: 256000 });
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     const stopPromise = new Promise(resolve => {
-        recorder.onstop = () => { Microphone.disconnectFromStudio(); const blob = new Blob(chunks, { type: 'audio/webm' }); resolve(blob); };
+        recorder.onstop = () => { 
+            if(sourceType === 'mic') Microphone.disconnectFromStudio(); 
+            const blob = new Blob(chunks, { type: 'audio/webm' }); 
+            resolve(blob); 
+        };
     });
     recorder.start();
     return { stop: () => { if (recorder.state !== 'inactive') recorder.stop(); return stopPromise; } };
@@ -190,14 +212,29 @@ export function startStudioRecording() {
 // --- TRACK MIXER ---
 const tracks = ['chords', 'bass', 'lead', 'drums', 'samples', 'looper', 'vocal'];
 const mixer = {};
+
 tracks.forEach(name => {
     const input = ctx.createGain();
     const filter = ctx.createBiquadFilter();
+    const panner = ctx.createStereoPanner(); 
     const volume = ctx.createGain();
     const reverbSend = ctx.createGain();
-    input.gain.value = 1.0; filter.frequency.value = 20000; volume.gain.value = 0.8; reverbSend.gain.value = 0.1;
-    input.connect(filter); filter.connect(volume); volume.connect(masterCompressor); input.connect(reverbSend); reverbSend.connect(reverbNode);
-    mixer[name] = { input, filter, volume, reverbSend };
+    
+    input.gain.value = 1.0; 
+    filter.frequency.value = 20000; 
+    panner.pan.value = 0; 
+    volume.gain.value = 0.8; 
+    reverbSend.gain.value = 0.1;
+
+    input.connect(filter); 
+    filter.connect(panner); 
+    panner.connect(volume); 
+    volume.connect(masterCompressor); 
+    
+    input.connect(reverbSend); 
+    reverbSend.connect(reverbNode);
+    
+    mixer[name] = { input, filter, panner, volume, reverbSend };
 });
 
 export function setTrackVolume(t, v) { if(mixer[t] && isFinite(v)) mixer[t].volume.gain.setTargetAtTime(v, ctx.currentTime, 0.02); }
@@ -207,6 +244,7 @@ export function setTrackFilter(t, v) {
         mixer[t].filter.frequency.setTargetAtTime(freq, ctx.currentTime, 0.05);
     }
 }
+export function setTrackPan(t, v) { if(mixer[t] && isFinite(v)) mixer[t].panner.pan.setTargetAtTime(v, ctx.currentTime, 0.05); }
 export function setTrackReverb(t, v) { if(mixer[t] && isFinite(v)) mixer[t].reverbSend.gain.setTargetAtTime(v * 0.8, ctx.currentTime, 0.02); }
 export function getTrackInput(name) { return mixer[name] ? mixer[name].input : masterCompressor; }
 
@@ -420,7 +458,6 @@ export function startNote(freq, midiNote, instName = 'Lead Synth', start = null,
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         
-        // --- NEW: LFO & PITCH BEND ---
         const lfo = ctx.createOscillator();
         const lfoGain = ctx.createGain();
         lfo.frequency.value = 5; 
@@ -471,8 +508,6 @@ export function stopNote(midiNote) {
             voice.gain.gain.setValueAtTime(voice.gain.gain.value, now); 
             voice.gain.gain.linearRampToValueAtTime(0, now + 0.1); 
             voice.osc.stop(now + 0.1); 
-            
-            // Remove from active pitch bend list
             const idx = activeSynthNodes.indexOf(voice);
             if(idx > -1) activeSynthNodes.splice(idx, 1);
         } 
@@ -483,8 +518,6 @@ export function stopNote(midiNote) {
                 voice.gain.gain.setValueAtTime(voice.gain.gain.value, now);
                 voice.gain.gain.linearRampToValueAtTime(0, now + 0.3); 
                 voice.osc.stop(now + 0.35);
-                
-                // Remove from active list
                 const idx = activeSynthNodes.indexOf(voice);
                 if(idx > -1) activeSynthNodes.splice(idx, 1);
             } catch(e){} 
@@ -557,7 +590,6 @@ export function stopAllSounds() {
     masterGain.gain.cancelScheduledValues(ctx.currentTime);
     masterGain.gain.setValueAtTime(0, ctx.currentTime);
     setTimeout(() => masterGain.gain.linearRampToValueAtTime(0.5, ctx.currentTime+0.1), 100);
-    // NEW: Stop synth nodes too
     activeSynthNodes.forEach(n => { try { n.source.stop(); } catch(e){} });
     activeSynthNodes = [];
 }

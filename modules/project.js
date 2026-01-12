@@ -1,5 +1,5 @@
 // modules/project.js
-import { audioBufferToBase64, base64ToAudioBuffer, SAMPLE_BANKS, DRUM_SAMPLES, DRUM_VOLUMES, setDrumVolume, setTrackVolume, setTrackFilter, setTrackReverb, loadSavedSamples } from './audio.js';
+import { audioBufferToBase64, base64ToAudioBuffer, SAMPLE_BANKS, DRUM_SAMPLES, DRUM_VOLUMES, setDrumVolume, setTrackVolume, setTrackFilter, setTrackReverb, setTrackPan, loadSavedSamples } from './audio.js'; // Added setTrackPan
 import { SampleStorage } from './storage.js';
 
 export class ProjectManager {
@@ -33,7 +33,7 @@ export class ProjectManager {
                 loops: [],
                 samples: [],
                 drums: [],
-                drumVolumes: DRUM_VOLUMES, // Export Drum Levels
+                drumVolumes: DRUM_VOLUMES, 
                 studioTracks: []
             }
         };
@@ -123,7 +123,7 @@ export class ProjectManager {
                 this.sequencer.populateDropdowns();
                 this.sequencer.refreshPresetList();
 
-                // --- NEW: Restore Mixer UI & Audio Engine ---
+                // --- NEW: Restore Mixer UI & Audio Engine (Including Pan) ---
                 const s = this.sequencer.settings;
                 ['chords', 'bass', 'lead', 'samples', 'drums'].forEach(t => {
                     // Volume
@@ -137,6 +137,12 @@ export class ProjectManager {
                         setTrackFilter(t, s.filters[t]);
                         const el = document.getElementById(`filt-${t}`);
                         if (el) el.value = s.filters[t];
+                    }
+                    // Pan (NEW)
+                    if (s.pans && s.pans[t] !== undefined) {
+                        setTrackPan(t, s.pans[t]);
+                        const el = document.getElementById(`pan-${t}`);
+                        if (el) el.value = s.pans[t];
                     }
                     // Reverb
                     if (s.reverbs && s.reverbs[t] !== undefined && t !== 'drums') {

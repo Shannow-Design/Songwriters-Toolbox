@@ -1,5 +1,5 @@
 // modules/sequencer.js
-import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb } from './audio.js';
+import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb, setTrackPan } from './audio.js';
 import { getAllChords, generateScale } from './theory.js'; 
 
 const DRUM_PATTERNS = {
@@ -37,15 +37,10 @@ const DEFAULT_PROGRESSIONS = {
     'Circle of 5ths':      [0, 3, 6, 2, 5, 1, 4, 0]
 };
 
-// --- UPDATED: Full List of Selectable Chords ---
 const ROMAN_NUMERALS = [
-    // Diatonic (0-6)
     'I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°',
-    // Secondary Dominants (7-10)
     'III (V/vi)', 'VI (V/ii)', 'II (V/V)', 'VII (V/iii)',
-    // Borrowed / Mode Mixture (11-15)
     'bIII', 'iv', 'v', 'bVI', 'bVII',
-    // Neapolitan (16)
     'bII'
 ];
 
@@ -114,6 +109,7 @@ export class Sequencer {
             volumes: { chords:0.8, bass:0.8, lead:0.8, samples:0.8, drums:0.8 },
             filters: { chords:1.0, bass:1.0, lead:1.0, samples:1.0, drums:1.0 },
             reverbs: { chords:0.1, bass:0.1, lead:0.1, samples:0.1 },
+            pans: { chords:0, bass:0, lead:0, samples:0, drums:0 }, // NEW: Pans
             octaves: { chords: 0, bass: 0, lead: 0, samples: 0 },
             drops: { chords: false, bass: false, lead: false, samples: false },
             upStrums: true,
@@ -125,11 +121,10 @@ export class Sequencer {
     }
 
     renderUI() {
-        // --- Same Render Logic as before ---
-        const createSliderGroup = (idPrefix, label, val) => `
+        const createSliderGroup = (idPrefix, label, val, min=0, max=1, step=0.1) => `
             <div style="display:flex; flex-direction:column; margin-bottom:5px;">
                 <label style="font-size:0.65rem; color:#888;">${label}</label>
-                <input type="range" class="vol-slider" id="${idPrefix}" min="0" max="1" step="0.1" value="${val}" style="width:100%; accent-color:var(--primary-cyan);">
+                <input type="range" class="vol-slider" id="${idPrefix}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:100%; accent-color:var(--primary-cyan);">
             </div>
         `;
         const createHeader = (title, type) => `
@@ -191,6 +186,7 @@ export class Sequencer {
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">CHORDS</strong>
                         ${createSliderGroup('vol-chords', 'Vol', this.settings.volumes.chords)}
+                        ${createSliderGroup('pan-chords', 'Pan', this.settings.pans.chords, -1, 1, 0.1)}
                         ${createSliderGroup('filt-chords', 'Bright', this.settings.filters.chords)}
                         ${createSliderGroup('verb-chords', 'Space', this.settings.reverbs.chords)}
                     </div>
@@ -203,6 +199,7 @@ export class Sequencer {
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">BASS</strong>
                         ${createSliderGroup('vol-bass', 'Vol', this.settings.volumes.bass)}
+                        ${createSliderGroup('pan-bass', 'Pan', this.settings.pans.bass, -1, 1, 0.1)}
                         ${createSliderGroup('filt-bass', 'Bright', this.settings.filters.bass)}
                         ${createSliderGroup('verb-bass', 'Space', this.settings.reverbs.bass)}
                     </div>
@@ -215,6 +212,7 @@ export class Sequencer {
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">LEAD</strong>
                         ${createSliderGroup('vol-lead', 'Vol', this.settings.volumes.lead)}
+                        ${createSliderGroup('pan-lead', 'Pan', this.settings.pans.lead, -1, 1, 0.1)}
                         ${createSliderGroup('filt-lead', 'Bright', this.settings.filters.lead)}
                         ${createSliderGroup('verb-lead', 'Space', this.settings.reverbs.lead)}
                     </div>
@@ -227,6 +225,7 @@ export class Sequencer {
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">SAMPLES</strong>
                         ${createSliderGroup('vol-samples', 'Vol', this.settings.volumes.samples)}
+                        ${createSliderGroup('pan-samples', 'Pan', this.settings.pans.samples, -1, 1, 0.1)}
                         ${createSliderGroup('filt-samples', 'Bright', this.settings.filters.samples)}
                         ${createSliderGroup('verb-samples', 'Space', this.settings.reverbs.samples)}
                     </div>
@@ -239,6 +238,7 @@ export class Sequencer {
                     <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
                         <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">DRUMS</strong>
                         ${createSliderGroup('vol-drums', 'Vol', this.settings.volumes.drums)}
+                        ${createSliderGroup('pan-drums', 'Pan', this.settings.pans.drums, -1, 1, 0.1)}
                         ${createSliderGroup('filt-drums', 'Bright', this.settings.filters.drums)}
                         </div>
                     <div class="control-group" style="flex:1;">
@@ -311,18 +311,23 @@ export class Sequencer {
         bindSelect('#sel-drums', 'drumName', 'drums');
         bindSelect('#sel-progression', 'progressionName', 'progression');
 
+        // UPDATED: Mixer Binding to include PANS
         const bindMixer = (id, type, track) => {
-            this.container.querySelector(id).addEventListener('input', (e) => {
+            const el = this.container.querySelector(id);
+            if(!el) return;
+            el.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 this.settings[type][track] = val;
                 if(type === 'volumes') setTrackVolume(track, val);
                 if(type === 'filters') setTrackFilter(track, val);
                 if(type === 'reverbs') setTrackReverb(track, val);
+                if(type === 'pans') setTrackPan(track, val);
             });
         };
         ['chords','bass','lead','samples','drums'].forEach(t => {
             bindMixer(`#vol-${t}`, 'volumes', t);
             bindMixer(`#filt-${t}`, 'filters', t);
+            bindMixer(`#pan-${t}`, 'pans', t); // Bind Pan
             if(t!=='drums') bindMixer(`#verb-${t}`, 'reverbs', t);
         });
 
@@ -544,17 +549,21 @@ export class Sequencer {
         else if(type==='bass') { this.state.bassName = name; this.container.querySelector('#sel-bass-pattern').value = name; } 
         else if(type==='lead') { this.state.leadName = name; this.container.querySelector('#sel-lead-pattern').value = name; } 
         else if(type==='samples') { this.state.samplesName = name; this.container.querySelector('#sel-samples-pattern').value = name; } 
+        
+        if (this.isPreviewing) {
+            this.togglePatternPreview();
+        }
+
         modal.style.display = 'none'; 
     }
 
     openProgressionModal() { document.getElementById('prog-modal').style.display = 'flex'; document.getElementById('new-prog-name').value = ''; document.getElementById('chord-selectors-container').innerHTML = ''; for(let i=0; i<4; i++) this.addProgStep(); }
     
-    // --- UPDATED: Use extended ROMAN_NUMERALS array ---
     addProgStep() { 
         const cont = document.getElementById('chord-selectors-container'); 
         const sel = document.createElement('select'); 
         sel.className = 'prog-step-select'; 
-        sel.style.width = '70px'; // Slightly wider for longer names
+        sel.style.width = '70px'; 
         sel.style.margin='2px'; 
         sel.style.fontSize='0.8rem';
         
@@ -582,6 +591,8 @@ export class Sequencer {
         const p = this.savedPresets[name]; if(!p) return; 
         this.bpm = p.bpm; this.settings = p.settings; 
         
+        if (!this.settings.pans) this.settings.pans = { chords:0, bass:0, lead:0, samples:0, drums:0 };
+
         const defaultState = {
             progressionName: 'Pop Hit (I-V-vi-IV)',
             rhythmName: 'Whole Notes',
@@ -606,7 +617,18 @@ export class Sequencer {
             });
         }
         const elAlt = this.container.querySelector('#cb-alt-strum'); if(elAlt) elAlt.checked = (this.settings.upStrums !== false);
-        const applyMix = (t) => { setVal(`#vol-${t}`, this.settings.volumes[t]); setVal(`#filt-${t}`, this.settings.filters[t]); if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); if(isFinite(this.settings.volumes[t])) setTrackVolume(t, this.settings.volumes[t]); if(isFinite(this.settings.filters[t])) setTrackFilter(t, this.settings.filters[t]); if(t!=='drums' && isFinite(this.settings.reverbs[t])) setTrackReverb(t, this.settings.reverbs[t]); }; 
+        
+        const applyMix = (t) => { 
+            setVal(`#vol-${t}`, this.settings.volumes[t]); 
+            setVal(`#filt-${t}`, this.settings.filters[t]); 
+            setVal(`#pan-${t}`, this.settings.pans[t]); 
+            if(t!=='drums') setVal(`#verb-${t}`, this.settings.reverbs[t]); 
+            
+            if(isFinite(this.settings.volumes[t])) setTrackVolume(t, this.settings.volumes[t]); 
+            if(isFinite(this.settings.filters[t])) setTrackFilter(t, this.settings.filters[t]); 
+            if(isFinite(this.settings.pans[t])) setTrackPan(t, this.settings.pans[t]); 
+            if(t!=='drums' && isFinite(this.settings.reverbs[t])) setTrackReverb(t, this.settings.reverbs[t]); 
+        }; 
         ['chords','bass','lead','samples','drums'].forEach(applyMix); 
         this.populateDropdowns(); 
         if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale, looper: p.looper}); 

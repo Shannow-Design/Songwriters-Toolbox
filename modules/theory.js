@@ -1,6 +1,8 @@
 // modules/theory.js
 
-const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+// Canonical Chromatic Index: 0=C, 1=C#/Db, ...
+const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTES_FLAT  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
 export const SCALES = {
     major: { name: 'Major', intervals: [0, 2, 4, 5, 7, 9, 11] },
@@ -30,13 +32,63 @@ export class TheoryEngine {
     constructor() {}
 }
 
-export function getNotes() { return NOTES; }
+// Default to Sharps for generic lists (like dropdowns)
+export function getNotes() { return NOTES_SHARP; }
 
+// Robust Index Finder (Handles both C# and Db)
 export function getNoteIndex(note) {
-    const enharmonics = { 'Db':'C#', 'Eb':'D#', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#' };
-    let n = note;
-    if (enharmonics[n]) n = enharmonics[n];
-    return NOTES.indexOf(n);
+    const enharmonics = { 
+        'Db':'C#', 'Eb':'D#', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#',
+        'C#':'Db', 'D#':'Eb', 'F#':'Gb', 'G#':'Ab', 'A#':'Bb' 
+    };
+    
+    // Try Sharp Array First
+    let idx = NOTES_SHARP.indexOf(note);
+    if (idx !== -1) return idx;
+    
+    // Try Flat Array
+    idx = NOTES_FLAT.indexOf(note);
+    if (idx !== -1) return idx;
+
+    // Try Enharmonic Map
+    if (enharmonics[note]) {
+        return getNoteIndex(enharmonics[note]);
+    }
+    return -1;
+}
+
+// --- INTELLIGENT KEY SIGNATURE LOGIC ---
+function shouldUseFlats(root, scaleKey) {
+    // 1. Always use Flats for these Roots (regardless of scale)
+    // F Major (1b), Bb (2b), Eb (3b), Ab (4b), Db (5b), Gb (6b)
+    // Note: We check against sharp aliases too in case they come from the UI (e.g., A#)
+    const alwaysFlatRoots = ['F', 'Bb', 'A#', 'Eb', 'D#', 'Ab', 'G#', 'Db', 'C#', 'Gb', 'F#'];
+    if (alwaysFlatRoots.includes(root)) {
+        // Exception: F# usually implies Sharps (6#) vs Gb (6b). 
+        // But for code simplicity, users often prefer Gb over F# in tools.
+        // Let's stick to standard theory:
+        if (root === 'F#') return false; // F# Major uses Sharps
+        if (root === 'C#') return false; // C# Major uses Sharps (7#), but Db is usually preferred. Let's toggle:
+        return true; 
+    }
+
+    // 2. Use Flats for Minor-ish scales on natural roots C, G, D
+    // C Minor (3b), G Minor (2b), D Minor (1b)
+    const minorModes = [
+        'natural_minor', 'harmonic_minor', 'melodic_minor', 
+        'dorian', 'phrygian', 'locrian', 
+        'pentatonic_minor', 'blues'
+    ];
+    
+    if (minorModes.includes(scaleKey)) {
+        if (['C', 'G', 'D'].includes(root)) return true;
+    }
+    
+    // Mixolydian also adds a flat (b7). 
+    // F Mixolydian (Bb, Eb, Ab, Db + Eb??). 
+    // F Mixo is relative to Bb Major. Uses Flats. Covered by rule #1 (F root).
+
+    return false;
 }
 
 export function generateScale(root, scaleKey) {
@@ -44,8 +96,11 @@ export function generateScale(root, scaleKey) {
     const scale = SCALES[scaleKey];
     if (!scale) return [];
     
+    const useFlats = shouldUseFlats(root, scaleKey);
+    const sourceNotes = useFlats ? NOTES_FLAT : NOTES_SHARP;
+
     return scale.intervals.map(interval => {
-        return NOTES[(rootIdx + interval) % 12];
+        return sourceNotes[(rootIdx + interval) % 12];
     });
 }
 
@@ -65,12 +120,14 @@ function getChordType(root, third, fifth) {
 }
 
 export function getDiatonicChords(root, scaleKey) {
-    // Parent Scale Mapping for Diatonic Generation
+    // Map subset scales to parent 7-note scales for chord generation
     let effectiveScaleKey = scaleKey;
     if (scaleKey === 'pentatonic_major') effectiveScaleKey = 'major';
     else if (scaleKey === 'pentatonic_minor' || scaleKey === 'blues') effectiveScaleKey = 'natural_minor';
 
-    const notes = generateScale(root, effectiveScaleKey);
+    // generateScale now handles Flat/Sharp logic automatically!
+    const notes = generateScale(root, effectiveScaleKey); 
+    
     if (notes.length < 7) return []; 
 
     return notes.map((note, i) => {
@@ -111,14 +168,26 @@ export function getBorrowedChords(root, scaleKey) {
         family = 'major';
     }
 
-    const buildChord = (interval, type, roman) => {
-        const chordRoot = NOTES[(rootIdx + interval) % 12];
+    // Determine scale preference, but allow overriding for "Flat" degrees
+    const scaleUsesFlats = shouldUseFlats(root, scaleKey);
+
+    const buildChord = (interval, type, roman, forceFlatRoot = false) => {
+        const absIndex = (rootIdx + interval) % 12;
+        
+        // Use Flat spelling if forced (like bIII) OR if scale uses flats
+        // Otherwise use Sharp spelling
+        const useFlatForChord = forceFlatRoot || scaleUsesFlats;
+        const chordRoot = useFlatForChord ? NOTES_FLAT[absIndex] : NOTES_SHARP[absIndex];
+
         let thirdInterval = (type === 'maj') ? 4 : 3;
         let fifthInterval = 7;
         if (type === 'dim') { fifthInterval = 6; }
         
-        const third = NOTES[(getNoteIndex(chordRoot) + thirdInterval) % 12];
-        const fifth = NOTES[(getNoteIndex(chordRoot) + fifthInterval) % 12];
+        // Notes inside the chord should generally match the chord root's preference
+        // e.g. Eb Major -> Eb, G, Bb (Flat array)
+        const innerSource = useFlatForChord ? NOTES_FLAT : NOTES_SHARP;
+        const third = innerSource[(getNoteIndex(chordRoot) + thirdInterval) % 12];
+        const fifth = innerSource[(getNoteIndex(chordRoot) + fifthInterval) % 12];
         
         let suffix = '';
         if (type === 'min') suffix = 'm';
@@ -136,26 +205,28 @@ export function getBorrowedChords(root, scaleKey) {
 
     if (family === 'major') {
         // --- MAJOR FAMILY BORROWED ---
-        chords.push(buildChord(4, 'maj', 'III (V/vi)')); // Secondary Dom
-        chords.push(buildChord(9, 'maj', 'VI (V/ii)')); // Secondary Dom
-        chords.push(buildChord(2, 'maj', 'II (V/V)'));  // Secondary Dom
-        chords.push(buildChord(11, 'maj', 'VII (V/iii)')); // Secondary Dom
-
-        chords.push(buildChord(3, 'maj', 'bIII')); // Mode Mixture
-        chords.push(buildChord(5, 'min', 'iv'));   // Mode Mixture
-        chords.push(buildChord(7, 'min', 'v'));    // Mixolydian feel
-        chords.push(buildChord(8, 'maj', 'bVI'));  // Mode Mixture
-        chords.push(buildChord(10, 'maj', 'bVII'));// Mode Mixture
         
-        chords.push(buildChord(1, 'maj', 'bII'));  // Neapolitan
+        // Secondary Dominants (usually act like Major keys, use Sharps unless root is flat)
+        chords.push(buildChord(4, 'maj', 'III (V/vi)')); 
+        chords.push(buildChord(9, 'maj', 'VI (V/ii)')); 
+        chords.push(buildChord(2, 'maj', 'II (V/V)'));  
+        chords.push(buildChord(11, 'maj', 'VII (V/iii)')); 
+
+        // Mode Mixture (Borrowed from Minor = FLATTENED DEGREES)
+        // We force Flats for bIII, bVI, bVII, bII to ensure "Eb" not "D#"
+        chords.push(buildChord(3, 'maj', 'bIII', true)); 
+        chords.push(buildChord(5, 'min', 'iv'));   
+        chords.push(buildChord(7, 'min', 'v'));    
+        chords.push(buildChord(8, 'maj', 'bVI', true));  
+        chords.push(buildChord(10, 'maj', 'bVII', true));
+        chords.push(buildChord(1, 'maj', 'bII', true));  // Neapolitan
 
     } else {
         // --- MINOR FAMILY BORROWED ---
-        chords.push(buildChord(7, 'maj', 'V'));    // Harmonic Minor V
-        chords.push(buildChord(0, 'maj', 'I'));    // Picardy Third
-        chords.push(buildChord(5, 'maj', 'IV'));   // Dorian IV
-        chords.push(buildChord(1, 'maj', 'bII'));  // Neapolitan
-        // Optional: V/V works in minor too (II major)
+        chords.push(buildChord(7, 'maj', 'V'));    
+        chords.push(buildChord(0, 'maj', 'I'));    
+        chords.push(buildChord(5, 'maj', 'IV'));   
+        chords.push(buildChord(1, 'maj', 'bII', true));  
         chords.push(buildChord(2, 'maj', 'II (V/V)')); 
     }
 
@@ -166,8 +237,7 @@ export function getAllChords(root, scaleKey) {
     const diatonic = getDiatonicChords(root, scaleKey);
     const borrowed = getBorrowedChords(root, scaleKey);
     
-    // Filter duplicates (e.g. if Mixolydian already has bVII, don't add it again)
-    // We check chord NAME uniqueness
+    // Filter duplicates by name
     const seen = new Set(diatonic.map(c => c.name));
     const uniqueBorrowed = borrowed.filter(c => {
         if (seen.has(c.name)) return false;

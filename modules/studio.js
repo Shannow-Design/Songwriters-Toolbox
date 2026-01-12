@@ -31,8 +31,8 @@ export class Studio {
             <div class="studio-panel">
                 <div class="studio-controls-top">
                     <div class="transport-group">
-                        <button id="btn-studio-rec" class="btn-transport rec" title="Record Microphone">● REC NEW</button>
-                        <button id="btn-studio-bounce" class="btn-transport bounce" title="Record Sequencer/Song to Audio Track">⚡ BOUNCE SONG</button>
+                        <button id="btn-studio-rec" class="btn-transport rec" title="Record Microphone (Vocals only)">● REC NEW</button>
+                        <button id="btn-studio-bounce" class="btn-transport bounce" title="Record Sequencer/Song to Audio Track (Backing only)">⚡ BOUNCE SONG</button>
                         <button id="btn-studio-play" class="btn-transport play" title="Play All">▶ PLAY MIX</button>
                         <button id="btn-studio-stop" class="btn-transport stop" title="Stop All">■ STOP</button>
                     </div>
@@ -53,7 +53,7 @@ export class Studio {
                     <div class="empty-state">
                         No tracks yet.<br>
                         <span style="color:#00e5ff">⚡ BOUNCE SONG</span> to import your backing track.<br>
-                        <span style="color:#ff0055">● REC NEW</span> to record vocals.
+                        <span style="color:#ff0055">● REC NEW</span> to record vocals over it.
                     </div>
                 </div>
 
@@ -126,8 +126,13 @@ export class Studio {
             .track-name { font-size: 0.8rem; font-weight: bold; color: #eee; margin-bottom: 2px; }
             .track-details { font-size: 0.65rem; color: #777; }
             
-            .track-controls { display: flex; align-items: center; gap: 10px; }
+            .track-controls { display: flex; align-items: center; gap: 15px; }
+            .control-column { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+            .control-label { font-size: 0.55rem; color: #666; font-weight: bold; }
+            
             .track-vol-slider { width: 80px; height: 4px; accent-color: #00e5ff; }
+            .track-pan-slider { width: 60px; height: 4px; accent-color: #00e5ff; }
+            
             .btn-track-action { 
                 background: none; border: none; color: #666; cursor: pointer; font-size: 0.8rem; 
             }
@@ -169,7 +174,7 @@ export class Studio {
         this.container.querySelector('#cb-vocal-fx').addEventListener('change', (e) => Microphone.setFxEnabled(e.target.checked));
     }
 
-    // --- BOUNCE (INTERNAL RECORDING) ---
+    // --- BOUNCE (INTERNAL MIX ONLY) ---
     async handleBounceButton() {
         if (this.isBouncing) {
             this.stopAll();
@@ -181,23 +186,21 @@ export class Studio {
         btn.classList.add('recording');
         this.isBouncing = true;
 
-        // 1. Ensure Microphone is DISCONNECTED so we don't record room noise
-        Microphone.disconnectFromStudio();
+        Microphone.disconnectFromStudio(); // Ensure Mic is OFF for bounce
 
-        // 2. Start Recording (captures master output)
         if (ctx.state === 'suspended') await ctx.resume();
-        this.recorder = startStudioRecording();
+        
+        // RECORD INTERNAL MIX ('mix')
+        this.recorder = startStudioRecording('mix');
         this.startTime = Date.now();
 
-        // 3. Start Playback (Song or Sequencer)
-        // Prefer SongBuilder if it has content, otherwise Sequencer
+        // Start Playback
         if (this.songBuilder && this.songBuilder.playlist.length > 0) {
             if (this.songBuilder.togglePlay) this.songBuilder.playSong();
         } else if (this.sequencer) {
             if (!this.sequencer.isPlaying) this.sequencer.togglePlay();
         }
 
-        // 4. Timer & Auto-Stop Check
         this.timerInterval = setInterval(() => {
             const elapsed = Date.now() - this.startTime;
             const secs = Math.floor(elapsed / 1000) % 60;
@@ -205,15 +208,13 @@ export class Studio {
             this.container.querySelector('#studio-timer').textContent = 
                 `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 
-            // Auto-stop if SongBuilder finishes
-            // FIX: Check isPlaying instead of isActive to match SongBuilder update
             if (this.songBuilder && !this.songBuilder.isPlaying && this.isBouncing && elapsed > 1000) {
-                this.stopAll(); // Song finished naturally
+                this.stopAll(); 
             }
         }, 500);
     }
 
-    // --- MICROPHONE RECORDING ---
+    // --- MICROPHONE RECORDING (VOCALS ONLY) ---
     handleRecordButton() {
         if (this.isRecording || this.isCountingDown) {
             this.stopAll(); 
@@ -258,19 +259,19 @@ export class Studio {
         const btn = this.container.querySelector('#btn-studio-rec');
         const syncSource = this.container.querySelector('#sel-studio-sync').value;
 
-        // 1. Connect Mic
         await Microphone.init();
-        Microphone.connectToStudio(); // Ensure connected
         
         if (ctx.state === 'suspended') await ctx.resume();
 
-        this.recorder = startStudioRecording();
+        // RECORD MIC STREAM ('mic')
+        this.recorder = startStudioRecording('mic');
         this.isRecording = true;
         this.startTime = Date.now();
         
         btn.textContent = "■ STOP";
         btn.classList.add('recording');
 
+        // Play backing track (if synced)
         if (syncSource === 'sequencer' && this.sequencer) {
             if (!this.sequencer.isPlaying) this.sequencer.togglePlay();
         } else if (syncSource === 'songbuilder' && this.songBuilder) {
@@ -288,7 +289,6 @@ export class Studio {
     }
 
     async stopRecording() {
-        // Handle BOTH Mic recording AND Bounce recording cleanup here
         const btnRec = this.container.querySelector('#btn-studio-rec');
         const btnBounce = this.container.querySelector('#btn-studio-bounce');
         
@@ -305,25 +305,21 @@ export class Studio {
         btnBounce.textContent = "⚡ BOUNCE SONG";
         btnBounce.classList.remove('recording');
         
-        // Stop playback if it was auto-started
         if (this.sequencer && this.sequencer.isPlaying) {
              this.sequencer.togglePlay(); 
         }
-        // FIX: Check isPlaying instead of isActive
         if (this.songBuilder && this.songBuilder.isPlaying) {
              this.songBuilder.stopSong();
         }
 
         if (this.recorder) {
             const blob = await this.recorder.stop();
-            // If we were bouncing, name it "Backing Track"
             const name = wasBouncing ? "Backing Track" : `Track ${this.trackCounter++}`;
             await this.addTrackFromBlob(blob, name);
             this.recorder = null;
         }
 
-        // Cleanup: Disconnect mic if we were using it, or ensure it stays disconnected if bouncing
-        Microphone.disconnectFromStudio();
+        // Cleanup done inside startStudioRecording promise
     }
 
     async addTrackFromBlob(blob, defaultName) {
@@ -335,9 +331,11 @@ export class Studio {
             name: defaultName,
             buffer: audioBuffer,
             volume: 0.8,
+            pan: 0.0, // Default Pan Center
             muted: false,
             blob: blob,
-            _activeGain: null 
+            _activeGain: null,
+            _activePanner: null
         };
         
         this.tracks.push(newTrack);
@@ -350,7 +348,7 @@ export class Studio {
         list.innerHTML = '';
 
         if (this.tracks.length === 0) {
-            list.innerHTML = '<div class="empty-state">No tracks yet.<br><span style="color:#00e5ff">⚡ BOUNCE SONG</span> to import your backing track.<br><span style="color:#ff0055">● REC NEW</span> to record vocals.</div>';
+            list.innerHTML = '<div class="empty-state">No tracks yet.<br><span style="color:#00e5ff">⚡ BOUNCE SONG</span> to import your backing track.<br><span style="color:#ff0055">● REC NEW</span> to record vocals over it.</div>';
             return;
         }
 
@@ -364,7 +362,17 @@ export class Studio {
                 </div>
                 <div class="track-controls">
                     <button class="btn-track-action btn-mute ${track.muted ? 'muted' : ''}" data-id="${track.id}">M</button>
-                    <input type="range" class="track-vol-slider" min="0" max="1" step="0.05" value="${track.volume}" data-id="${track.id}" title="Volume">
+                    
+                    <div class="control-column">
+                        <span class="control-label">VOL</span>
+                        <input type="range" class="track-vol-slider" min="0" max="1" step="0.05" value="${track.volume}" data-id="${track.id}" title="Volume">
+                    </div>
+
+                    <div class="control-column">
+                        <span class="control-label">PAN</span>
+                        <input type="range" class="track-pan-slider" min="-1" max="1" step="0.1" value="${track.pan}" data-id="${track.id}" title="Pan (Left/Right)">
+                    </div>
+
                     <button class="btn-track-action delete" data-id="${track.id}">×</button>
                 </div>
             `;
@@ -377,6 +385,14 @@ export class Studio {
                 track.volume = newVol; 
                 if (track._activeGain) {
                     track._activeGain.gain.setTargetAtTime(newVol, ctx.currentTime, 0.05);
+                }
+            });
+
+            div.querySelector('.track-pan-slider').addEventListener('input', (e) => { 
+                const newPan = parseFloat(e.target.value);
+                track.pan = newPan; 
+                if (track._activePanner) {
+                    track._activePanner.pan.setTargetAtTime(newPan, ctx.currentTime, 0.05);
                 }
             });
 
@@ -397,18 +413,25 @@ export class Studio {
             const source = ctx.createBufferSource();
             source.buffer = track.buffer;
             
+            const pannerNode = ctx.createStereoPanner();
+            pannerNode.pan.value = track.pan;
+            track._activePanner = pannerNode;
+
             const gainNode = ctx.createGain();
             gainNode.gain.value = track.volume;
             track._activeGain = gainNode;
 
-            source.connect(gainNode);
+            source.connect(pannerNode);
+            pannerNode.connect(gainNode);
             gainNode.connect(ctx.destination);
+            
             source.start(0);
             this.activeSources.push(source);
             
             source.onended = () => {
                 this.activeSources = this.activeSources.filter(s => s !== source);
                 track._activeGain = null; 
+                track._activePanner = null;
                 if(this.activeSources.length === 0) this.stopAll();
             };
         });
@@ -436,7 +459,7 @@ export class Studio {
         
         this.activeSources.forEach(src => { try { src.stop(); } catch(e) {} });
         this.activeSources = [];
-        this.tracks.forEach(t => t._activeGain = null);
+        this.tracks.forEach(t => { t._activeGain = null; t._activePanner = null; });
     }
 
     async exportMix() {
@@ -454,10 +477,17 @@ export class Studio {
             if (track.muted) return;
             const source = offlineCtx.createBufferSource();
             source.buffer = track.buffer;
+            
+            const panner = offlineCtx.createStereoPanner();
+            panner.pan.value = track.pan;
+
             const gain = offlineCtx.createGain();
             gain.gain.value = track.volume;
-            source.connect(gain);
+            
+            source.connect(panner);
+            panner.connect(gain);
             gain.connect(offlineCtx.destination);
+            
             source.start(0);
         });
 
