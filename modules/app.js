@@ -33,7 +33,7 @@ let currentActiveChordNotes = [];
 let currentActiveChordRoot = null; 
 let currentActiveChordShape = null; 
 
-// --- HELPER FUNCTIONS (Must be defined before init usage) ---
+// --- HELPER FUNCTIONS ---
 
 function getActiveNotes() { 
     if(!keySelect || !scaleSelect) return [];
@@ -47,7 +47,6 @@ function addSpanToggle(wrapperId) {
     const header = wrapper.querySelector('h3');
     if(!header) return;
 
-    // Prevent duplicate buttons
     if(header.querySelector('.btn-span-toggle')) return;
 
     const btn = document.createElement('button');
@@ -314,9 +313,10 @@ function init() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
-    // Sequencer & Dependents
+    // Sequencer Initialization
     sequencer = new Sequencer('sequencer-container', 
         () => { return { key: keySelect.value, scale: scaleSelect.value }; },
+        // Chord Change Callback
         (chordIndex) => {
             if (chordIndex === -1) {
                 chordRenderer.clearHighlights();
@@ -334,6 +334,7 @@ function init() {
                 }
             }
         },
+        // Preset Load Callback
         (presetData) => {
             keySelect.value = presetData.key;
             scaleSelect.value = presetData.scale;
@@ -345,13 +346,20 @@ function init() {
             document.body.style.background = "#222";
             setTimeout(() => document.body.style.background = "", 100);
         },
+        // Step Callback
         (step, progIndex, progLength, cycleCount, time) => {
             looper.onStep(step, progIndex, progLength, cycleCount, time);
             if (songBuilder) songBuilder.onStep(step, time);
             if (vocalGenerator) vocalGenerator.onStep(step, progIndex, progLength, cycleCount, time);
         },
+        // Stop Callback
         () => { looper.stopAll(); },
-        () => { return looper.getSettings(); }
+        // Get Looper Data
+        () => { return looper.getSettings(); },
+        // NEW: Lead Visual Callback
+        (midiNumber) => {
+            if (keyboard) keyboard.highlightLeadNote(midiNumber);
+        }
     );
 
     vocalGenerator = new VocalGenerator('vocal-module', sequencer);

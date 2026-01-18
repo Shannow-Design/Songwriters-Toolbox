@@ -2,52 +2,19 @@
 import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb, setTrackPan } from './audio.js';
 import { getAllChords, generateScale } from './theory.js'; 
 
-const DRUM_PATTERNS = {
-    'Basic Rock': { kick:[1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Four on Floor': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Indie Disco': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Hard Rock': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Punk': { kick:[1,0,0,1, 0,1,0,0, 1,0,0,1, 0,1,0,0], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0] },
-    'Half-Time Shuffle': { kick:[1,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,1, 0,1,1,0, 1,0,1,1, 0,1,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Hip Hop': { kick:[1,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,1,1,0, 1,0,1,0, 1,0,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Funk Break': { kick:[1,0,0,1, 0,0,1,0, 0,0,0,1, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Trap': { kick:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Bossa Nova': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0], snare:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Samba': { kick:[1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Cha Cha': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 0,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Tango': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[1,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0], hihat:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Reggae': { kick:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
-    'Empty': { kick:Array(16).fill(0), snare:Array(16).fill(0), hihat:Array(16).fill(0), tom:Array(16).fill(0), crash:Array(16).fill(0) }
-};
-
+// ... (Pattern Constants: DRUM_PATTERNS, BASS_PATTERNS, etc. - Same as before)
+const DRUM_PATTERNS = { 'Basic Rock': { kick:[1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Four on Floor': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Indie Disco': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Hard Rock': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Punk': { kick:[1,0,0,1, 0,1,0,0, 1,0,0,1, 0,1,0,0], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0] }, 'Half-Time Shuffle': { kick:[1,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,1, 0,1,1,0, 1,0,1,1, 0,1,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Hip Hop': { kick:[1,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,1,1,0, 1,0,1,0, 1,0,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Funk Break': { kick:[1,0,0,1, 0,0,1,0, 0,0,0,1, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Trap': { kick:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Bossa Nova': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0], snare:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Samba': { kick:[1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Cha Cha': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 0,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Tango': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[1,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0], hihat:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Reggae': { kick:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Empty': { kick:Array(16).fill(0), snare:Array(16).fill(0), hihat:Array(16).fill(0), tom:Array(16).fill(0), crash:Array(16).fill(0) } };
 const BASS_PATTERNS = { 'Root Notes':['1',null,null,null, '1',null,null,null, '1',null,null,null, '1',null,null,null], 'Root & Fifth':['1',null,null,null, '5',null,null,null, '1',null,null,null, '5',null,null,null], 'Walking':['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null], 'Disco Octaves':['1',null,'8',null, '1',null,'8',null, '1',null,'8',null, '1',null,'8',null], 'Offbeat Pump':[null,'1',null,'1', null,'1',null,'1', null,'1',null,'1', null,'1',null,'1'], 'Running 8ths':['1',null,'1',null, '1',null,'1',null, '1',null,'1',null, '1',null,'1',null], 'Empty':Array(16).fill(null) };
 const MELODY_PATTERNS = { 'Arp Up (8ths)':['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null], 'Arp Down (8ths)':['8',null,'5',null, '3',null,'1',null, '8',null,'5',null, '3',null,'1',null], 'Fast Arp (16ths)':['1','3','5','8', '5','3','1','3', '5','8','1','3', '5','8','5','3'], 'Alberti':['1',null,'5',null, '3',null,'5',null, '1',null,'5',null, '3',null,'5',null], 'Staircase':['1',null,'3',null, '1',null,'5',null, '1',null,'8',null, '1',null,'5',null], 'Pedal Point':['8',null,'3',null, '8',null,'5',null, '8',null,'1',null, '8',null,'5',null], 'Empty':Array(16).fill(null) };
 const SAMPLES_PATTERNS = { 'Whole Note (Drone)':['1',null,null,null, null,null,null,null, null,null,null,null, null,null,null,null], 'Half Notes (1 & 3)':['1',null,null,null, null,null,null,null, '1',null,null,null, null,null,null,null], 'Backbeat Stab':[null,null,null,null, '1',null,null,null, null,null,null,null, '1',null,null,null], 'Dotted Quarter':['1',null,null,null, null,null,'1',null, null,null,null,null, '1',null,null,null], 'Offbeat 8ths':[null,null,'1',null, null,null,'1',null, null,null,'1',null, null,null,'1',null], 'Slow Arp (Halves)':['1',null,null,null, null,null,null,null, '5',null,null,null, null,null,null,null], 'Charleston':['1',null,null,null, null,null,'1',null, null,null,null,null, null,null,null,null], 'Empty':Array(16).fill(null) };
 const RHYTHM_PATTERNS = { 'Whole Notes':[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], 'Quarter Strum':[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], 'Driving 8ths':[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], 'Syncopated':[1,0,0,1, 0,0,1,0, 0,0,1,0, 0,0,0,0], 'Reggae Skank':[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], 'Gallop':[1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], 'Charleston':[1,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0] };
 
-const DEFAULT_PROGRESSIONS = {
-    'Pop Hit (I-V-vi-IV)': [0, 4, 5, 3],
-    'Doo Wop (I-vi-IV-V)': [0, 5, 3, 4],
-    'Blues (I-IV-I-V)':    [0, 3, 0, 4],
-    'Jazz ii-V-I':         [1, 4, 0, 0],
-    'Minor Sad (vi-IV-I-V)': [5, 3, 0, 4],
-    'Canon (Pachelbel)':   [0, 4, 5, 2, 3, 0, 3, 4],
-    'Andalusian':          [5, 4, 3, 2],
-    'Royal Road':          [3, 4, 2, 5],
-    'Circle of 5ths':      [0, 3, 6, 2, 5, 1, 4, 0]
-};
-
-const ROMAN_NUMERALS = [
-    'I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°',
-    'III (V/vi)', 'VI (V/ii)', 'II (V/V)', 'VII (V/iii)',
-    'bIII', 'iv', 'v', 'bVI', 'bVII',
-    'bII'
-];
-
+const DEFAULT_PROGRESSIONS = { 'Pop Hit (I-V-vi-IV)': [0, 4, 5, 3], 'Doo Wop (I-vi-IV-V)': [0, 5, 3, 4], 'Blues (I-IV-I-V)': [0, 3, 0, 4], 'Jazz ii-V-I': [1, 4, 0, 0], 'Minor Sad (vi-IV-I-V)': [5, 3, 0, 4], 'Canon (Pachelbel)': [0, 4, 5, 2, 3, 0, 3, 4], 'Andalusian': [5, 4, 3, 2], 'Royal Road': [3, 4, 2, 5], 'Circle of 5ths': [0, 3, 6, 2, 5, 1, 4, 0] };
+const ROMAN_NUMERALS = [ 'I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°', 'III (V/vi)', 'VI (V/ii)', 'II (V/V)', 'VII (V/iii)', 'bIII', 'iv', 'v', 'bVI', 'bVII', 'bII' ];
 const SCALE_OPTIONS = [null, '1', '2', '3', '4', '5', '6', '7', '8'];
 
 export class Sequencer {
-    constructor(containerId, getScaleDataCallback, onChordChangeCallback, onPresetLoadCallback, onStepCallback, onStopCallback, getLooperDataCallback) {
+    constructor(containerId, getScaleDataCallback, onChordChangeCallback, onPresetLoadCallback, onStepCallback, onStopCallback, getLooperDataCallback, onLeadStepCallback) {
         this.container = document.getElementById(containerId);
         this.getScaleData = getScaleDataCallback; 
         this.onChordChange = onChordChangeCallback; 
@@ -55,8 +22,9 @@ export class Sequencer {
         this.onStepCallback = onStepCallback; 
         this.onStopCallback = onStopCallback; 
         this.getLooperData = getLooperDataCallback; 
+        this.onLeadStep = onLeadStepCallback; // New callback for lead visualizer
 
-        // Main State
+        // ... (State initialization remains same)
         this.isPlaying = false;
         this.isPreviewing = false; 
         this.previewStep = 0;      
@@ -109,7 +77,7 @@ export class Sequencer {
             volumes: { chords:0.8, bass:0.8, lead:0.8, samples:0.8, drums:0.8 },
             filters: { chords:1.0, bass:1.0, lead:1.0, samples:1.0, drums:1.0 },
             reverbs: { chords:0.1, bass:0.1, lead:0.1, samples:0.1 },
-            pans: { chords:0, bass:0, lead:0, samples:0, drums:0 }, // NEW: Pans
+            pans: { chords:0, bass:0, lead:0, samples:0, drums:0 }, 
             octaves: { chords: 0, bass: 0, lead: 0, samples: 0 },
             drops: { chords: false, bass: false, lead: false, samples: false },
             upStrums: true,
@@ -120,7 +88,9 @@ export class Sequencer {
         this.injectModals(); 
     }
 
+    // ... (renderUI, bindEvents, populateDropdowns, etc. - assume standard content)
     renderUI() {
+        // (Same UI code as provided in previous turns)
         const createSliderGroup = (idPrefix, label, val, min=0, max=1, step=0.1) => `
             <div style="display:flex; flex-direction:column; margin-bottom:5px;">
                 <label style="font-size:0.65rem; color:#888;">${label}</label>
@@ -311,7 +281,7 @@ export class Sequencer {
         bindSelect('#sel-drums', 'drumName', 'drums');
         bindSelect('#sel-progression', 'progressionName', 'progression');
 
-        // UPDATED: Mixer Binding to include PANS
+        // Mixer Binding
         const bindMixer = (id, type, track) => {
             const el = this.container.querySelector(id);
             if(!el) return;
@@ -327,7 +297,7 @@ export class Sequencer {
         ['chords','bass','lead','samples','drums'].forEach(t => {
             bindMixer(`#vol-${t}`, 'volumes', t);
             bindMixer(`#filt-${t}`, 'filters', t);
-            bindMixer(`#pan-${t}`, 'pans', t); // Bind Pan
+            bindMixer(`#pan-${t}`, 'pans', t);
             if(t!=='drums') bindMixer(`#verb-${t}`, 'reverbs', t);
         });
 
@@ -378,6 +348,7 @@ export class Sequencer {
         this.container.querySelector('#sel-metronome-sub').addEventListener('change', (e) => this.settings.metronomeSubdivision = parseInt(e.target.value));
     }
 
+    // ... (Populate/Delete/Modals methods - standard)
     populateDropdowns() {
         const populate = (id, lib) => { const sel = this.container.querySelector(id); sel.innerHTML = ''; Object.keys(lib).forEach(k => sel.add(new Option(k, k))); };
         const insts = Object.keys(INSTRUMENTS);
@@ -587,6 +558,7 @@ export class Sequencer {
         this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; 
     }
     
+    // ... (rest of methods: loadPreset, refreshPresetList, deletePreset, resetProgressionIndex, togglePlay, scheduler, nextNote)
     loadPreset(name) { 
         const p = this.savedPresets[name]; if(!p) return; 
         this.bpm = p.bpm; this.settings = p.settings; 
@@ -711,6 +683,56 @@ export class Sequencer {
             if (stepNumber === 0 && this.onChordChange && prog) {
                 this.onChordChange(prog[this.settings.progressionIndex]);
             }
+
+            if (this.onLeadStep) {
+                const leadPat = this.libraries.lead[this.state.leadName];
+                let visualMidi = null; // Changed from visualNote
+                const chords = getAllChords(this.getScaleData().key, this.getScaleData().scale);
+                const chord = chords[prog[this.settings.progressionIndex]];
+                
+                if (leadPat && leadPat[stepNumber] && chord) {
+                    const fullScale = generateScale(this.getScaleData().key, this.getScaleData().scale);
+                    const rootIndex = fullScale.indexOf(chord.root);
+                    const instruction = leadPat[stepNumber];
+                    const leadOct = this.settings.octaves.lead || 0;
+                    const leadDrop = this.settings.drops.lead || false;
+                    
+                    if (rootIndex !== -1 && instruction) {
+                        let interval = 0;
+                        let isOctave = false;
+                        if (instruction === 'R' || instruction === '1') interval = 0;
+                        else if (instruction === '2') interval = 1;
+                        else if (instruction === '3') interval = 2;
+                        else if (instruction === '4') interval = 3;
+                        else if (instruction === '5') interval = 4;
+                        else if (instruction === '6') interval = 5;
+                        else if (instruction === '7') interval = 6;
+                        else if (instruction === '8' || instruction === 'O') { interval = 0; isOctave = true; }
+                        
+                        const noteIndex = (rootIndex + interval) % fullScale.length;
+                        
+                        // Calculate specific MIDI for visuals
+                        const SHARPS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; 
+                        const noteName = fullScale[noteIndex];
+                        const ni = SHARPS.indexOf(noteName);
+                        
+                        // Calculate Scale Wrap Octave logic (same as audio engine)
+                        let base = 4 + leadOct; // Base C4
+                        if (noteIndex < rootIndex) base += 1;
+                        if (isOctave) base += 1;
+                        
+                        // Handle Drop logic
+                        if (leadDrop) {
+                            const ki = SHARPS.indexOf(this.getScaleData().key);
+                            if (ni > ki) base--;
+                        }
+
+                        // Final MIDI = (Octave + 1) * 12 + NoteIndex
+                        visualMidi = (base + 1) * 12 + ni;
+                    }
+                }
+                this.onLeadStep(visualMidi);
+            }
         });
 
         if (this.onStepCallback) {
@@ -763,8 +785,6 @@ export class Sequencer {
             const playScaleNote = (instruction, instrument, octSetting, octDrop, trackType, defaultDur) => {
                 if (!instruction) return;
                 const rootIndex = fullScale.indexOf(chord.root); 
-                // Diatonic check: if root not in scale, skip melody generation for that note
-                // or fallback to root note (index 0 relative to chord root)
                 if(rootIndex === -1) return; 
 
                 let interval = 0; 
