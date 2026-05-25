@@ -2,15 +2,48 @@
 import { ctx, playDrum, playStrum, startNote, stopAllSounds, INSTRUMENTS, setTrackVolume, setTrackFilter, setTrackReverb, setTrackPan } from './audio.js';
 import { getAllChords, generateScale } from './theory.js'; 
 
-// ... (Pattern Constants: DRUM_PATTERNS, BASS_PATTERNS, etc. - Same as before)
-const DRUM_PATTERNS = { 'Basic Rock': { kick:[1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Four on Floor': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Indie Disco': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Hard Rock': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Punk': { kick:[1,0,0,1, 0,1,0,0, 1,0,0,1, 0,1,0,0], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0] }, 'Half-Time Shuffle': { kick:[1,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,1, 0,1,1,0, 1,0,1,1, 0,1,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Hip Hop': { kick:[1,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,1,1,0, 1,0,1,0, 1,0,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Funk Break': { kick:[1,0,0,1, 0,0,1,0, 0,0,0,1, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Trap': { kick:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Bossa Nova': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0], snare:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Samba': { kick:[1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Cha Cha': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 0,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Tango': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[1,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0], hihat:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Reggae': { kick:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] }, 'Empty': { kick:Array(16).fill(0), snare:Array(16).fill(0), hihat:Array(16).fill(0), tom:Array(16).fill(0), crash:Array(16).fill(0) } };
+const DRUM_PATTERNS = {
+    'Basic Rock': { kick:[1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Four on Floor': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Indie Disco': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Hard Rock': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Punk': { kick:[1,0,0,1, 0,1,0,0, 1,0,0,1, 0,1,0,0], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0] },
+    'Half-Time Shuffle': { kick:[1,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,1,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,1, 0,1,1,0, 1,0,1,1, 0,1,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Hip Hop': { kick:[1,0,0,0, 0,0,1,0, 0,0,0,0, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,0,1,0, 1,1,1,0, 1,0,1,0, 1,0,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,1, 0,0,0,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Funk Break': { kick:[1,0,0,1, 0,0,1,0, 0,0,0,1, 0,1,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0], crash:[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Trap': { kick:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Bossa Nova': { kick:[1,0,0,1, 0,0,1,0, 1,0,0,1, 0,0,1,0], snare:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Samba': { kick:[1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], snare:[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], hihat:[1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Cha Cha': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 0,0,0,0, 0,0,1,0, 1,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Tango': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[1,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0], hihat:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Reggae': { kick:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0], hihat:[0,1,1,1, 0,1,1,1, 0,1,1,1, 0,1,1,1], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Empty': { kick:Array(16).fill(0), snare:Array(16).fill(0), hihat:Array(16).fill(0), tom:Array(16).fill(0), crash:Array(16).fill(0) }
+};
+
 const BASS_PATTERNS = { 'Root Notes':['1',null,null,null, '1',null,null,null, '1',null,null,null, '1',null,null,null], 'Root & Fifth':['1',null,null,null, '5',null,null,null, '1',null,null,null, '5',null,null,null], 'Walking':['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null], 'Disco Octaves':['1',null,'8',null, '1',null,'8',null, '1',null,'8',null, '1',null,'8',null], 'Offbeat Pump':[null,'1',null,'1', null,'1',null,'1', null,'1',null,'1', null,'1',null,'1'], 'Running 8ths':['1',null,'1',null, '1',null,'1',null, '1',null,'1',null, '1',null,'1',null], 'Empty':Array(16).fill(null) };
 const MELODY_PATTERNS = { 'Arp Up (8ths)':['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null], 'Arp Down (8ths)':['8',null,'5',null, '3',null,'1',null, '8',null,'5',null, '3',null,'1',null], 'Fast Arp (16ths)':['1','3','5','8', '5','3','1','3', '5','8','1','3', '5','8','5','3'], 'Alberti':['1',null,'5',null, '3',null,'5',null, '1',null,'5',null, '3',null,'5',null], 'Staircase':['1',null,'3',null, '1',null,'5',null, '1',null,'8',null, '1',null,'5',null], 'Pedal Point':['8',null,'3',null, '8',null,'5',null, '8',null,'1',null, '8',null,'5',null], 'Empty':Array(16).fill(null) };
 const SAMPLES_PATTERNS = { 'Whole Note (Drone)':['1',null,null,null, null,null,null,null, null,null,null,null, null,null,null,null], 'Half Notes (1 & 3)':['1',null,null,null, null,null,null,null, '1',null,null,null, null,null,null,null], 'Backbeat Stab':[null,null,null,null, '1',null,null,null, null,null,null,null, '1',null,null,null], 'Dotted Quarter':['1',null,null,null, null,null,'1',null, null,null,null,null, '1',null,null,null], 'Offbeat 8ths':[null,null,'1',null, null,null,'1',null, null,null,'1',null, null,null,'1',null], 'Slow Arp (Halves)':['1',null,null,null, null,null,null,null, '5',null,null,null, null,null,null,null], 'Charleston':['1',null,null,null, null,null,'1',null, null,null,null,null, null,null,null,null], 'Empty':Array(16).fill(null) };
 const RHYTHM_PATTERNS = { 'Whole Notes':[1,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], 'Quarter Strum':[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], 'Driving 8ths':[1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0], 'Syncopated':[1,0,0,1, 0,0,1,0, 0,0,1,0, 0,0,0,0], 'Reggae Skank':[0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0], 'Gallop':[1,0,0,1, 1,0,0,1, 1,0,0,1, 1,0,0,1], 'Charleston':[1,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,0] };
 
-const DEFAULT_PROGRESSIONS = { 'Pop Hit (I-V-vi-IV)': [0, 4, 5, 3], 'Doo Wop (I-vi-IV-V)': [0, 5, 3, 4], 'Blues (I-IV-I-V)': [0, 3, 0, 4], 'Jazz ii-V-I': [1, 4, 0, 0], 'Minor Sad (vi-IV-I-V)': [5, 3, 0, 4], 'Canon (Pachelbel)': [0, 4, 5, 2, 3, 0, 3, 4], 'Andalusian': [5, 4, 3, 2], 'Royal Road': [3, 4, 2, 5], 'Circle of 5ths': [0, 3, 6, 2, 5, 1, 4, 0] };
-const ROMAN_NUMERALS = [ 'I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°', 'III (V/vi)', 'VI (V/ii)', 'II (V/V)', 'VII (V/iii)', 'bIII', 'iv', 'v', 'bVI', 'bVII', 'bII' ];
+const DEFAULT_PROGRESSIONS = {
+    'Pop Hit (I-V-vi-IV)': [0, 4, 5, 3],
+    'Doo Wop (I-vi-IV-V)': [0, 5, 3, 4],
+    'Blues (I-IV-I-V)':    [0, 3, 0, 4],
+    'Jazz ii-V-I':         [1, 4, 0, 0],
+    'Minor Sad (vi-IV-I-V)': [5, 3, 0, 4],
+    'Canon (Pachelbel)':   [0, 4, 5, 2, 3, 0, 3, 4],
+    'Andalusian':          [5, 4, 3, 2],
+    'Royal Road':          [3, 4, 2, 5],
+    'Circle of 5ths':      [0, 3, 6, 2, 5, 1, 4, 0]
+};
+
+const ROMAN_NUMERALS = [
+    'I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°',
+    'III (V/vi)', 'VI (V/ii)', 'II (V/V)', 'VII (V/iii)',
+    'bIII', 'iv', 'v', 'bVI', 'bVII',
+    'bII'
+];
+
 const SCALE_OPTIONS = [null, '1', '2', '3', '4', '5', '6', '7', '8'];
 
 export class Sequencer {
@@ -22,9 +55,8 @@ export class Sequencer {
         this.onStepCallback = onStepCallback; 
         this.onStopCallback = onStopCallback; 
         this.getLooperData = getLooperDataCallback; 
-        this.onLeadStep = onLeadStepCallback; // New callback for lead visualizer
+        this.onLeadStep = onLeadStepCallback; 
 
-        // ... (State initialization remains same)
         this.isPlaying = false;
         this.isPreviewing = false; 
         this.previewStep = 0;      
@@ -36,7 +68,6 @@ export class Sequencer {
         this.scheduleAheadTime = 0.1; 
         this.progressionCycles = 0; 
 
-        // Load Data
         this.customData = {
             progressions: JSON.parse(localStorage.getItem('custom_progressions')) || {},
             rhythm:       JSON.parse(localStorage.getItem('custom_rhythms')) || {}, 
@@ -88,145 +119,266 @@ export class Sequencer {
         this.injectModals(); 
     }
 
-    // ... (renderUI, bindEvents, populateDropdowns, etc. - assume standard content)
     renderUI() {
-        // (Same UI code as provided in previous turns)
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .track-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 20px;
+                background: #1c1c1c;
+                padding: 12px 20px;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                align-items: center;
+                border: 1px solid #2a2a2a;
+            }
+            .track-header-col {
+                width: 115px; /* INCREASED TO FIX PROGRESSION OVERFLOW */
+                flex-shrink: 0;
+            }
+            .track-header-col strong {
+                color: #00e5ff; 
+                font-size: 0.85rem; 
+                letter-spacing: 1px;
+            }
+            .track-mixer-col {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 15px;
+                flex: 2;
+                min-width: 240px;
+                max-width: 400px;
+            }
+            .slider-group {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-width: 60px;
+            }
+            .slider-group label {
+                font-size: 0.65rem; 
+                color: #888;
+                margin-bottom: 4px;
+            }
+            .slider-group input {
+                width: 100%; 
+                accent-color: var(--primary-cyan);
+            }
+            .track-sound-col {
+                flex: 1.5;
+                min-width: 140px;
+                max-width: 250px;
+                display: flex;
+                flex-direction: column;
+            }
+            .track-pattern-col {
+                flex: 2.5;
+                min-width: 200px;
+                max-width: 450px;
+                display: flex;
+                flex-direction: column;
+            }
+            .track-octave-col {
+                width: 60px;
+                flex-shrink: 0;
+                display: flex;
+                flex-direction: column;
+            }
+            .full-width-select {
+                width: 100%;
+                background: #111;
+                color: #fff;
+                border: 1px solid #444;
+                padding: 6px 8px;
+                border-radius: 4px;
+                font-size: 0.8rem;
+            }
+        `;
+        this.container.appendChild(style);
+
         const createSliderGroup = (idPrefix, label, val, min=0, max=1, step=0.1) => `
-            <div style="display:flex; flex-direction:column; margin-bottom:5px;">
-                <label style="font-size:0.65rem; color:#888;">${label}</label>
-                <input type="range" class="vol-slider" id="${idPrefix}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:100%; accent-color:var(--primary-cyan);">
+            <div class="slider-group">
+                <label>${label}</label>
+                <input type="range" class="vol-slider" id="${idPrefix}" min="${min}" max="${max}" step="${step}" value="${val}">
             </div>
         `;
+        
         const createHeader = (title, type) => `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <label>${title}</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                <label style="font-size:0.75rem; color:#ccc;">${title}</label>
                 <div>
-                    <button id="btn-del-${type}" class="btn-delete-custom" style="display:none; font-size:0.6rem; padding:2px 5px; margin-right:5px;">DEL</button>
-                    <button class="btn-new" data-type="${type}" style="font-size:0.6rem;">+ NEW</button>
+                    <button class="btn-edit-pat" data-type="${type}" style="font-size:0.6rem; padding:2px 5px; margin-right:5px; background:#444; border:1px solid #555; color:#fff; border-radius:3px;">EDIT</button>
+                    <button id="btn-del-${type}" class="btn-delete-custom" style="display:none; font-size:0.6rem; padding:2px 5px; margin-right:5px; background:#aa0033; color:white; border:none; border-radius:3px;">DEL</button>
+                    <button class="btn-new" data-type="${type}" style="font-size:0.6rem; padding:2px 5px; background:#00e5ff; color:#000; border:none; border-radius:3px; font-weight:bold;">+ NEW</button>
                 </div>
             </div>
         `;
+        
         const createOctaveControl = (track) => `
-            <div style="display:flex; flex-direction:column; margin-left:5px; width:50px;">
-                <label style="font-size:0.65rem; color:#888;">Octave</label>
-                <select id="sel-oct-${track}" style="width:100%; font-size:0.8rem; padding:0; margin-bottom:2px;">
+            <div class="track-octave-col">
+                <label style="font-size:0.75rem; color:#ccc; margin-bottom:5px;">Octave</label>
+                <select id="sel-oct-${track}" class="full-width-select" style="margin-bottom:5px; padding: 4px;">
                     <option value="-2">-2</option>
                     <option value="-1">-1</option>
                     <option value="0" selected>0</option>
                     <option value="1">+1</option>
                     <option value="2">+2</option>
                 </select>
-                <div style="display:flex; align-items:center; cursor:pointer;" title="Drop chords higher than root">
+                <div style="display:flex; align-items:center; cursor:pointer; justify-content:center;" title="Drop chords higher than root">
                     <input type="checkbox" id="cb-drop-${track}" style="width:10px; height:10px; accent-color:var(--primary-cyan);">
                     <label for="cb-drop-${track}" style="font-size:0.6rem; color:#888; margin-left:3px; cursor:pointer;">Drop</label>
                 </div>
             </div>
         `;
 
-        this.container.innerHTML = `
+        const html = `
             <div class="sequencer-controls">
-                <div class="seq-row">
-                    <button id="btn-seq-play" class="play-btn">▶ PLAY TRACK</button>
-                    <div class="bpm-control">
-                        <label>BPM: <span id="bpm-val">100</span></label>
-                        <input type="range" id="bpm-slider" min="40" max="200" value="100">
+                
+                <div class="seq-row" style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:20px; margin-bottom:20px; background:#1a1a1a; padding:15px 20px; border-radius:8px; border:1px solid #333;">
+                    <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
+                        <button id="btn-seq-play" class="play-btn" style="min-width:140px;">▶ PLAY TRACK</button>
+                        <div class="bpm-control" style="display:flex; align-items:center; gap:10px;">
+                            <label style="white-space:nowrap; color:#fff; font-size:0.9rem;">BPM: <span id="bpm-val">100</span></label>
+                            <input type="range" id="bpm-slider" min="40" max="200" value="100" style="width:120px; accent-color:var(--primary-cyan);">
+                        </div>
                     </div>
-                    <div style="display: flex; gap: 15px; align-items: center; border-left: 1px solid #444; padding-left: 15px;">
+                    
+                    <div style="display: flex; gap: 15px; align-items: center; border-left: 1px solid #444; padding-left: 15px; flex-wrap:wrap;">
                         <div style="display:flex; align-items:center; gap:5px;">
                             <input type="checkbox" id="cb-metronome" style="accent-color: #00e5ff; width:16px; height:16px; cursor:pointer;">
-                            <label for="cb-metronome" style="cursor:pointer; font-size:0.8rem;">Click</label>
+                            <label for="cb-metronome" style="cursor:pointer; font-size:0.85rem; color:#ccc;">Click</label>
                         </div>
                         <div style="display:flex; align-items:center; gap:5px;">
                             <input type="checkbox" id="cb-shuffle" style="accent-color: #00e5ff; width:16px; height:16px; cursor:pointer;"> 
-                            <label id="lbl-shuffle" for="cb-shuffle" style="cursor:pointer; font-size:0.8rem; transition: color 0.2s;">Shuffle</label>
+                            <label id="lbl-shuffle" for="cb-shuffle" style="cursor:pointer; font-size:0.85rem; color:#ccc; transition: color 0.2s;">Shuffle</label>
                         </div>
-                        <select id="sel-metronome-sub" style="font-size: 0.8rem; padding: 2px;">
+                        <select id="sel-metronome-sub" class="full-width-select" style="width:auto; padding:2px 8px;">
                             <option value="4" selected>1/4</option>
                             <option value="2">1/8</option>
                         </select>
                     </div>
-                    <div style="margin-left:auto; display:flex; gap:5px; align-items:center;">
-                        <select id="sel-presets" style="font-size:0.8rem; width:120px;"><option value="">Load Preset...</option></select>
-                        <button id="btn-save-preset" class="btn-new" style="background:#444;">SAVE</button>
-                        <button id="btn-del-preset" class="btn-delete-custom" style="display:none;">X</button>
+                    
+                    <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
+                        <select id="sel-presets" class="full-width-select" style="width:160px;"><option value="">Load Preset...</option></select>
+                        <button id="btn-save-preset" class="btn-new" style="background:#00e5ff; color:#000; padding:6px 12px; font-weight:bold; border-radius:4px; border:none;">SAVE</button>
+                        <button id="btn-del-preset" class="btn-delete-custom" style="display:none; background:#aa0033; color:white; padding:6px 12px; border:none; border-radius:4px;">X</button>
                     </div>
                 </div>
 
-                <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
-                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
-                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">CHORDS</strong>
+                <div class="track-row">
+                    <div class="track-header-col">
+                        <strong>CHORDS</strong>
+                    </div>
+                    <div class="track-mixer-col">
                         ${createSliderGroup('vol-chords', 'Vol', this.settings.volumes.chords)}
                         ${createSliderGroup('pan-chords', 'Pan', this.settings.pans.chords, -1, 1, 0.1)}
                         ${createSliderGroup('filt-chords', 'Bright', this.settings.filters.chords)}
                         ${createSliderGroup('verb-chords', 'Space', this.settings.reverbs.chords)}
                     </div>
-                    <div class="control-group"><label>Sound</label><select id="sel-instrument"></select></div>
-                    <div class="control-group">${createHeader('Rhythm', 'rhythm')}<select id="sel-rhythm"></select><div style="display:flex; align-items:center; margin-top:5px; cursor:pointer;" title="Alternating Up/Down strums"><input type="checkbox" id="cb-alt-strum" style="width:12px; height:12px; accent-color:var(--primary-cyan);" checked><label for="cb-alt-strum" style="font-size:0.7rem; color:#888; margin-left:5px; cursor:pointer;">Alt Strum</label></div></div>
+                    <div class="track-sound-col">
+                        <label style="font-size:0.75rem; color:#ccc; margin-bottom:5px;">Sound</label>
+                        <select id="sel-instrument" class="full-width-select"></select>
+                    </div>
+                    <div class="track-pattern-col">
+                        ${createHeader('Rhythm', 'rhythm')}
+                        <select id="sel-rhythm" class="full-width-select"></select>
+                        <div style="display:flex; align-items:center; margin-top:5px; cursor:pointer;" title="Alternating Up/Down strums">
+                            <input type="checkbox" id="cb-alt-strum" style="width:12px; height:12px; accent-color:var(--primary-cyan);" checked>
+                            <label for="cb-alt-strum" style="font-size:0.7rem; color:#888; margin-left:5px; cursor:pointer;">Alt Strum</label>
+                        </div>
+                    </div>
                     ${createOctaveControl('chords')}
                 </div>
 
-                <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
-                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
-                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">BASS</strong>
+                <div class="track-row">
+                    <div class="track-header-col">
+                        <strong>BASS</strong>
+                    </div>
+                    <div class="track-mixer-col">
                         ${createSliderGroup('vol-bass', 'Vol', this.settings.volumes.bass)}
                         ${createSliderGroup('pan-bass', 'Pan', this.settings.pans.bass, -1, 1, 0.1)}
                         ${createSliderGroup('filt-bass', 'Bright', this.settings.filters.bass)}
                         ${createSliderGroup('verb-bass', 'Space', this.settings.reverbs.bass)}
                     </div>
-                    <div class="control-group"><label>Sound</label><select id="sel-bass-instrument"></select></div>
-                    <div class="control-group">${createHeader('Pattern', 'bass')}<select id="sel-bass-pattern"></select></div>
+                    <div class="track-sound-col">
+                        <label style="font-size:0.75rem; color:#ccc; margin-bottom:5px;">Sound</label>
+                        <select id="sel-bass-instrument" class="full-width-select"></select>
+                    </div>
+                    <div class="track-pattern-col">
+                        ${createHeader('Pattern', 'bass')}
+                        <select id="sel-bass-pattern" class="full-width-select"></select>
+                    </div>
                     ${createOctaveControl('bass')}
                 </div>
 
-                <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
-                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
-                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">LEAD</strong>
+                <div class="track-row">
+                    <div class="track-header-col">
+                        <strong>LEAD</strong>
+                    </div>
+                    <div class="track-mixer-col">
                         ${createSliderGroup('vol-lead', 'Vol', this.settings.volumes.lead)}
                         ${createSliderGroup('pan-lead', 'Pan', this.settings.pans.lead, -1, 1, 0.1)}
                         ${createSliderGroup('filt-lead', 'Bright', this.settings.filters.lead)}
                         ${createSliderGroup('verb-lead', 'Space', this.settings.reverbs.lead)}
                     </div>
-                    <div class="control-group"><label>Sound</label><select id="sel-lead-instrument"></select></div>
-                    <div class="control-group">${createHeader('Pattern', 'lead')}<select id="sel-lead-pattern"></select></div>
+                    <div class="track-sound-col">
+                        <label style="font-size:0.75rem; color:#ccc; margin-bottom:5px;">Sound</label>
+                        <select id="sel-lead-instrument" class="full-width-select"></select>
+                    </div>
+                    <div class="track-pattern-col">
+                        ${createHeader('Pattern', 'lead')}
+                        <select id="sel-lead-pattern" class="full-width-select"></select>
+                    </div>
                     ${createOctaveControl('lead')}
                 </div>
 
-                <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
-                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
-                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">SAMPLES</strong>
+                <div class="track-row">
+                    <div class="track-header-col">
+                        <strong>SAMPLES</strong>
+                    </div>
+                    <div class="track-mixer-col">
                         ${createSliderGroup('vol-samples', 'Vol', this.settings.volumes.samples)}
                         ${createSliderGroup('pan-samples', 'Pan', this.settings.pans.samples, -1, 1, 0.1)}
                         ${createSliderGroup('filt-samples', 'Bright', this.settings.filters.samples)}
                         ${createSliderGroup('verb-samples', 'Space', this.settings.reverbs.samples)}
                     </div>
-                    <div class="control-group"><label>Sampler</label><select id="sel-samples-instrument"></select></div>
-                    <div class="control-group">${createHeader('Pattern', 'samples')}<select id="sel-samples-pattern"></select></div>
+                    <div class="track-sound-col">
+                        <label style="font-size:0.75rem; color:#ccc; margin-bottom:5px;">Sampler</label>
+                        <select id="sel-samples-instrument" class="full-width-select"></select>
+                    </div>
+                    <div class="track-pattern-col">
+                        ${createHeader('Pattern', 'samples')}
+                        <select id="sel-samples-pattern" class="full-width-select"></select>
+                    </div>
                     ${createOctaveControl('samples')}
                 </div>
 
-                <div class="seq-row" style="background:#222; padding:10px; border-radius:4px;">
-                    <div style="display:flex; flex-direction:column; width:80px; margin-right:15px;">
-                        <strong style="color:#00e5ff; font-size:0.8rem; margin-bottom:5px;">DRUMS</strong>
+                <div class="track-row">
+                    <div class="track-header-col">
+                        <strong>DRUMS</strong>
+                    </div>
+                    <div class="track-mixer-col">
                         ${createSliderGroup('vol-drums', 'Vol', this.settings.volumes.drums)}
                         ${createSliderGroup('pan-drums', 'Pan', this.settings.pans.drums, -1, 1, 0.1)}
                         ${createSliderGroup('filt-drums', 'Bright', this.settings.filters.drums)}
-                        </div>
-                    <div class="control-group" style="flex:1;">
-                        ${createHeader('Pattern', 'drums')}
-                        <select id="sel-drums"></select>
+                        <div class="slider-group"></div> 
                     </div>
+                    <div class="track-sound-col" style="visibility:hidden; flex: 0; min-width:0; max-width:0;"></div>
+                    <div class="track-pattern-col" style="flex: 4; max-width: none;"> 
+                        ${createHeader('Pattern', 'drums')}
+                        <select id="sel-drums" class="full-width-select"></select>
+                    </div>
+                    <div class="track-octave-col" style="visibility:hidden; width:0;"></div>
                 </div>
 
-                <div class="seq-row">
-                    <div class="control-group" style="width:100%;">
-                        <label style="display:flex; justify-content:space-between;">
-                            Chord Progression 
-                            <div>
-                                <button id="btn-delete-prog" class="btn-delete-custom" style="display:none;">DEL</button>
-                                <button class="btn-new" data-type="progression">+ NEW</button>
-                            </div>
-                        </label>
-                        <select id="sel-progression"></select>
+                <div class="track-row" style="background: transparent; border: 1px solid #00e5ff33;">
+                    <div class="track-header-col">
+                        <strong style="color:#00e5ff;">PROGRESSION</strong>
+                    </div>
+                    <div class="track-pattern-col" style="flex: 1; max-width: none;">
+                        ${createHeader('&nbsp;', 'progression')}
+                        <select id="sel-progression" class="full-width-select"></select>
                     </div>
                 </div>
 
@@ -235,6 +387,10 @@ export class Sequencer {
                 </div>
             </div>
         `;
+        
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+        this.container.appendChild(wrapper);
 
         this.populateDropdowns();
         this.refreshPresetList();
@@ -248,16 +404,26 @@ export class Sequencer {
             this.container.querySelector('#bpm-val').textContent = this.bpm;
         });
 
+        // + NEW Buttons
         this.container.querySelectorAll('.btn-new').forEach(btn => {
             if(btn.id === 'btn-save-preset') return;
             btn.addEventListener('click', (e) => {
                 const type = e.target.dataset.type;
-                if(type === 'progression') this.openProgressionModal();
-                else this.openPatternEditor(type);
+                if(type === 'progression') this.openProgressionModal(false);
+                else this.openPatternEditor(type, false);
             });
         });
 
-        const btnDelProg = this.container.querySelector('#btn-delete-prog');
+        // EDIT Buttons
+        this.container.querySelectorAll('.btn-edit-pat').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const type = e.target.dataset.type;
+                if(type === 'progression') this.openProgressionModal(true);
+                else this.openPatternEditor(type, true);
+            });
+        });
+
+        const btnDelProg = this.container.querySelector('#btn-del-progression');
         if(btnDelProg) {
             btnDelProg.addEventListener('click', () => this.deleteCurrentProgression());
         }
@@ -348,7 +514,6 @@ export class Sequencer {
         this.container.querySelector('#sel-metronome-sub').addEventListener('change', (e) => this.settings.metronomeSubdivision = parseInt(e.target.value));
     }
 
-    // ... (Populate/Delete/Modals methods - standard)
     populateDropdowns() {
         const populate = (id, lib) => { const sel = this.container.querySelector(id); sel.innerHTML = ''; Object.keys(lib).forEach(k => sel.add(new Option(k, k))); };
         const insts = Object.keys(INSTRUMENTS);
@@ -376,8 +541,17 @@ export class Sequencer {
         this.updatePatternDeleteVisibility('samples', this.state.samplesName);
         this.updatePatternDeleteVisibility('drums', this.state.drumName);
     }
-    updateDeleteButtonVisibility(name) { const btn = this.container.querySelector('#btn-delete-prog'); btn.style.display = this.customData.progressions[name] ? 'inline-block' : 'none'; }
-    updatePatternDeleteVisibility(type, name) { const btn = this.container.querySelector(`#btn-del-${type}`); if(btn) btn.style.display = (this.customData[type] && this.customData[type][name]) ? 'inline-block' : 'none'; }
+
+    updateDeleteButtonVisibility(name) { 
+        const btn = this.container.querySelector('#btn-del-progression'); 
+        if (btn) btn.style.display = this.customData.progressions[name] ? 'inline-block' : 'none'; 
+    }
+
+    updatePatternDeleteVisibility(type, name) { 
+        const btn = this.container.querySelector(`#btn-del-${type}`); 
+        if (btn) btn.style.display = (this.customData[type] && this.customData[type][name]) ? 'inline-block' : 'none'; 
+    }
+
     deleteCustomPattern(type) {
         let name;
         if(type==='rhythm') name=this.state.rhythmName; else if(type==='bass') name=this.state.bassName; else if(type==='lead') name=this.state.leadName; else if(type==='samples') name=this.state.samplesName; else if(type==='drums') name=this.state.drumName;
@@ -388,8 +562,9 @@ export class Sequencer {
             this.populateDropdowns();
         }
     }
+    
     injectModals() {
-        const modalHtml = `<div id="prog-modal" class="modal-overlay"><div class="modal-content" style="max-width:500px;"><h3 class="modal-title">Edit Progression</h3><input type="text" id="new-prog-name" placeholder="Name" style="width:100%; margin-bottom:10px; padding:5px;"><div id="chord-selectors-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:15px;"></div><button id="btn-add-step" class="btn-new" style="margin-bottom:10px;">+ Step</button><div class="modal-actions"><button onclick="document.getElementById('prog-modal').style.display='none'" class="btn-cancel">Cancel</button><button id="btn-save-prog" class="btn-save">Save</button></div></div></div><div id="pattern-modal" class="modal-overlay"><div class="modal-content" style="max-width:600px;"><h3 class="modal-title" id="pat-modal-title">Edit Pattern</h3><input type="text" id="new-pat-name" placeholder="Pattern Name" style="width:100%; margin-bottom:15px; padding:8px; background:#222; border:1px solid #555; color:white;"><div id="pattern-editor-grid" class="pattern-editor-container"></div><div class="modal-actions"><div style="display:flex; gap:10px;"><button id="btn-preview-pat" class="btn-new" style="background:#444; border:1px solid #666; font-size:0.8rem; padding:8px 12px;">▶ Preview</button><button onclick="document.getElementById('pattern-modal').style.display='none'" class="btn-cancel">Cancel</button></div><button id="btn-save-pat" class="btn-save">Save Pattern</button></div></div></div>`;
+        const modalHtml = `<div id="prog-modal" class="modal-overlay"><div class="modal-content" style="max-width:500px;"><h3 class="modal-title">Edit Progression</h3><input type="text" id="new-prog-name" placeholder="Name" style="width:100%; margin-bottom:10px; padding:5px; background:#222; border:1px solid #555; color:white;"><div id="chord-selectors-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:15px;"></div><button id="btn-add-step" class="btn-new" style="margin-bottom:10px;">+ Step</button><div class="modal-actions"><button onclick="document.getElementById('prog-modal').style.display='none'" class="btn-cancel">Cancel</button><button id="btn-save-prog" class="btn-save">Save</button></div></div></div><div id="pattern-modal" class="modal-overlay"><div class="modal-content" style="max-width:600px;"><h3 class="modal-title" id="pat-modal-title">Edit Pattern</h3><input type="text" id="new-pat-name" placeholder="Pattern Name" style="width:100%; margin-bottom:15px; padding:8px; background:#222; border:1px solid #555; color:white;"><div id="pattern-editor-grid" class="pattern-editor-container"></div><div class="modal-actions"><div style="display:flex; gap:10px;"><button id="btn-preview-pat" class="btn-new" style="background:#444; border:1px solid #666; font-size:0.8rem; padding:8px 12px;">▶ Preview</button><button onclick="document.getElementById('pattern-modal').style.display='none'" class="btn-cancel">Cancel</button></div><button id="btn-save-pat" class="btn-save">Save Pattern</button></div></div></div>`;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         document.getElementById('btn-add-step').addEventListener('click', () => this.addProgStep());
         document.getElementById('btn-save-prog').addEventListener('click', () => this.saveCustomProgression());
@@ -397,21 +572,46 @@ export class Sequencer {
         document.getElementById('btn-preview-pat').addEventListener('click', () => this.togglePatternPreview());
     }
     
-    openPatternEditor(type) {
-        const modal = document.getElementById('pattern-modal'); const grid = document.getElementById('pattern-editor-grid'); const title = document.getElementById('pat-modal-title'); const nameInput = document.getElementById('new-pat-name');
-        modal.style.display = 'flex'; title.textContent = `Edit ${type.toUpperCase()} Pattern`; title.dataset.type = type; nameInput.value = ''; grid.innerHTML = '';
+    openPatternEditor(type, isEdit = false) {
+        const modal = document.getElementById('pattern-modal'); 
+        const grid = document.getElementById('pattern-editor-grid'); 
+        const title = document.getElementById('pat-modal-title'); 
+        const nameInput = document.getElementById('new-pat-name');
+
+        let currentName = '';
+        let currentData = null;
+
+        if (isEdit) {
+            if (type === 'drums') currentName = this.state.drumName;
+            else if (type === 'rhythm') currentName = this.state.rhythmName;
+            else if (type === 'bass') currentName = this.state.bassName;
+            else if (type === 'lead') currentName = this.state.leadName;
+            else if (type === 'samples') currentName = this.state.samplesName;
+
+            currentData = this.libraries[type][currentName];
+        }
+
+        modal.style.display = 'flex'; 
+        title.textContent = (isEdit ? 'Edit ' : 'New ') + `${type.toUpperCase()} Pattern`; 
+        title.dataset.type = type; 
+        nameInput.value = isEdit ? currentName : ''; 
+        grid.innerHTML = '';
+        
         if(this.isPlaying) this.togglePlay();
-        if (type === 'drums') this.renderDrumGrid(grid); 
-        else if (type === 'rhythm') this.renderToggleGrid(grid, 'Strum'); 
-        else this.renderCycleGrid(grid, SCALE_OPTIONS); 
+
+        if (type === 'drums') this.renderDrumGrid(grid, currentData); 
+        else if (type === 'rhythm') this.renderToggleGrid(grid, 'Strum', currentData); 
+        else this.renderCycleGrid(grid, SCALE_OPTIONS, currentData); 
     }
 
     closeModal() { document.getElementById('pattern-modal').style.display = 'none'; document.getElementById('prog-modal').style.display = 'none'; if(this.isPreviewing) this.togglePatternPreview(); }
+    
     togglePatternPreview() {
         this.isPreviewing = !this.isPreviewing; const btn = document.getElementById('btn-preview-pat');
         if(this.isPreviewing) { if (ctx.state === 'suspended') ctx.resume(); this.previewStep = 0; this.nextNoteTime = ctx.currentTime; btn.textContent = "⏹ Stop"; btn.style.background = "#ff0055"; this.previewScheduler(); } 
         else { clearTimeout(this.timerID); btn.textContent = "▶ Preview"; btn.style.background = "#444"; stopAllSounds(); document.querySelectorAll('.step-cell').forEach(c => c.style.borderColor = "#444"); }
     }
+    
     previewScheduler() {
         if(!this.isPreviewing) return;
         if (this.nextNoteTime < ctx.currentTime - 0.2) this.nextNoteTime = ctx.currentTime;
@@ -461,7 +661,7 @@ export class Sequencer {
         }
     }
 
-    renderDrumGrid(container) { 
+    renderDrumGrid(container, initData = null) { 
         ['kick', 'snare', 'hihat', 'tom', 'crash'].forEach(part => { 
             const row = document.createElement('div'); 
             row.className = 'pattern-row'; 
@@ -471,7 +671,13 @@ export class Sequencer {
                 cell.className = 'step-cell'; 
                 cell.dataset.part = part; 
                 cell.dataset.step = i; 
-                cell.dataset.val = 0; 
+                
+                let val = 0;
+                if(initData && initData[part] && initData[part][i]) val = 1;
+
+                cell.dataset.val = val; 
+                if(val === 1) cell.classList.add('active-drum');
+
                 cell.addEventListener('click', () => { 
                     const newVal = cell.dataset.val == 1 ? 0 : 1; 
                     cell.dataset.val = newVal; 
@@ -483,8 +689,65 @@ export class Sequencer {
         }); 
     }
     
-    renderToggleGrid(container, label) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">${label}</div>`; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.dataset.step = i; cell.dataset.val = 0; cell.addEventListener('click', () => { const newVal = cell.dataset.val == 1 ? 0 : 1; cell.dataset.val = newVal; cell.classList.toggle('active-note', newVal == 1); }); row.appendChild(cell); } container.appendChild(row); }
-    renderCycleGrid(container, options) { const row = document.createElement('div'); row.className = 'pattern-row'; row.innerHTML = `<div class="row-label">Note</div>`; const cycle = options; for(let i=0; i<16; i++) { const cell = document.createElement('div'); cell.className = 'step-cell'; cell.textContent = '-'; cell.dataset.idx = 0; cell.dataset.step = i; cell.addEventListener('click', () => { let idx = parseInt(cell.dataset.idx); idx = (idx + 1) % cycle.length; cell.dataset.idx = idx; const val = cycle[idx]; cell.textContent = val || '-'; cell.classList.toggle('active-note', val !== null); }); row.appendChild(cell); } container.appendChild(row); }
+    renderToggleGrid(container, label, initData = null) { 
+        const row = document.createElement('div'); 
+        row.className = 'pattern-row'; 
+        row.innerHTML = `<div class="row-label">${label}</div>`; 
+        for(let i=0; i<16; i++) { 
+            const cell = document.createElement('div'); 
+            cell.className = 'step-cell'; 
+            cell.dataset.step = i; 
+            
+            let val = 0;
+            if (initData && initData[i]) val = 1;
+
+            cell.dataset.val = val; 
+            if(val === 1) cell.classList.add('active-note');
+
+            cell.addEventListener('click', () => { 
+                const newVal = cell.dataset.val == 1 ? 0 : 1; 
+                cell.dataset.val = newVal; 
+                cell.classList.toggle('active-note', newVal == 1); 
+            }); 
+            row.appendChild(cell); 
+        } 
+        container.appendChild(row); 
+    }
+    
+    renderCycleGrid(container, options, initData = null) { 
+        const row = document.createElement('div'); 
+        row.className = 'pattern-row'; 
+        row.innerHTML = `<div class="row-label">Note</div>`; 
+        const cycle = options; 
+        for(let i=0; i<16; i++) { 
+            const cell = document.createElement('div'); 
+            cell.className = 'step-cell'; 
+            
+            let val = null;
+            let idx = 0;
+            if (initData && initData[i] !== undefined) {
+                val = initData[i];
+                idx = cycle.indexOf(val);
+                if (idx === -1) idx = 0;
+            }
+
+            cell.textContent = val || '-'; 
+            cell.dataset.idx = idx; 
+            cell.dataset.step = i; 
+            if(val !== null) cell.classList.add('active-note');
+
+            cell.addEventListener('click', () => { 
+                let curIdx = parseInt(cell.dataset.idx); 
+                curIdx = (curIdx + 1) % cycle.length; 
+                cell.dataset.idx = curIdx; 
+                const v = cycle[curIdx]; 
+                cell.textContent = v || '-'; 
+                cell.classList.toggle('active-note', v !== null); 
+            }); 
+            row.appendChild(cell); 
+        } 
+        container.appendChild(row); 
+    }
     
     saveCustomPattern() { 
         const modal = document.getElementById('pattern-modal'); 
@@ -528,9 +791,30 @@ export class Sequencer {
         modal.style.display = 'none'; 
     }
 
-    openProgressionModal() { document.getElementById('prog-modal').style.display = 'flex'; document.getElementById('new-prog-name').value = ''; document.getElementById('chord-selectors-container').innerHTML = ''; for(let i=0; i<4; i++) this.addProgStep(); }
+    openProgressionModal(isEdit = false) { 
+        const modal = document.getElementById('prog-modal');
+        const nameInput = document.getElementById('new-prog-name');
+        const cont = document.getElementById('chord-selectors-container');
+        const title = document.querySelector('#prog-modal .modal-title');
+        
+        modal.style.display = 'flex'; 
+        cont.innerHTML = ''; 
+        if (title) title.textContent = isEdit ? "Edit Progression" : "New Progression";
+
+        if (isEdit) {
+            const currentName = this.state.progressionName;
+            nameInput.value = currentName;
+            const progData = this.libraries.progression[currentName] || [0,0,0,0];
+            progData.forEach(chordIdx => {
+                this.addProgStep(chordIdx);
+            });
+        } else {
+            nameInput.value = ''; 
+            for(let i=0; i<4; i++) this.addProgStep(); 
+        }
+    }
     
-    addProgStep() { 
+    addProgStep(defaultVal = 0) { 
         const cont = document.getElementById('chord-selectors-container'); 
         const sel = document.createElement('select'); 
         sel.className = 'prog-step-select'; 
@@ -538,7 +822,11 @@ export class Sequencer {
         sel.style.margin='2px'; 
         sel.style.fontSize='0.8rem';
         
-        ROMAN_NUMERALS.forEach((r, i) => sel.add(new Option(r, i))); 
+        ROMAN_NUMERALS.forEach((r, i) => {
+            const opt = new Option(r, i);
+            if (i === defaultVal) opt.selected = true;
+            sel.add(opt);
+        }); 
         cont.appendChild(sel); 
     }
     
@@ -546,11 +834,28 @@ export class Sequencer {
     deleteCurrentProgression() { if(confirm(`Delete ${this.state.progressionName}?`)) { delete this.customData.progressions[this.state.progressionName]; delete this.libraries.progression[this.state.progressionName]; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); } }
     
     savePreset() { 
-        const name = prompt("Preset Name:", "My Track"); 
-        if(!name) return; 
+        const sel = this.container.querySelector('#sel-presets');
+        const currentSelection = sel.value;
+        let name = "";
+
+        if (currentSelection) {
+            const isOverwrite = confirm(`Do you want to update the existing block: "${currentSelection}"?\n\n(Click OK to Update, or Cancel to save as a new block)`);
+            
+            if (isOverwrite) {
+                name = currentSelection;
+            } else {
+                name = prompt("Save as new block name:", `${currentSelection} - Copy`);
+                if (!name) return; 
+            }
+        } else {
+            name = prompt("Block Name:", "My Track"); 
+            if(!name) return; 
+        }
+
         const ks = this.getScaleData(); 
         const looperSettings = this.getLooperData ? this.getLooperData() : null;
         const preset = { name, bpm: this.bpm, key: ks.key, scale: ks.scale, settings: this.settings, state: this.state, looper: looperSettings }; 
+        
         this.savedPresets[name] = preset; 
         localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); 
         this.refreshPresetList(); 
@@ -558,7 +863,6 @@ export class Sequencer {
         this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; 
     }
     
-    // ... (rest of methods: loadPreset, refreshPresetList, deletePreset, resetProgressionIndex, togglePlay, scheduler, nextNote)
     loadPreset(name) { 
         const p = this.savedPresets[name]; if(!p) return; 
         this.bpm = p.bpm; this.settings = p.settings; 
@@ -686,7 +990,7 @@ export class Sequencer {
 
             if (this.onLeadStep) {
                 const leadPat = this.libraries.lead[this.state.leadName];
-                let visualMidi = null; // Changed from visualNote
+                let visualMidi = null; 
                 const chords = getAllChords(this.getScaleData().key, this.getScaleData().scale);
                 const chord = chords[prog[this.settings.progressionIndex]];
                 
@@ -711,23 +1015,19 @@ export class Sequencer {
                         
                         const noteIndex = (rootIndex + interval) % fullScale.length;
                         
-                        // Calculate specific MIDI for visuals
                         const SHARPS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']; 
                         const noteName = fullScale[noteIndex];
                         const ni = SHARPS.indexOf(noteName);
                         
-                        // Calculate Scale Wrap Octave logic (same as audio engine)
-                        let base = 4 + leadOct; // Base C4
+                        let base = 4 + leadOct;
                         if (noteIndex < rootIndex) base += 1;
                         if (isOctave) base += 1;
                         
-                        // Handle Drop logic
                         if (leadDrop) {
                             const ki = SHARPS.indexOf(this.getScaleData().key);
                             if (ni > ki) base--;
                         }
 
-                        // Final MIDI = (Octave + 1) * 12 + NoteIndex
                         visualMidi = (base + 1) * 12 + ni;
                     }
                 }

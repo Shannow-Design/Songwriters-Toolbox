@@ -1,4 +1,6 @@
 // modules/songbuilder.js
+import { setTrackVolume } from './audio.js';
+
 export class SongBuilder {
     constructor(containerId, sequencer) {
         this.container = document.getElementById(containerId);
@@ -9,15 +11,17 @@ export class SongBuilder {
         this.savedSongs = JSON.parse(localStorage.getItem('songbuilder_saved_songs')) || {};
         
         // Playback State
-        this.isActive = false; // Changed from isPlaying to match original intent but keep consistent naming
-        this.isPlaying = false; // Added this property because app.js checks for it
+        this.isActive = false; 
+        this.isPlaying = false; 
         this.currentBlockIndex = 0;
         this.currentRepeatCount = 0;
+        
+        // Automated Mixing
+        this.fadeMultiplier = 1.0; 
 
         this.render();
     }
 
-    // --- FIX: Added togglePlay method for Global Transport ---
     togglePlay() {
         if (this.isPlaying) {
             this.stopSong();
@@ -29,17 +33,58 @@ export class SongBuilder {
     onStep(stepNumber) {
         if (!this.isPlaying || this.playlist.length === 0) return;
 
+        const currentBlock = this.playlist[this.currentBlockIndex];
+        
+        if (currentBlock) {
+            // --- AUTOMATED FADE LOGIC ---
+            const totalSteps = currentBlock.repeats * 16;
+            const currentAbsoluteStep = (this.currentRepeatCount * 16) + stepNumber;
+            
+            // Calculate exactly how far through the block we are (0.0 to 1.0)
+            const progress = currentAbsoluteStep / Math.max(1, totalSteps - 1);
+            const currentFade = currentBlock.fade || 'none';
+            
+            if (currentFade === 'in') {
+                this.fadeMultiplier = progress; // 0.0 to 1.0
+            } else if (currentFade === 'out') {
+                this.fadeMultiplier = 1.0 - progress; // 1.0 to 0.0
+            } else {
+                this.fadeMultiplier = 1.0;
+            }
+
+            this.applyFadeVolumes();
+        }
+
         // Check at the END of the bar (Step 15) to prep for next bar
         if (stepNumber === 15) {
             this.handleBarEnd();
         }
+    }
+    
+    applyFadeVolumes() {
+        // Multiply the user's base mixer settings by our calculated fade curve
+        // Now includes looper and vocal tracks!
+        const tracks = ['chords', 'bass', 'lead', 'samples', 'drums', 'looper', 'vocal'];
+        
+        tracks.forEach(t => {
+            // Sequencer tracks have their own saved volumes.
+            // Looper and Vocal master buses default to 0.8 in the audio engine.
+            let baseVol = this.sequencer.settings.volumes[t];
+            if (baseVol === undefined) baseVol = 0.8; 
+            
+            setTrackVolume(t, baseVol * this.fadeMultiplier);
+        });
+    }
+
+    resetVolumes() {
+        this.fadeMultiplier = 1.0;
+        this.applyFadeVolumes();
     }
 
     handleBarEnd() {
         this.currentRepeatCount++;
         const currentBlock = this.playlist[this.currentBlockIndex];
         
-        // Safety check if block was deleted while playing
         if (!currentBlock) {
             this.stopSong();
             return;
@@ -61,12 +106,10 @@ export class SongBuilder {
             this.highlightActiveBlock(nextIndex);
             
             if (this.sequencer.savedPresets[nextPresetName]) {
-                console.log(`SongBuilder: Switching to ${nextPresetName}`);
                 this.sequencer.loadPreset(nextPresetName);
                 this.sequencer.resetProgressionIndex(); 
             }
         } else {
-            console.log("SongBuilder: Song Finished");
             this.stopSong();
         }
     }
@@ -74,9 +117,10 @@ export class SongBuilder {
     playSong() {
         if (this.playlist.length === 0) return alert("Add some blocks to your song first!");
         
-        this.isPlaying = true; // Set flag
+        this.isPlaying = true; 
         this.currentBlockIndex = 0;
         this.currentRepeatCount = 0;
+        this.fadeMultiplier = 1.0;
         
         const firstPreset = this.playlist[0].presetName;
         if (this.sequencer.savedPresets[firstPreset]) {
@@ -86,7 +130,6 @@ export class SongBuilder {
 
         this.highlightActiveBlock(0);
         
-        // Start the sequencer engine if not running
         if (!this.sequencer.isPlaying) {
             this.sequencer.togglePlay();
         }
@@ -95,12 +138,13 @@ export class SongBuilder {
     }
 
     stopSong() {
-        this.isPlaying = false; // Reset flag
+        this.isPlaying = false; 
         this.currentBlockIndex = 0;
         this.currentRepeatCount = 0;
         this.clearHighlights();
         
-        // Stop sequencer if running
+        this.resetVolumes(); // Return all faders (including looper) to normal
+
         if (this.sequencer.isPlaying) {
             this.sequencer.togglePlay(); 
         }
@@ -110,22 +154,22 @@ export class SongBuilder {
     // --- DATA PERSISTENCE ---
 
     saveSong() {
-        const name = prompt("Enter a name for this song:");
+        const currentSelection = this.container.querySelector('#sel-song-load').value;
+        const defaultName = currentSelection ? currentSelection : "My Song";
+        
+        const name = prompt("Enter a name for this song:", defaultName);
         if (!name) return;
 
         this.savedSongs[name] = this.playlist;
         localStorage.setItem('songbuilder_saved_songs', JSON.stringify(this.savedSongs));
         this.refreshSongList();
         
-        // Select the newly saved song
         this.container.querySelector('#sel-song-load').value = name;
         this.toggleDeleteButton();
     }
 
     loadSong(name) {
         if (!name || !this.savedSongs[name]) return;
-        
-        // Deep copy to prevent reference issues
         this.playlist = JSON.parse(JSON.stringify(this.savedSongs[name]));
         this.renderList();
         this.toggleDeleteButton();
@@ -155,7 +199,6 @@ export class SongBuilder {
             sel.appendChild(opt);
         });
 
-        // Restore selection if it still exists
         if (this.savedSongs[currentVal]) sel.value = currentVal;
     }
 
@@ -173,7 +216,8 @@ export class SongBuilder {
 
         this.playlist.push({
             presetName: presets[0],
-            repeats: 4 
+            repeats: 4,
+            fade: 'none' // Default to no fade
         });
         this.renderList();
     }
@@ -262,35 +306,34 @@ export class SongBuilder {
             
             .song-block-row { 
                 display: flex; align-items: center; gap: 10px; background: #222; padding: 8px; border-radius: 4px; border-left: 4px solid #444; 
-                transition: all 0.2s;
+                transition: all 0.2s; flex-wrap: wrap;
             }
             .song-block-row.active-playing-block { border-left-color: var(--primary-cyan); background: #2a2a2a; box-shadow: 0 0 10px rgba(0,229,255,0.1); }
 
             .block-index { font-weight: bold; color: #555; width: 20px; text-align: center; }
             
-            .block-select { flex: 1; background: #111; color: #fff; border: 1px solid #444; padding: 5px; border-radius: 4px; }
+            .block-select { flex: 1; background: #111; color: #fff; border: 1px solid #444; padding: 5px; border-radius: 4px; min-width: 120px; }
             
             .block-repeats-group { display: flex; align-items: center; gap: 5px; background: #111; padding: 2px 8px; border-radius: 15px; border: 1px solid #333; }
             .block-repeats-group label { font-size: 0.7rem; color: #888; }
             .block-repeats-input { width: 40px; background: transparent; border: none; color: var(--primary-cyan); font-weight: bold; text-align: center; }
 
-            .block-actions { display: flex; gap: 2px; }
+            .block-fade-select { background: #111; color: #fff; border: 1px solid #444; padding: 4px; border-radius: 4px; font-size: 0.75rem; }
+
+            .block-actions { display: flex; gap: 2px; margin-left: auto; }
             .btn-icon { background: none; border: none; color: #666; cursor: pointer; font-size: 0.9rem; padding: 2px 5px; }
             .btn-icon:hover { color: #fff; }
             .btn-icon.del:hover { color: #ff5555; }
         `;
         this.container.appendChild(style);
 
-        // Bind Events
         this.container.querySelector('#btn-add-block').addEventListener('click', () => this.addBlock());
         this.container.querySelector('#btn-song-play').addEventListener('click', () => this.togglePlay());
         
-        // Load/Save Events
         this.container.querySelector('#btn-song-save').addEventListener('click', () => this.saveSong());
         this.container.querySelector('#btn-song-del').addEventListener('click', () => this.deleteSong());
         this.container.querySelector('#sel-song-load').addEventListener('change', (e) => this.loadSong(e.target.value));
 
-        // Initial Populate
         this.refreshSongList();
     }
 
@@ -329,6 +372,19 @@ export class SongBuilder {
             repGroup.innerHTML = `<label>x</label><input type="number" class="block-repeats-input" value="${block.repeats}" min="1" max="64"> <label>BARS</label>`;
             repGroup.querySelector('input').addEventListener('change', (e) => this.updateBlockData(i, 'repeats', parseInt(e.target.value)));
 
+            // Fade Toggle Dropdown
+            const currentFade = block.fade || 'none';
+            const fadeGroup = document.createElement('div');
+            fadeGroup.className = 'block-fade-group';
+            fadeGroup.innerHTML = `
+                <select class="block-fade-select" title="Volume Fade">
+                    <option value="none" ${currentFade === 'none' ? 'selected' : ''}>No Fade</option>
+                    <option value="in" ${currentFade === 'in' ? 'selected' : ''}>Fade In</option>
+                    <option value="out" ${currentFade === 'out' ? 'selected' : ''}>Fade Out</option>
+                </select>
+            `;
+            fadeGroup.querySelector('select').addEventListener('change', (e) => this.updateBlockData(i, 'fade', e.target.value));
+
             const actions = document.createElement('div');
             actions.className = 'block-actions';
             actions.innerHTML = `
@@ -344,6 +400,7 @@ export class SongBuilder {
             row.appendChild(idx);
             row.appendChild(sel);
             row.appendChild(repGroup);
+            row.appendChild(fadeGroup); 
             row.appendChild(actions);
             list.appendChild(row);
         });

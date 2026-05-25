@@ -356,7 +356,7 @@ function init() {
         () => { looper.stopAll(); },
         // Get Looper Data
         () => { return looper.getSettings(); },
-        // NEW: Lead Visual Callback
+        // Lead Visual Callback
         (midiNumber) => {
             if (keyboard) keyboard.highlightLeadNote(midiNumber);
         }
@@ -506,6 +506,7 @@ function init() {
     addSpanToggle('wrapper-keyfinder');
     addSpanToggle('wrapper-keyboard'); 
     addSpanToggle('wrapper-extra-chords');
+    addSpanToggle('wrapper-sequencer'); 
 
     setTimeout(() => {
         const vocalHeader = document.querySelector('.vocal-header');
@@ -528,12 +529,31 @@ function init() {
     const btnExport = document.getElementById('btn-project-export');
     const btnImport = document.getElementById('btn-project-import');
     const inputImport = document.getElementById('input-project-import');
+    
     if(btnExport) btnExport.addEventListener('click', () => projectManager.exportProject());
+    
     if(btnImport && inputImport) { 
         btnImport.addEventListener('click', () => inputImport.click()); 
         inputImport.addEventListener('change', (e) => { 
             if(e.target.files.length > 0) projectManager.importProject(e.target.files[0]); 
         }); 
+    }
+
+    // NEW: Inject the New Project Button dynamically right before the Import button
+    if (btnExport && btnExport.parentNode && !document.getElementById('btn-project-new')) {
+        const btnNew = document.createElement('button');
+        btnNew.id = 'btn-project-new';
+        btnNew.className = btnExport.className; // Inherit Tailwind CSS classes from Export button
+        btnNew.innerHTML = "📄 NEW PROJECT";
+        
+        // Add a subtle red tint so it looks like a reset/danger button
+        btnNew.style.backgroundColor = "rgba(255, 0, 85, 0.15)";
+        btnNew.style.color = "#ff4466";
+        btnNew.style.borderColor = "#ff0055";
+        
+        btnExport.parentNode.insertBefore(btnNew, btnImport);
+        
+        btnNew.addEventListener('click', () => projectManager.newProject());
     }
 
     document.getElementById('btn-global-seq').addEventListener('click', () => { if(songBuilder && songBuilder.isPlaying) songBuilder.togglePlay(); if(sequencer) sequencer.togglePlay(); });

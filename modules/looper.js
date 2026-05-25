@@ -7,7 +7,7 @@ export class Looper {
         this.container = document.getElementById(containerId);
         
         // 8 Banks
-        this.banks = Array(8).fill(0).map((_, i) => {
+        this.banks = Array(16).fill(0).map((_, i) => {
             const gainNode = ctx.createGain();
             const pannerNode = ctx.createStereoPanner();
             
@@ -114,7 +114,7 @@ export class Looper {
     }
 
     async loadLoops() {
-        for(let i=0; i<8; i++) {
+        for(let i=0; i<16; i++) {
             const entry = await SampleStorage.loadSample(i, ctx, 'loop');
             if (entry && entry.buffer) {
                 const faded = applyFades(entry.buffer);

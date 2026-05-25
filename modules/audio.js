@@ -24,8 +24,8 @@ masterAnalyser.smoothingTimeConstant = 0.85;
 const DRUM_MAP = { 'kick': 0, 'snare': 1, 'hihat': 2, 'tom': 3, 'crash': 4 };
 
 // --- ROUTING BUSSES ---
-const recordingDest = ctx.createMediaStreamDestination(); // For Bouncing (Internal Mix)
-const micRecordingDest = ctx.createMediaStreamDestination(); // For Overdubbing (Mic Only)
+const recordingDest = ctx.createMediaStreamDestination(); 
+const micRecordingDest = ctx.createMediaStreamDestination(); 
 
 const masterCompressor = ctx.createDynamicsCompressor();
 masterCompressor.threshold.setValueAtTime(-8, ctx.currentTime);
@@ -60,7 +60,7 @@ reverbGain.connect(masterGain);
 
 masterGain.connect(masterAnalyser);
 masterAnalyser.connect(ctx.destination);
-masterGain.connect(recordingDest); // Internal Music goes to 'recordingDest'
+// FIXED: We no longer permanently connect masterGain to recordingDest here!
 
 // --- BASE64 AUDIO HELPERS ---
 export async function audioBufferToBase64(buffer) {
@@ -162,7 +162,6 @@ export const Microphone = {
     connectToStudio() {
         if (!this.gainNode) return;
         this.disconnectFromStudio();
-        // CONNECT TO MIC DESTINATION ONLY (NOT MASTER MIX)
         if (this.useFx && this.fxChain) { 
             this.gainNode.connect(this.fxChain.input); 
             this.studioConnection = this.fxChain.output.connect(micRecordingDest); 
@@ -183,14 +182,13 @@ export const Microphone = {
 };
 
 export function startStudioRecording(sourceType = 'mix') {
-    // Select the correct stream based on mode
     let targetStream;
-    
     if (sourceType === 'mic') {
         Microphone.connectToStudio();
         targetStream = micRecordingDest.stream;
     } else {
-        // Bounce mode (mix)
+        // FIXED: Dynamically connect the master mix to the recorder ONLY when recording starts!
+        masterGain.connect(recordingDest);
         targetStream = recordingDest.stream;
     }
 
@@ -200,7 +198,12 @@ export function startStudioRecording(sourceType = 'mix') {
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     const stopPromise = new Promise(resolve => {
         recorder.onstop = () => { 
-            if(sourceType === 'mic') Microphone.disconnectFromStudio(); 
+            if(sourceType === 'mic') {
+                Microphone.disconnectFromStudio(); 
+            } else {
+                // FIXED: Disconnect the recorder instantly so standard playback remains Stereo!
+                masterGain.disconnect(recordingDest);
+            }
             const blob = new Blob(chunks, { type: 'audio/webm' }); 
             resolve(blob); 
         };
@@ -220,6 +223,12 @@ tracks.forEach(name => {
     const volume = ctx.createGain();
     const reverbSend = ctx.createGain();
     
+    // Explicitly enforce Stereo for every track
+    panner.channelCountMode = 'explicit';
+    panner.channelCount = 2;
+    volume.channelCountMode = 'explicit';
+    volume.channelCount = 2;
+
     input.gain.value = 1.0; 
     filter.frequency.value = 20000; 
     panner.pan.value = 0; 
@@ -250,8 +259,25 @@ export function getTrackInput(name) { return mixer[name] ? mixer[name].input : m
 
 // --- SAMPLER FUNCTIONS ---
 export async function loadSavedSamples() {
-    for(let i=0; i<8; i++) { const entry = await SampleStorage.loadSample(i, ctx, 'slot'); if(entry && entry.buffer) SAMPLE_BANKS[i] = entry; }
-    for(let i=0; i<5; i++) { const entry = await SampleStorage.loadSample(i, ctx, 'drum'); if(entry && entry.buffer) DRUM_SAMPLES[i] = entry; }
+    for(let i=0; i<8; i++) { 
+        const entry = await SampleStorage.loadSample(i, ctx, 'slot'); 
+        if(entry && entry.buffer) {
+            const existingPitchShift = SAMPLE_BANKS[i] && SAMPLE_BANKS[i].pitchShift !== undefined ? SAMPLE_BANKS[i].pitchShift : true;
+            SAMPLE_BANKS[i] = { ...entry, pitchShift: existingPitchShift }; 
+        }
+    }
+    for(let i=0; i<5; i++) { 
+        const entry = await SampleStorage.loadSample(i, ctx, 'drum'); 
+        if(entry && entry.buffer) DRUM_SAMPLES[i] = entry; 
+    }
+}
+
+export function setSamplePitchShift(index, enabled) {
+    if (!SAMPLE_BANKS[index]) {
+        SAMPLE_BANKS[index] = { name: `Slot ${index + 1}`, buffer: null, pitchShift: enabled };
+    } else {
+        SAMPLE_BANKS[index].pitchShift = enabled;
+    }
 }
 
 export async function unloadDrumSample(index) {
@@ -329,25 +355,38 @@ export function shiftBuffer(buffer, shiftMs) {
 
 export function playSample(slotIndex, time, freq = null, track = 'lead', bufferOverride = null, customDest = null, volume = 1.0) {
     let buffer;
-    if (bufferOverride) { buffer = bufferOverride; } 
+    let isPitchShifted = true; 
+
+    if (bufferOverride) { 
+        buffer = bufferOverride; 
+    } 
     else {
-        const entry = SAMPLE_BANKS[slotIndex]; if (!entry || !entry.buffer) return null;
+        const entry = SAMPLE_BANKS[slotIndex]; 
+        if (!entry || !entry.buffer) return null;
         buffer = entry.buffer;
+        if (entry.pitchShift === false) isPitchShifted = false;
     }
+
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    if (freq) {
+    
+    if (freq && isPitchShifted) {
         let baseFreq = (track === 'bass') ? 65.41 : 130.81; 
-        let rate = freq / baseFreq; if(rate < 0.1) rate = 0.1; if(rate > 4.0) rate = 4.0;
+        let rate = freq / baseFreq; 
+        if(rate < 0.1) rate = 0.1; 
+        if(rate > 4.0) rate = 4.0;
         source.playbackRate.value = rate;
     }
+    
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0, time);
     gainNode.gain.linearRampToValueAtTime(volume, time + 0.01); 
     const dest = customDest || (mixer[track] ? mixer[track].input : mixer.lead.input);
+    
     source.connect(gainNode);
     gainNode.connect(dest);
     source.start(time);
+    
     return { osc: source, gain: gainNode, type: 'sampler' }; 
 }
 

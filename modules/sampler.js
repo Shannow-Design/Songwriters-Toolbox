@@ -1,5 +1,5 @@
 // modules/sampler.js
-import { Microphone, recordSample, autoTrimBuffer, SAMPLE_BANKS, playSample, ctx, decodeAudioFile, bufferToWav } from './audio.js';
+import { Microphone, recordSample, autoTrimBuffer, SAMPLE_BANKS, playSample, ctx, decodeAudioFile, bufferToWav, setSamplePitchShift } from './audio.js';
 import { SampleStorage } from './storage.js';
 
 export class Sampler {
@@ -28,6 +28,12 @@ export class Sampler {
                             <button class="btn-rec" data-slot="${i}">${isRec ? '■ STOP' : '● REC'}</button>
                             <button class="btn-play" data-slot="${i}">▶</button>
                         </div>
+                        
+                        <div class="pad-pitch-toggle">
+                            <input type="checkbox" id="pitch-shift-${i}" class="cb-pitch-shift" data-slot="${i}" checked>
+                            <label for="pitch-shift-${i}" title="When checked, sample changes pitch with sequencer chords">Melodic</label>
+                        </div>
+
                         <div class="pad-file-controls">
                             <input type="file" id="file-input-${i}" class="hidden-file-input" accept="audio/*">
                             <button class="btn-icon btn-load" data-slot="${i}" title="Load">📂</button>
@@ -46,11 +52,16 @@ export class Sampler {
             .btn-clear { background: transparent; border: none; color: #666; font-weight: bold; cursor: pointer; visibility: hidden; }
             .btn-clear:hover { color: #ff0055; }
             .sampler-pad.loaded .btn-clear { visibility: visible; }
-            .pad-status { font-size: 0.9rem; font-weight: bold; color: #fff; margin-bottom: 10px; height: 1.2em; }
+            .pad-status { font-size: 0.9rem; font-weight: bold; color: #fff; margin-bottom: 5px; height: 1.2em; }
             .pad-controls { display: flex; justify-content: center; gap: 8px; margin-bottom: 8px; }
             .btn-rec { width: 60px; border-radius: 4px; font-weight:bold; font-size:0.7rem; padding: 4px 0; transition: all 0.2s; }
             .sampler-pad.recording .btn-rec { background: #ff0055; color: white; border-color:white; animation: none; }
             .btn-play { width: 30px; border-radius: 4px; font-size:0.8rem; padding: 4px 0; }
+            
+            .pad-pitch-toggle { display: flex; justify-content: center; align-items: center; gap: 5px; margin-bottom: 5px; font-size: 0.65rem; color: #888; }
+            .cb-pitch-shift { accent-color: var(--primary-cyan); cursor: pointer; margin:0; }
+            .cb-pitch-shift + label { cursor: pointer; }
+
             .pad-file-controls { display: flex; justify-content: center; gap: 10px; border-top: 1px solid #333; padding-top: 5px; }
             .hidden-file-input { display: none; }
             .btn-icon { background: transparent; border: none; cursor: pointer; font-size: 1rem; opacity: 0.5; transition: opacity 0.2s; }
@@ -90,12 +101,28 @@ export class Sampler {
             });
         });
 
+        // Pitch Shift Toggle
+        this.container.querySelectorAll('.cb-pitch-shift').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const slot = parseInt(e.target.dataset.slot);
+                const isEnabled = e.target.checked;
+                
+                // Update Audio Engine
+                setSamplePitchShift(slot, isEnabled);
+                
+                // Save to Local Storage for persistence across app reloads
+                const pitchSettings = JSON.parse(localStorage.getItem('sampler_pitch_settings') || '{}');
+                pitchSettings[slot] = isEnabled;
+                localStorage.setItem('sampler_pitch_settings', JSON.stringify(pitchSettings));
+            });
+        });
+
         // Clear Button
         this.container.querySelectorAll('.btn-clear').forEach(btn => {
             btn.addEventListener('click', (e) => this.clearSample(parseInt(e.target.dataset.slot)));
         });
 
-        // Load Button (Trigger File Input) - FIXED HERE
+        // Load Button
         this.container.querySelectorAll('.btn-load').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const slot = e.target.dataset.slot;
@@ -115,7 +142,11 @@ export class Sampler {
                         const trimmed = autoTrimBuffer(buffer);
                         const name = file.name.replace(/\.[^/.]+$/, "") || `Sampler ${slot+1}`;
                         
-                        SAMPLE_BANKS[slot] = { buffer: trimmed, name: name };
+                        // Preserve pitch shift state if it was already set
+                        const cb = document.querySelector(`#pitch-shift-${slot}`);
+                        const isPitched = cb ? cb.checked : true;
+                        
+                        SAMPLE_BANKS[slot] = { buffer: trimmed, name: name, pitchShift: isPitched };
                         await SampleStorage.saveSample(slot, trimmed, name);
                         this.updateStatus();
                     } else {
@@ -166,7 +197,6 @@ export class Sampler {
         this.render(); 
 
         try {
-            // Use Central Microphone (respects gain)
             await Microphone.init();
             const stream = Microphone.stream;
             
@@ -195,15 +225,16 @@ export class Sampler {
         try {
             let buffer = await promise; 
             
-            // Note: We do NOT stop the Microphone stream here because it is global
-            
             if (buffer) {
                 buffer = autoTrimBuffer(buffer);
                 const nameInput = document.querySelector(`.pad-name-input[data-slot="${slot}"]`);
                 const name = nameInput ? nameInput.value : `Sampler ${slot+1}`;
                 
                 if (buffer) {
-                    SAMPLE_BANKS[slot] = { buffer: buffer, name: name };
+                    const cb = document.querySelector(`#pitch-shift-${slot}`);
+                    const isPitched = cb ? cb.checked : true;
+                    
+                    SAMPLE_BANKS[slot] = { buffer: buffer, name: name, pitchShift: isPitched };
                     await SampleStorage.saveSample(slot, buffer, name);
                 } else {
                     alert("Silence detected.");
@@ -221,13 +252,17 @@ export class Sampler {
 
     async clearSample(slot) {
         if(confirm(`Clear Sampler ${slot+1}?`)) {
-            SAMPLE_BANKS[slot] = null;
+            // Re-initialize the array slot while preserving the pitch shift toggle state
+            const cb = document.querySelector(`#pitch-shift-${slot}`);
+            SAMPLE_BANKS[slot] = { buffer: null, name: `Sampler ${slot+1}`, pitchShift: cb ? cb.checked : true };
             this.updateStatus();
             this.render(); 
         }
     }
 
     updateStatus() {
+        const pitchSettings = JSON.parse(localStorage.getItem('sampler_pitch_settings') || '{}');
+
         SAMPLE_BANKS.forEach((entry, i) => {
             const pad = document.getElementById(`pad-${i}`);
             if(!pad) return;
@@ -235,9 +270,21 @@ export class Sampler {
             const nameInput = pad.querySelector('.pad-name-input');
             const saveBtn = pad.querySelector('.btn-save');
             const clearBtn = pad.querySelector('.btn-clear');
+            const pitchCb = pad.querySelector('.cb-pitch-shift');
             
             if (this.recordingSlot === i) return;
 
+            // Sync Pitch Shift Checkbox
+            let isPitched = true;
+            if (entry && entry.pitchShift !== undefined) {
+                isPitched = entry.pitchShift;
+            } else if (pitchSettings[i] !== undefined) {
+                isPitched = pitchSettings[i];
+            }
+            if (pitchCb) pitchCb.checked = isPitched;
+            if (entry) entry.pitchShift = isPitched;
+
+            // Update Rest of UI
             if (entry && entry.buffer) {
                 pad.classList.add('loaded');
                 stat.textContent = `${entry.buffer.duration.toFixed(2)}s`;

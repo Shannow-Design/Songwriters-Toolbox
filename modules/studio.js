@@ -1,5 +1,5 @@
 // modules/studio.js
-import { Microphone, startStudioRecording, ctx, bufferToWav, playDrum } from './audio.js';
+import { Microphone, startStudioRecording, ctx, bufferToWav, playDrum, shiftBuffer } from './audio.js';
 
 export class Studio {
     constructor(containerId, sequencerInstance, songBuilderInstance) {
@@ -16,6 +16,9 @@ export class Studio {
         this.countdownInterval = null; 
         this.startTime = 0;
         this.isPlaying = false;
+        
+        // Recording Latency Compensation
+        this.recordLatencyMs = 50; 
         
         // Track Management
         this.tracks = []; 
@@ -69,6 +72,10 @@ export class Studio {
                     <div class="slider-compact">
                         <label>Mic Gain</label>
                         <input type="range" id="studio-mic-gain" min="0" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="slider-compact">
+                        <label>Rec Latency (<span id="studio-lat-val">${this.recordLatencyMs}</span>ms)</label>
+                        <input type="range" id="studio-latency" min="0" max="300" step="5" value="${this.recordLatencyMs}">
                     </div>
                     <div class="fx-toggle">
                         <input type="checkbox" id="cb-vocal-fx">
@@ -133,6 +140,10 @@ export class Studio {
             .track-vol-slider { width: 80px; height: 4px; accent-color: #00e5ff; }
             .track-pan-slider { width: 60px; height: 4px; accent-color: #00e5ff; }
             
+            /* Remove spinners from number input */
+            .track-nudge-input::-webkit-inner-spin-button, .track-nudge-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+            .track-nudge-input { -moz-appearance: textfield; }
+
             .btn-track-action { 
                 background: none; border: none; color: #666; cursor: pointer; font-size: 0.8rem; 
             }
@@ -151,8 +162,8 @@ export class Studio {
             }
             .btn-export:disabled { background: #333; color: #555; cursor: default; }
 
-            .input-settings { display: flex; gap: 20px; border-top: 1px solid #333; padding-top: 10px; }
-            .slider-compact { display: flex; align-items: center; gap: 5px; flex-grow: 1; }
+            .input-settings { display: flex; gap: 15px; border-top: 1px solid #333; padding-top: 10px; flex-wrap: wrap; }
+            .slider-compact { display: flex; align-items: center; gap: 5px; flex-grow: 1; min-width: 150px; }
             .slider-compact label { font-size: 0.7rem; color: #888; white-space: nowrap; }
             .slider-compact input { width: 100%; height: 4px; accent-color: #ff0055; }
             .fx-toggle { display: flex; align-items: center; gap: 5px; font-size: 0.75rem; color: #888; }
@@ -172,9 +183,14 @@ export class Studio {
         this.container.querySelector('#btn-export-mix').addEventListener('click', () => this.exportMix());
         this.container.querySelector('#studio-mic-gain').addEventListener('input', (e) => Microphone.setGain(parseFloat(e.target.value)));
         this.container.querySelector('#cb-vocal-fx').addEventListener('change', (e) => Microphone.setFxEnabled(e.target.checked));
+        
+        // NEW: Bind Latency Setting
+        this.container.querySelector('#studio-latency').addEventListener('input', (e) => {
+            this.recordLatencyMs = parseInt(e.target.value);
+            this.container.querySelector('#studio-lat-val').textContent = this.recordLatencyMs;
+        });
     }
 
-    // --- BOUNCE (INTERNAL MIX ONLY) ---
     async handleBounceButton() {
         if (this.isBouncing) {
             this.stopAll();
@@ -186,15 +202,13 @@ export class Studio {
         btn.classList.add('recording');
         this.isBouncing = true;
 
-        Microphone.disconnectFromStudio(); // Ensure Mic is OFF for bounce
+        Microphone.disconnectFromStudio(); 
 
         if (ctx.state === 'suspended') await ctx.resume();
         
-        // RECORD INTERNAL MIX ('mix')
         this.recorder = startStudioRecording('mix');
         this.startTime = Date.now();
 
-        // Start Playback
         if (this.songBuilder && this.songBuilder.playlist.length > 0) {
             if (this.songBuilder.togglePlay) this.songBuilder.playSong();
         } else if (this.sequencer) {
@@ -214,7 +228,6 @@ export class Studio {
         }, 500);
     }
 
-    // --- MICROPHONE RECORDING (VOCALS ONLY) ---
     handleRecordButton() {
         if (this.isRecording || this.isCountingDown) {
             this.stopAll(); 
@@ -260,10 +273,8 @@ export class Studio {
         const syncSource = this.container.querySelector('#sel-studio-sync').value;
 
         await Microphone.init();
-        
         if (ctx.state === 'suspended') await ctx.resume();
 
-        // RECORD MIC STREAM ('mic')
         this.recorder = startStudioRecording('mic');
         this.isRecording = true;
         this.startTime = Date.now();
@@ -271,7 +282,6 @@ export class Studio {
         btn.textContent = "■ STOP";
         btn.classList.add('recording');
 
-        // Play backing track (if synced)
         if (syncSource === 'sequencer' && this.sequencer) {
             if (!this.sequencer.isPlaying) this.sequencer.togglePlay();
         } else if (syncSource === 'songbuilder' && this.songBuilder) {
@@ -305,33 +315,36 @@ export class Studio {
         btnBounce.textContent = "⚡ BOUNCE SONG";
         btnBounce.classList.remove('recording');
         
-        if (this.sequencer && this.sequencer.isPlaying) {
-             this.sequencer.togglePlay(); 
-        }
-        if (this.songBuilder && this.songBuilder.isPlaying) {
-             this.songBuilder.stopSong();
-        }
+        if (this.sequencer && this.sequencer.isPlaying) this.sequencer.togglePlay(); 
+        if (this.songBuilder && this.songBuilder.isPlaying) this.songBuilder.stopSong();
 
         if (this.recorder) {
             const blob = await this.recorder.stop();
             const name = wasBouncing ? "Backing Track" : `Track ${this.trackCounter++}`;
-            await this.addTrackFromBlob(blob, name);
+            // If it was a Mic recording (!wasBouncing), apply the auto-latency shift
+            await this.addTrackFromBlob(blob, name, !wasBouncing);
             this.recorder = null;
         }
 
-        // Cleanup done inside startStudioRecording promise
+        Microphone.disconnectFromStudio();
     }
 
-    async addTrackFromBlob(blob, defaultName) {
+    async addTrackFromBlob(blob, defaultName, applyLatency = false) {
         const arrayBuffer = await blob.arrayBuffer();
-        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        let audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        
+        // NEW: Automatically trim the start of the buffer based on Latency setting
+        if (applyLatency && this.recordLatencyMs > 0) {
+            audioBuffer = shiftBuffer(audioBuffer, this.recordLatencyMs);
+        }
         
         const newTrack = {
             id: Date.now(),
             name: defaultName,
             buffer: audioBuffer,
             volume: 0.8,
-            pan: 0.0, // Default Pan Center
+            pan: 0.0, 
+            nudge: 0, // NEW: Manual nudge in milliseconds
             muted: false,
             blob: blob,
             _activeGain: null,
@@ -373,6 +386,11 @@ export class Studio {
                         <input type="range" class="track-pan-slider" min="-1" max="1" step="0.1" value="${track.pan}" data-id="${track.id}" title="Pan (Left/Right)">
                     </div>
 
+                    <div class="control-column">
+                        <span class="control-label" style="color:#ffaa00;">NUDGE(ms)</span>
+                        <input type="number" class="track-nudge-input" value="${track.nudge || 0}" data-id="${track.id}" step="10" style="width: 50px; font-size: 0.65rem; background: #111; color: #ffaa00; border: 1px solid #444; border-radius: 3px; text-align: center; padding: 2px;" title="Positive=Delay, Negative=Early">
+                    </div>
+
                     <button class="btn-track-action delete" data-id="${track.id}">×</button>
                 </div>
             `;
@@ -383,17 +401,18 @@ export class Studio {
             div.querySelector('.track-vol-slider').addEventListener('input', (e) => { 
                 const newVol = parseFloat(e.target.value);
                 track.volume = newVol; 
-                if (track._activeGain) {
-                    track._activeGain.gain.setTargetAtTime(newVol, ctx.currentTime, 0.05);
-                }
+                if (track._activeGain) track._activeGain.gain.setTargetAtTime(newVol, ctx.currentTime, 0.05);
             });
 
             div.querySelector('.track-pan-slider').addEventListener('input', (e) => { 
                 const newPan = parseFloat(e.target.value);
                 track.pan = newPan; 
-                if (track._activePanner) {
-                    track._activePanner.pan.setTargetAtTime(newPan, ctx.currentTime, 0.05);
-                }
+                if (track._activePanner) track._activePanner.pan.setTargetAtTime(newPan, ctx.currentTime, 0.05);
+            });
+
+            // NEW: Nudge Event
+            div.querySelector('.track-nudge-input').addEventListener('change', (e) => {
+                track.nudge = parseInt(e.target.value) || 0;
             });
 
             div.querySelector('.delete').addEventListener('click', () => { if(confirm('Delete this track?')) { this.tracks.splice(index, 1); this.renderTrackList(); this.updateExportButton(); } });
@@ -407,6 +426,8 @@ export class Studio {
 
         this.isPlaying = true;
         this.container.querySelector('#btn-studio-play').classList.add('recording'); 
+
+        const now = ctx.currentTime;
 
         this.tracks.forEach(track => {
             if (track.muted) return;
@@ -425,7 +446,18 @@ export class Studio {
             pannerNode.connect(gainNode);
             gainNode.connect(ctx.destination);
             
-            source.start(0);
+            // NEW: Handle Nudge timing calculations
+            let delayTime = 0;
+            let bufferOffset = 0;
+            
+            if (track.nudge > 0) {
+                delayTime = track.nudge / 1000;
+            } else if (track.nudge < 0) {
+                bufferOffset = Math.abs(track.nudge) / 1000;
+                if (bufferOffset >= track.buffer.duration) bufferOffset = 0; // Failsafe
+            }
+
+            source.start(now + delayTime, bufferOffset);
             this.activeSources.push(source);
             
             source.onended = () => {
@@ -469,10 +501,17 @@ export class Studio {
         btn.textContent = "⏳ RENDERING...";
         btn.disabled = true;
 
-        let maxDuration = 0;
-        this.tracks.forEach(t => { if(t.buffer.duration > maxDuration) maxDuration = t.buffer.duration; });
+        // Calculate maximum track duration + any positive nudges
+        let maxDuration = 1.0; 
+        this.tracks.forEach(t => { 
+            if(!t.muted) {
+                const end = t.buffer.duration + (t.nudge > 0 ? t.nudge / 1000 : 0);
+                if(end > maxDuration) maxDuration = end; 
+            }
+        });
 
         const offlineCtx = new OfflineAudioContext(2, maxDuration * ctx.sampleRate, ctx.sampleRate);
+        
         this.tracks.forEach(track => {
             if (track.muted) return;
             const source = offlineCtx.createBufferSource();
@@ -488,7 +527,16 @@ export class Studio {
             panner.connect(gain);
             gain.connect(offlineCtx.destination);
             
-            source.start(0);
+            // NEW: Export also respects Nudge
+            let delayTime = 0;
+            let bufferOffset = 0;
+            if (track.nudge > 0) delayTime = track.nudge / 1000;
+            else if (track.nudge < 0) {
+                bufferOffset = Math.abs(track.nudge) / 1000;
+                if (bufferOffset >= track.buffer.duration) bufferOffset = 0;
+            }
+            
+            source.start(delayTime, bufferOffset);
         });
 
         const renderedBuffer = await offlineCtx.startRendering();

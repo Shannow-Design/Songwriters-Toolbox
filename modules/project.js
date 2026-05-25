@@ -1,5 +1,5 @@
 // modules/project.js
-import { audioBufferToBase64, base64ToAudioBuffer, SAMPLE_BANKS, DRUM_SAMPLES, DRUM_VOLUMES, setDrumVolume, setTrackVolume, setTrackFilter, setTrackReverb, setTrackPan, loadSavedSamples } from './audio.js'; // Added setTrackPan
+import { audioBufferToBase64, base64ToAudioBuffer, SAMPLE_BANKS, DRUM_SAMPLES, DRUM_VOLUMES, setDrumVolume, setTrackVolume, setTrackFilter, setTrackReverb, setTrackPan, loadSavedSamples, setSamplePitchShift, stopAllSounds } from './audio.js'; 
 import { SampleStorage } from './storage.js';
 
 export class ProjectManager {
@@ -9,6 +9,99 @@ export class ProjectManager {
         this.looper = looper;
         this.studio = studio;
         this.sampler = sampler; 
+    }
+
+    async newProject() {
+        if (!confirm("Start a New Project?\n\nThis will clear all tracks, song blocks, loops, and sample banks!")) {
+            return;
+        }
+
+        stopAllSounds();
+
+        // 1. Reset Sequencer State
+        if (this.sequencer) {
+            this.sequencer.state = {
+                progressionName: 'Pop Hit (I-V-vi-IV)',
+                rhythmName: 'Whole Notes',
+                drumName: 'Basic Rock',
+                bassName: 'Root & Fifth',
+                leadName: 'Empty',
+                samplesName: 'Whole Note (Drone)'
+            };
+            
+            const s = this.sequencer.settings;
+            s.volumes = { chords:0.8, bass:0.8, lead:0.8, samples:0.8, drums:0.8 };
+            s.filters = { chords:1.0, bass:1.0, lead:1.0, samples:1.0, drums:1.0 };
+            s.reverbs = { chords:0.1, bass:0.1, lead:0.1, samples:0.1 };
+            s.pans = { chords:0, bass:0, lead:0, samples:0, drums:0 };
+            s.octaves = { chords: 0, bass: 0, lead: 0, samples: 0 };
+            s.drops = { chords: false, bass: false, lead: false, samples: false };
+
+            ['chords', 'bass', 'lead', 'samples', 'drums'].forEach(t => {
+                setTrackVolume(t, s.volumes[t]);
+                const elVol = document.getElementById(`vol-${t}`);
+                if (elVol) elVol.value = s.volumes[t];
+
+                setTrackFilter(t, s.filters[t]);
+                const elFilt = document.getElementById(`filt-${t}`);
+                if (elFilt) elFilt.value = s.filters[t];
+
+                setTrackPan(t, s.pans[t]);
+                const elPan = document.getElementById(`pan-${t}`);
+                if (elPan) elPan.value = s.pans[t];
+
+                if (t !== 'drums') {
+                    setTrackReverb(t, s.reverbs[t]);
+                    const elVerb = document.getElementById(`verb-${t}`);
+                    if (elVerb) elVerb.value = s.reverbs[t];
+                }
+            });
+
+            this.sequencer.populateDropdowns();
+        }
+
+        // 2. Clear SongBuilder
+        if (this.songBuilder) {
+            this.songBuilder.playlist = [];
+            this.songBuilder.renderList();
+        }
+
+        // 3. Clear Looper Banks
+        if (this.looper) {
+            for (let i = 0; i < this.looper.banks.length; i++) {
+                const bank = this.looper.banks[i];
+                bank.buffer = null;
+                bank.state = 'empty';
+                bank.name = `Loop ${i+1}`;
+                await SampleStorage.deleteSample(i, 'loop');
+            }
+            this.looper.banks.forEach((b, i) => this.looper.updateBankUI(i));
+        }
+
+        // 4. Clear Studio Tracks
+        if (this.studio) {
+            this.studio.tracks = [];
+            this.studio.renderTrackList();
+            this.studio.updateExportButton();
+        }
+
+        // 5. Clear Sampler Slots
+        for (let i = 0; i < 8; i++) {
+            const cb = document.querySelector(`#pitch-shift-${i}`);
+            const isPitched = cb ? cb.checked : true;
+            SAMPLE_BANKS[i] = { buffer: null, name: `Sampler ${i+1}`, pitchShift: isPitched };
+            await SampleStorage.deleteSample(i, 'slot');
+        }
+
+        // 6. Clear Drum Samples
+        for (let i = 0; i < 5; i++) {
+            DRUM_SAMPLES[i] = null;
+            await SampleStorage.deleteSample(i, 'drum');
+        }
+
+        if (this.sampler) this.sampler.updateStatus();
+
+        alert("New Project Ready!");
     }
 
     async exportProject() {
@@ -54,6 +147,8 @@ export class ProjectManager {
             projectData.audio.studioTracks.push({
                 name: track.name,
                 volume: track.volume,
+                pan: track.pan,
+                nudge: track.nudge,
                 muted: track.muted,
                 data: b64
             });
@@ -64,7 +159,8 @@ export class ProjectManager {
             const entry = SAMPLE_BANKS[i];
             if (entry && entry.buffer) {
                 const b64 = await audioBufferToBase64(entry.buffer);
-                projectData.audio.samples.push({ slot: i, name: entry.name, data: b64 });
+                const isPitched = entry.pitchShift !== false; 
+                projectData.audio.samples.push({ slot: i, name: entry.name, data: b64, pitchShift: isPitched });
             }
         }
 
@@ -99,7 +195,8 @@ export class ProjectManager {
             return;
         }
 
-        if (confirm("This will overwrite your current project. Continue?")) {
+        if (confirm("This will overwrite your current project and clear all existing loops. Continue?")) {
+            
             // 1. Restore Sequencer Data
             if (data.sequencer) {
                 this.sequencer.savedPresets = data.sequencer.presets || {};
@@ -123,28 +220,24 @@ export class ProjectManager {
                 this.sequencer.populateDropdowns();
                 this.sequencer.refreshPresetList();
 
-                // --- NEW: Restore Mixer UI & Audio Engine (Including Pan) ---
+                // Restore Mixer UI & Audio Engine
                 const s = this.sequencer.settings;
                 ['chords', 'bass', 'lead', 'samples', 'drums'].forEach(t => {
-                    // Volume
                     if (s.volumes && s.volumes[t] !== undefined) {
                         setTrackVolume(t, s.volumes[t]);
                         const el = document.getElementById(`vol-${t}`);
                         if (el) el.value = s.volumes[t];
                     }
-                    // Filter
                     if (s.filters && s.filters[t] !== undefined) {
                         setTrackFilter(t, s.filters[t]);
                         const el = document.getElementById(`filt-${t}`);
                         if (el) el.value = s.filters[t];
                     }
-                    // Pan (NEW)
                     if (s.pans && s.pans[t] !== undefined) {
                         setTrackPan(t, s.pans[t]);
                         const el = document.getElementById(`pan-${t}`);
                         if (el) el.value = s.pans[t];
                     }
-                    // Reverb
                     if (s.reverbs && s.reverbs[t] !== undefined && t !== 'drums') {
                         setTrackReverb(t, s.reverbs[t]);
                         const el = document.getElementById(`verb-${t}`);
@@ -164,18 +257,26 @@ export class ProjectManager {
 
             // 3. Restore Audio (Loops)
             if (data.audio && data.audio.loops) {
-                for(let i=0; i<8; i++) await this.looper.clearBank(i);
+                // SILENTLY clear all banks first to avoid the popups
+                for(let i=0; i < this.looper.banks.length; i++) {
+                    const bank = this.looper.banks[i];
+                    bank.buffer = null;
+                    bank.state = 'empty';
+                    await SampleStorage.deleteSample(i, 'loop'); 
+                }
                 
                 for (const loop of data.audio.loops) {
                     const buffer = await base64ToAudioBuffer(loop.data);
                     if (buffer) {
                         const bank = this.looper.banks[loop.index];
-                        bank.buffer = buffer;
-                        bank.name = loop.name;
-                        bank.volume = loop.volume;
-                        bank.isMuted = loop.muted;
-                        bank.state = 'playing';
-                        await SampleStorage.saveSample(loop.index, buffer, loop.name, 'loop');
+                        if (bank) {
+                            bank.buffer = buffer;
+                            bank.name = loop.name;
+                            bank.volume = loop.volume;
+                            bank.isMuted = loop.muted;
+                            bank.state = 'playing';
+                            await SampleStorage.saveSample(loop.index, buffer, loop.name, 'loop');
+                        }
                     }
                 }
                 this.looper.banks.forEach((b, i) => this.looper.updateBankUI(i));
@@ -192,8 +293,11 @@ export class ProjectManager {
                             name: t.name,
                             buffer: buffer,
                             volume: t.volume,
+                            pan: t.pan || 0.0, 
+                            nudge: t.nudge || 0,
                             muted: t.muted,
-                            _activeGain: null
+                            _activeGain: null,
+                            _activePanner: null
                         });
                     }
                 }
@@ -206,6 +310,13 @@ export class ProjectManager {
                     const buffer = await base64ToAudioBuffer(s.data);
                     if (buffer) {
                         await SampleStorage.saveSample(s.slot, buffer, s.name, 'slot');
+                        
+                        const isPitched = s.pitchShift !== false; 
+                        setSamplePitchShift(s.slot, isPitched);
+                        
+                        const pitchSettings = JSON.parse(localStorage.getItem('sampler_pitch_settings') || '{}');
+                        pitchSettings[s.slot] = isPitched;
+                        localStorage.setItem('sampler_pitch_settings', JSON.stringify(pitchSettings));
                     }
                 }
             }
@@ -223,7 +334,7 @@ export class ProjectManager {
                 if (data.audio.drumVolumes) {
                     data.audio.drumVolumes.forEach((vol, i) => setDrumVolume(i, vol));
                 }
-                // Reload global audio arrays for both Sampler and Drums
+                
                 await loadSavedSamples();
                 if(this.sampler) this.sampler.updateStatus();
             }
