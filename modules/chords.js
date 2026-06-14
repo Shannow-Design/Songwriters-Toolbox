@@ -23,19 +23,14 @@ export class ChordRenderer {
         this.container.innerHTML = '';
         if (!chords || chords.length === 0) return;
 
-        const allNotes = getNotes();
-        
-        // Render simple flex list
         chords.forEach((chord, index) => {
             const card = document.createElement('div');
             card.className = 'chord-card';
-            // Use chord.index if available (for sequencer mapping), otherwise UI index
             const uiIndex = (chord.index !== undefined) ? chord.index : index;
             card.dataset.index = uiIndex;
 
             if (uiIndex === this.highlightedIndex) card.classList.add('active-playing');
 
-            // Style Borrowed Chords differently
             if (chord.isBorrowed) {
                 card.style.borderColor = "#442233";
                 card.style.background = "#221111";
@@ -53,22 +48,13 @@ export class ChordRenderer {
             title.className = 'chord-title';
             title.textContent = chord.name;
             
-            // --- CAPO LOGIC ---
-            let shape = this.getChordShape(chord.name);
-            if (capo > 0) {
-                const rootLen = chord.root.length;
-                const suffix = chord.name.slice(rootLen);
-                const rootIndex = getNoteIndex(chord.root);
-                const relativeIndex = (rootIndex - capo + 12) % 12;
-                const relativeRoot = allNotes[relativeIndex];
-                const relativeChordName = relativeRoot + suffix;
-                shape = this.getChordShape(relativeChordName);
-                
-                const sub = document.createElement('div');
-                sub.style.fontSize = '0.65rem';
-                sub.style.color = '#666';
-                sub.textContent = `(Shape: ${relativeChordName})`;
-                card.appendChild(sub);
+            const isStandard = tuning.join(',') === 'E,A,D,G,B,E' && capo === 0;
+            let shape;
+            
+            if (isStandard) {
+                shape = this.getChordShape(chord.name);
+            } else {
+                shape = this.generateDynamicShape(chord.notes, chord.root, tuning, capo);
             }
 
             const diagram = this.createSVG(chord.name, capo, shape);
@@ -85,6 +71,87 @@ export class ChordRenderer {
             
             this.container.appendChild(card);
         });
+    }
+
+    generateDynamicShape(chordNotes, rootNote, tuning, capo) {
+        const shape = [-1, -1, -1, -1, -1, -1];
+        const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        
+        const normalize = n => {
+            const ENHARMONIC_MAP = { 'Cb': 'B', 'Db': 'C#', 'Eb': 'D#', 'Fb': 'E', 'Gb': 'F#', 'Ab': 'G#', 'Bb': 'A#' };
+            return ENHARMONIC_MAP[n] || n;
+        };
+
+        const tuningIdx = tuning.map(n => SHARPS.indexOf(normalize(n)));
+        const rootIdx = SHARPS.indexOf(normalize(rootNote));
+        const chordIdxs = chordNotes.map(n => SHARPS.indexOf(normalize(n)));
+
+        let rootString = -1;
+        let rootFret = -1;
+
+        // 1. Anchor the Root Note
+        for (let s = 0; s < tuning.length - 2; s++) {
+            const openIdx = tuningIdx[s];
+            for (let f = capo; f <= capo + 4; f++) {
+                if ((openIdx + f) % 12 === rootIdx) {
+                    rootString = s;
+                    rootFret = f;
+                    break;
+                }
+            }
+            if (rootString !== -1) break;
+        }
+
+        if (rootString === -1) {
+            rootString = 0;
+            let diff = (rootIdx - tuningIdx[0] + 12) % 12;
+            while (diff < capo) diff += 12;
+            rootFret = diff;
+        }
+
+        shape[rootString] = rootFret;
+
+        const minFret = Math.max(capo, rootFret - 2);
+        const maxFret = Math.max(capo + 4, rootFret + 2); 
+
+        let unplayedNotes = [...chordIdxs];
+        unplayedNotes = unplayedNotes.filter(n => n !== rootIdx);
+
+        // 2. Map out the remaining strings
+        for (let s = rootString + 1; s < tuning.length; s++) {
+            const openIdx = tuningIdx[s];
+            let bestFret = -1;
+
+            if (chordIdxs.includes((openIdx + capo) % 12)) {
+                bestFret = capo;
+                const noteAtFret = (openIdx + capo) % 12;
+                unplayedNotes = unplayedNotes.filter(n => n !== noteAtFret);
+            } else {
+                for (let f = minFret; f <= maxFret; f++) {
+                    if (f === capo) continue; 
+                    const noteAtFret = (openIdx + f) % 12;
+                    if (unplayedNotes.includes(noteAtFret)) {
+                        bestFret = f;
+                        unplayedNotes = unplayedNotes.filter(n => n !== noteAtFret);
+                        break;
+                    }
+                }
+                
+                if (bestFret === -1) {
+                    for (let f = minFret; f <= maxFret; f++) {
+                        if (f === capo) continue;
+                        const noteAtFret = (openIdx + f) % 12;
+                        if (chordIdxs.includes(noteAtFret)) {
+                            bestFret = f;
+                            break;
+                        }
+                    }
+                }
+            }
+            shape[s] = bestFret;
+        }
+
+        return shape;
     }
 
     getRomanNumeral(index, chordName) {
@@ -106,7 +173,10 @@ export class ChordRenderer {
             let baseOctave = 2;
             if (s >= 2) baseOctave = 3; 
             if (s >= 4) baseOctave = 4; 
-            const chromaticIndex = (baseOctave * 12) + openNoteIndex + fret + capo;
+            
+            const absoluteFret = fret;
+            
+            const chromaticIndex = (baseOctave * 12) + openNoteIndex + absoluteFret;
             const midiNote = chromaticIndex + 12; 
             const hz = 440 * Math.pow(2, (midiNote - 69) / 12);
             frequencies.push(hz);
@@ -132,25 +202,65 @@ export class ChordRenderer {
     }
 
     createSVG(chordName, capo, shape) {
-        const width = 80; const height = 90; 
+        const width = 80; const height = 100; 
         let svgContent = '';
-        if (capo > 0) svgContent += `<text x="40" y="10" text-anchor="middle" fill="#888" font-size="10">Capo ${capo}</text>`;
-        const topY = 15;
-        svgContent += `<line x1="10" y1="${topY}" x2="70" y2="${topY}" stroke="${capo > 0 ? '#888' : 'white'}" stroke-width="${capo > 0 ? 1 : 2}" />`;
-        for(let i=1; i<=5; i++) { let y = topY + (i * 12); svgContent += `<line x1="10" y1="${y}" x2="70" y2="${y}" stroke="#444" stroke-width="1" />`; }
-        for(let i=0; i<6; i++) { let x = 10 + (i * 12); svgContent += `<line x1="${x}" y1="${topY}" x2="${x}" y2="${topY + 60}" stroke="#555" stroke-width="1" />`; }
+        
+        let minFret = 99;
+        let maxFret = 0;
+        shape.forEach(f => {
+            if (f !== -1 && f !== 0 && f !== capo) {
+                if (f < minFret) minFret = f;
+                if (f > maxFret) maxFret = f;
+            }
+        });
+
+        // FIXED: Shift the logical window so Space 0 maps to Capo + 1
+        let startFret = capo > 0 ? capo + 1 : 1;
+        if (maxFret - startFret > 3 && minFret > (capo > 0 ? capo : 0)) { 
+            startFret = minFret;
+        }
+
+        let label = '';
+        if (capo > 0 && startFret === capo + 1) label = `Capo ${capo}`;
+        else if (startFret > 1) label = `${startFret}fr`;
+        
+        // Render Text safely away from string indicators
+        if (label) {
+            svgContent += `<text x="40" y="8" text-anchor="middle" fill="#888" font-size="9">${label}</text>`;
+        }
+
+        const topY = 18; 
+        const isNut = (startFret === 1 && capo === 0);
+        svgContent += `<line x1="10" y1="${topY}" x2="70" y2="${topY}" stroke="${!isNut ? '#888' : 'white'}" stroke-width="${!isNut ? 1 : 2}" />`;
+        
+        for(let i=1; i<=4; i++) { 
+            let y = topY + (i * 15); 
+            svgContent += `<line x1="10" y1="${y}" x2="70" y2="${y}" stroke="#444" stroke-width="1" />`; 
+        }
+        for(let i=0; i<6; i++) { 
+            let x = 10 + (i * 12); 
+            svgContent += `<line x1="${x}" y1="${topY}" x2="${x}" y2="${topY + 60}" stroke="#555" stroke-width="1" />`; 
+        }
+        
         let rootStringIndex = -1;
         for(let i=0; i<6; i++) { if (shape[i] !== -1) { rootStringIndex = i; break; } }
+        
         shape.forEach((fret, stringIndex) => {
             const x = 10 + (stringIndex * 12);
-            if (fret === -1) { svgContent += `<text x="${x}" y="${topY - 4}" text-anchor="middle" fill="#666" font-size="9">×</text>`; } 
-            else if (fret === 0) { svgContent += `<circle cx="${x}" cy="${topY - 6}" r="2.5" stroke="#888" stroke-width="1.5" fill="none" />`; } 
+            if (fret === -1) { 
+                svgContent += `<text x="${x}" y="${topY - 4}" text-anchor="middle" fill="#666" font-size="9">×</text>`; 
+            } 
+            else if (fret === 0 || fret === capo) { 
+                svgContent += `<circle cx="${x}" cy="${topY - 5}" r="2.5" stroke="#888" stroke-width="1.5" fill="none" />`; 
+            } 
             else {
-                const y = topY + (fret * 12) - 6;
+                const relativePos = fret - startFret;
+                const y = topY + (relativePos * 15) + 7.5;
                 const color = (stringIndex === rootStringIndex) ? '#ffb300' : '#00e5ff';
                 svgContent += `<circle cx="${x}" cy="${y}" r="3.5" fill="${color}"></circle>`;
             }
         });
+
         const wrapper = document.createElement('div');
         wrapper.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 80 100">${svgContent}</svg>`;
         return wrapper.firstElementChild;
@@ -158,12 +268,6 @@ export class ChordRenderer {
     
     highlightChord(index) {
         this.clearHighlights();
-        // Since we now have two instances of this class (two containers),
-        // we can simply query the container we own.
-        // HOWEVER: The sequencer passes a global index (0-11).
-        // 0-6 are Diatonic (Renderer 1), 7+ are Borrowed (Renderer 2).
-        
-        // Check if the passed index matches a card in THIS container
         const card = this.container.querySelector(`.chord-card[data-index="${index}"]`);
         if (card) {
             this.highlightedIndex = index;

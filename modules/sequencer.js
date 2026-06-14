@@ -20,6 +20,14 @@ const DRUM_PATTERNS = {
     'Empty': { kick:Array(16).fill(0), snare:Array(16).fill(0), hihat:Array(16).fill(0), tom:Array(16).fill(0), crash:Array(16).fill(0) }
 };
 
+const FILL_PATTERNS = {
+    'Snare Roll 16ths': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 0,0,0,0, 1,1,1,1, 1,1,1,1], hihat:[1,0,1,0, 1,0,1,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Tom Rundown': { kick:[1,0,0,0, 1,0,0,0, 0,0,0,0, 0,0,0,0], snare:[0,0,0,0, 0,0,0,0, 1,1,0,0, 0,0,0,0], hihat:[1,0,1,0, 1,0,1,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,1,1, 1,1,1,1], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Disco Fill': { kick:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0], snare:[0,0,0,0, 1,0,0,0, 0,0,1,0, 1,1,1,1], hihat:[0,0,1,0, 0,0,1,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Rock Fill': { kick:[1,0,0,0, 0,0,0,0, 1,0,0,0, 0,0,0,0], snare:[0,0,1,0, 1,0,1,0, 0,0,1,1, 1,1,1,1], hihat:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], tom:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0], crash:[0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0] },
+    'Empty': { kick:Array(16).fill(0), snare:Array(16).fill(0), hihat:Array(16).fill(0), tom:Array(16).fill(0), crash:Array(16).fill(0) }
+};
+
 const BASS_PATTERNS = { 'Root Notes':['1',null,null,null, '1',null,null,null, '1',null,null,null, '1',null,null,null], 'Root & Fifth':['1',null,null,null, '5',null,null,null, '1',null,null,null, '5',null,null,null], 'Walking':['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null], 'Disco Octaves':['1',null,'8',null, '1',null,'8',null, '1',null,'8',null, '1',null,'8',null], 'Offbeat Pump':[null,'1',null,'1', null,'1',null,'1', null,'1',null,'1', null,'1',null,'1'], 'Running 8ths':['1',null,'1',null, '1',null,'1',null, '1',null,'1',null, '1',null,'1',null], 'Empty':Array(16).fill(null) };
 const MELODY_PATTERNS = { 'Arp Up (8ths)':['1',null,'3',null, '5',null,'8',null, '1',null,'3',null, '5',null,'8',null], 'Arp Down (8ths)':['8',null,'5',null, '3',null,'1',null, '8',null,'5',null, '3',null,'1',null], 'Fast Arp (16ths)':['1','3','5','8', '5','3','1','3', '5','8','1','3', '5','8','5','3'], 'Alberti':['1',null,'5',null, '3',null,'5',null, '1',null,'5',null, '3',null,'5',null], 'Staircase':['1',null,'3',null, '1',null,'5',null, '1',null,'8',null, '1',null,'5',null], 'Pedal Point':['8',null,'3',null, '8',null,'5',null, '8',null,'1',null, '8',null,'5',null], 'Empty':Array(16).fill(null) };
 const SAMPLES_PATTERNS = { 'Whole Note (Drone)':['1',null,null,null, null,null,null,null, null,null,null,null, null,null,null,null], 'Half Notes (1 & 3)':['1',null,null,null, null,null,null,null, '1',null,null,null, null,null,null,null], 'Backbeat Stab':[null,null,null,null, '1',null,null,null, null,null,null,null, '1',null,null,null], 'Dotted Quarter':['1',null,null,null, null,null,'1',null, null,null,null,null, '1',null,null,null], 'Offbeat 8ths':[null,null,'1',null, null,null,'1',null, null,null,'1',null, null,null,'1',null], 'Slow Arp (Halves)':['1',null,null,null, null,null,null,null, '5',null,null,null, null,null,null,null], 'Charleston':['1',null,null,null, null,null,'1',null, null,null,null,null, null,null,null,null], 'Empty':Array(16).fill(null) };
@@ -74,7 +82,8 @@ export class Sequencer {
             bass:         JSON.parse(localStorage.getItem('custom_bass')) || {},
             lead:         JSON.parse(localStorage.getItem('custom_lead')) || {},
             samples:      JSON.parse(localStorage.getItem('custom_samples')) || {},
-            drums:        JSON.parse(localStorage.getItem('custom_drums')) || {}
+            drums:        JSON.parse(localStorage.getItem('custom_drums')) || {},
+            fills:        JSON.parse(localStorage.getItem('custom_fills')) || {} 
         };
 
         this.libraries = {
@@ -83,15 +92,18 @@ export class Sequencer {
             bass:        { ...BASS_PATTERNS, ...this.customData.bass },
             lead:        { ...MELODY_PATTERNS, ...this.customData.lead },
             samples:     { ...SAMPLES_PATTERNS, ...this.customData.samples },
-            drums:       { ...DRUM_PATTERNS, ...this.customData.drums }
+            drums:       { ...DRUM_PATTERNS, ...this.customData.drums },
+            fills:       { ...FILL_PATTERNS, ...this.customData.fills } 
         };
 
         this.savedPresets = JSON.parse(localStorage.getItem('sequencer_presets')) || {};
+        this.globalFavorites = JSON.parse(localStorage.getItem('sequencer_global_favorites')) || {};
 
         this.state = {
             progressionName: 'Pop Hit (I-V-vi-IV)',
             rhythmName: 'Whole Notes',
             drumName: 'Basic Rock',
+            fillName: 'Tom Rundown',
             bassName: 'Root & Fifth',
             leadName: 'Empty',
             samplesName: 'Whole Note (Drone)'
@@ -101,6 +113,7 @@ export class Sequencer {
             metronome: false,
             metronomeSubdivision: 4, 
             shuffle: false,
+            autoFill: false, 
             instrument: 'Acoustic Guitar',
             bassInstrument: 'Bass Guitar',
             leadInstrument: 'Piano',
@@ -134,7 +147,7 @@ export class Sequencer {
                 border: 1px solid #2a2a2a;
             }
             .track-header-col {
-                width: 115px; /* INCREASED TO FIX PROGRESSION OVERFLOW */
+                width: 115px; 
                 flex-shrink: 0;
             }
             .track-header-col strong {
@@ -175,7 +188,6 @@ export class Sequencer {
             .track-pattern-col {
                 flex: 2.5;
                 min-width: 200px;
-                max-width: 450px;
                 display: flex;
                 flex-direction: column;
             }
@@ -193,6 +205,24 @@ export class Sequencer {
                 padding: 6px 8px;
                 border-radius: 4px;
                 font-size: 0.8rem;
+            }
+            .bpm-btn {
+                background: #444;
+                border: none;
+                color: #fff;
+                cursor: pointer;
+                padding: 0 6px;
+                border-radius: 3px;
+                font-size: 0.9rem;
+                font-weight: bold;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .bpm-btn:hover {
+                background: var(--primary-cyan);
+                color: #000;
             }
         `;
         this.container.appendChild(style);
@@ -240,7 +270,11 @@ export class Sequencer {
                         <button id="btn-seq-play" class="play-btn" style="min-width:140px;">▶ PLAY TRACK</button>
                         <div class="bpm-control" style="display:flex; align-items:center; gap:10px;">
                             <label style="white-space:nowrap; color:#fff; font-size:0.9rem;">BPM: <span id="bpm-val">100</span></label>
-                            <input type="range" id="bpm-slider" min="40" max="200" value="100" style="width:120px; accent-color:var(--primary-cyan);">
+                            <div style="display:flex; align-items:center; gap:5px;">
+                                <button id="btn-bpm-down" class="bpm-btn">-</button>
+                                <input type="range" id="bpm-slider" min="40" max="200" value="100" style="width:100px; accent-color:var(--primary-cyan);">
+                                <button id="btn-bpm-up" class="bpm-btn">+</button>
+                            </div>
                         </div>
                     </div>
                     
@@ -260,9 +294,10 @@ export class Sequencer {
                     </div>
                     
                     <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
-                        <select id="sel-presets" class="full-width-select" style="width:160px;"><option value="">Load Preset...</option></select>
-                        <button id="btn-save-preset" class="btn-new" style="background:#00e5ff; color:#000; padding:6px 12px; font-weight:bold; border-radius:4px; border:none;">SAVE</button>
-                        <button id="btn-del-preset" class="btn-delete-custom" style="display:none; background:#aa0033; color:white; padding:6px 12px; border:none; border-radius:4px;">X</button>
+                        <select id="sel-presets" class="full-width-select" style="width:150px;"><option value="">Load Preset...</option></select>
+                        <button id="btn-save-preset" class="btn-new" style="background:#00e5ff; color:#000; padding:6px 10px; font-weight:bold; border-radius:4px; border:none;" title="Save to Project">SAVE</button>
+                        <button id="btn-fav-preset" class="btn-new" style="background:#ffbb00; color:#000; padding:6px 10px; font-weight:bold; border-radius:4px; border:none;" title="Save to Global Favorites">⭐ FAV</button>
+                        <button id="btn-del-preset" class="btn-delete-custom" style="display:none; background:#aa0033; color:white; padding:6px 10px; border:none; border-radius:4px;">X</button>
                     </div>
                 </div>
 
@@ -365,9 +400,30 @@ export class Sequencer {
                         <div class="slider-group"></div> 
                     </div>
                     <div class="track-sound-col" style="visibility:hidden; flex: 0; min-width:0; max-width:0;"></div>
+                    
                     <div class="track-pattern-col" style="flex: 4; max-width: none;"> 
-                        ${createHeader('Pattern', 'drums')}
-                        <select id="sel-drums" class="full-width-select"></select>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <label style="font-size:0.75rem; color:#ccc;">Pattern</label>
+                            <div>
+                                <button class="btn-edit-pat" data-type="drums" style="font-size:0.6rem; padding:2px 5px; margin-right:5px; background:#444; border:1px solid #555; color:#fff; border-radius:3px;">EDIT</button>
+                                <button id="btn-del-drums" class="btn-delete-custom" style="display:none; font-size:0.6rem; padding:2px 5px; margin-right:5px; background:#aa0033; color:white; border:none; border-radius:3px;">DEL</button>
+                                <button class="btn-new" data-type="drums" style="font-size:0.6rem; padding:2px 5px; background:#00e5ff; color:#000; border:none; border-radius:3px; font-weight:bold;">+ NEW</button>
+                            </div>
+                        </div>
+                        <select id="sel-drums" class="full-width-select" style="margin-bottom:10px;"></select>
+
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                            <div style="display:flex; align-items:center; gap:5px;" title="Play this fill on the last bar of the progression">
+                                <input type="checkbox" id="cb-auto-fill" style="width:12px; height:12px; accent-color:var(--primary-cyan);">
+                                <label for="cb-auto-fill" style="font-size:0.75rem; color:#00e5ff; cursor:pointer;">Auto-Fill (Last Bar)</label>
+                            </div>
+                            <div>
+                                <button class="btn-edit-pat" data-type="fills" style="font-size:0.6rem; padding:2px 5px; margin-right:5px; background:#444; border:1px solid #555; color:#fff; border-radius:3px;">EDIT FILL</button>
+                                <button id="btn-del-fills" class="btn-delete-custom" style="display:none; font-size:0.6rem; padding:2px 5px; margin-right:5px; background:#aa0033; color:white; border:none; border-radius:3px;">DEL</button>
+                                <button class="btn-new" data-type="fills" style="font-size:0.6rem; padding:2px 5px; background:#00e5ff; color:#000; border:none; border-radius:3px; font-weight:bold;">+ NEW</button>
+                            </div>
+                        </div>
+                        <select id="sel-fill" class="full-width-select"></select>
                     </div>
                     <div class="track-octave-col" style="visibility:hidden; width:0;"></div>
                 </div>
@@ -399,14 +455,32 @@ export class Sequencer {
 
     bindEvents() {
         this.container.querySelector('#btn-seq-play').addEventListener('click', () => this.togglePlay());
-        this.container.querySelector('#bpm-slider').addEventListener('input', (e) => {
-            this.bpm = parseInt(e.target.value);
-            this.container.querySelector('#bpm-val').textContent = this.bpm;
+        
+        const bpmSlider = this.container.querySelector('#bpm-slider');
+        const bpmVal = this.container.querySelector('#bpm-val');
+
+        const updateBpm = (val) => {
+            this.bpm = val;
+            bpmSlider.value = val;
+            bpmVal.textContent = val;
+        };
+
+        bpmSlider.addEventListener('input', (e) => {
+            updateBpm(parseInt(e.target.value));
+        });
+
+        // BPM Up/Down Buttons
+        this.container.querySelector('#btn-bpm-down').addEventListener('click', () => {
+            if (this.bpm > 40) updateBpm(this.bpm - 1);
+        });
+        
+        this.container.querySelector('#btn-bpm-up').addEventListener('click', () => {
+            if (this.bpm < 200) updateBpm(this.bpm + 1);
         });
 
         // + NEW Buttons
         this.container.querySelectorAll('.btn-new').forEach(btn => {
-            if(btn.id === 'btn-save-preset') return;
+            if(btn.id === 'btn-save-preset' || btn.id === 'btn-fav-preset') return;
             btn.addEventListener('click', (e) => {
                 const type = e.target.dataset.type;
                 if(type === 'progression') this.openProgressionModal(false);
@@ -428,7 +502,7 @@ export class Sequencer {
             btnDelProg.addEventListener('click', () => this.deleteCurrentProgression());
         }
 
-        ['rhythm', 'bass', 'lead', 'samples', 'drums'].forEach(type => {
+        ['rhythm', 'bass', 'lead', 'samples', 'drums', 'fills'].forEach(type => {
             const btn = this.container.querySelector(`#btn-del-${type}`);
             if (btn) btn.addEventListener('click', () => this.deleteCustomPattern(type));
         });
@@ -445,7 +519,15 @@ export class Sequencer {
         bindSelect('#sel-lead-pattern', 'leadName', 'lead');
         bindSelect('#sel-samples-pattern', 'samplesName', 'samples'); 
         bindSelect('#sel-drums', 'drumName', 'drums');
+        bindSelect('#sel-fill', 'fillName', 'fills'); 
         bindSelect('#sel-progression', 'progressionName', 'progression');
+
+        // Auto Fill Checkbox
+        const cbAutoFill = this.container.querySelector('#cb-auto-fill');
+        if(cbAutoFill) {
+            cbAutoFill.checked = this.settings.autoFill;
+            cbAutoFill.addEventListener('change', (e) => this.settings.autoFill = e.target.checked);
+        }
 
         // Mixer Binding
         const bindMixer = (id, type, track) => {
@@ -496,6 +578,8 @@ export class Sequencer {
         bindSound('#sel-samples-instrument', 'samplesInstrument');
 
         this.container.querySelector('#btn-save-preset').addEventListener('click', () => this.savePreset());
+        this.container.querySelector('#btn-fav-preset').addEventListener('click', () => this.saveFavorite());
+        
         const presetSel = this.container.querySelector('#sel-presets');
         const presetDel = this.container.querySelector('#btn-del-preset');
         presetSel.addEventListener('change', (e) => { 
@@ -522,24 +606,30 @@ export class Sequencer {
         this.container.querySelector('#sel-bass-instrument').value = this.settings.bassInstrument;
         this.container.querySelector('#sel-lead-instrument').value = this.settings.leadInstrument;
         this.container.querySelector('#sel-samples-instrument').value = this.settings.samplesInstrument;
+        
         populate('#sel-rhythm', this.libraries.rhythm);
         populate('#sel-bass-pattern', this.libraries.bass);
         populate('#sel-lead-pattern', this.libraries.lead);
         populate('#sel-samples-pattern', this.libraries.samples);
         populate('#sel-drums', this.libraries.drums);
+        populate('#sel-fill', this.libraries.fills); 
         populate('#sel-progression', this.libraries.progression);
+        
         this.container.querySelector('#sel-rhythm').value = this.state.rhythmName;
         this.container.querySelector('#sel-bass-pattern').value = this.state.bassName;
         this.container.querySelector('#sel-lead-pattern').value = this.state.leadName;
         this.container.querySelector('#sel-samples-pattern').value = this.state.samplesName;
         this.container.querySelector('#sel-drums').value = this.state.drumName;
+        this.container.querySelector('#sel-fill').value = this.state.fillName; 
         this.container.querySelector('#sel-progression').value = this.state.progressionName;
+        
         this.updateDeleteButtonVisibility(this.state.progressionName);
         this.updatePatternDeleteVisibility('rhythm', this.state.rhythmName);
         this.updatePatternDeleteVisibility('bass', this.state.bassName);
         this.updatePatternDeleteVisibility('lead', this.state.leadName);
         this.updatePatternDeleteVisibility('samples', this.state.samplesName);
         this.updatePatternDeleteVisibility('drums', this.state.drumName);
+        this.updatePatternDeleteVisibility('fills', this.state.fillName); 
     }
 
     updateDeleteButtonVisibility(name) { 
@@ -554,19 +644,56 @@ export class Sequencer {
 
     deleteCustomPattern(type) {
         let name;
-        if(type==='rhythm') name=this.state.rhythmName; else if(type==='bass') name=this.state.bassName; else if(type==='lead') name=this.state.leadName; else if(type==='samples') name=this.state.samplesName; else if(type==='drums') name=this.state.drumName;
+        if(type==='rhythm') name=this.state.rhythmName; 
+        else if(type==='bass') name=this.state.bassName; 
+        else if(type==='lead') name=this.state.leadName; 
+        else if(type==='samples') name=this.state.samplesName; 
+        else if(type==='drums') name=this.state.drumName;
+        else if(type==='fills') name=this.state.fillName;
+
         if (confirm(`Delete custom pattern "${name}"?`)) {
             delete this.customData[type][name]; delete this.libraries[type][name];
-            let key = (type==='rhythm') ? 'custom_rhythms' : `custom_${type}`;
+            let key = `custom_${type}`;
+            if(type==='rhythm') key = 'custom_rhythms';
             localStorage.setItem(key, JSON.stringify(this.customData[type]));
             this.populateDropdowns();
         }
     }
     
     injectModals() {
-        const modalHtml = `<div id="prog-modal" class="modal-overlay"><div class="modal-content" style="max-width:500px;"><h3 class="modal-title">Edit Progression</h3><input type="text" id="new-prog-name" placeholder="Name" style="width:100%; margin-bottom:10px; padding:5px; background:#222; border:1px solid #555; color:white;"><div id="chord-selectors-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:15px;"></div><button id="btn-add-step" class="btn-new" style="margin-bottom:10px;">+ Step</button><div class="modal-actions"><button onclick="document.getElementById('prog-modal').style.display='none'" class="btn-cancel">Cancel</button><button id="btn-save-prog" class="btn-save">Save</button></div></div></div><div id="pattern-modal" class="modal-overlay"><div class="modal-content" style="max-width:600px;"><h3 class="modal-title" id="pat-modal-title">Edit Pattern</h3><input type="text" id="new-pat-name" placeholder="Pattern Name" style="width:100%; margin-bottom:15px; padding:8px; background:#222; border:1px solid #555; color:white;"><div id="pattern-editor-grid" class="pattern-editor-container"></div><div class="modal-actions"><div style="display:flex; gap:10px;"><button id="btn-preview-pat" class="btn-new" style="background:#444; border:1px solid #666; font-size:0.8rem; padding:8px 12px;">▶ Preview</button><button onclick="document.getElementById('pattern-modal').style.display='none'" class="btn-cancel">Cancel</button></div><button id="btn-save-pat" class="btn-save">Save Pattern</button></div></div></div>`;
+        const modalHtml = `<div id="prog-modal" class="modal-overlay">
+            <div class="modal-content" style="max-width:500px;">
+                <h3 class="modal-title">Edit Progression</h3>
+                <input type="text" id="new-prog-name" placeholder="Name" style="width:100%; margin-bottom:10px; padding:5px; background:#222; border:1px solid #555; color:white;">
+                <div id="chord-selectors-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:15px;"></div>
+                <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
+                    <button id="btn-remove-step" class="btn-delete-custom" style="padding:4px 12px; background:#aa0033; color:white; border:none; border-radius:3px; cursor:pointer;">- Step</button>
+                    <button id="btn-add-step" class="btn-new" style="padding:4px 12px; cursor:pointer;">+ Step</button>
+                </div>
+                <div class="modal-actions">
+                    <button onclick="document.getElementById('prog-modal').style.display='none'" class="btn-cancel">Cancel</button>
+                    <button id="btn-save-prog" class="btn-save">Save</button>
+                </div>
+            </div>
+        </div>
+        <div id="pattern-modal" class="modal-overlay">
+            <div class="modal-content" style="max-width:600px;">
+                <h3 class="modal-title" id="pat-modal-title">Edit Pattern</h3>
+                <input type="text" id="new-pat-name" placeholder="Pattern Name" style="width:100%; margin-bottom:15px; padding:8px; background:#222; border:1px solid #555; color:white;">
+                <div id="pattern-editor-grid" class="pattern-editor-container"></div>
+                <div class="modal-actions">
+                    <div style="display:flex; gap:10px;">
+                        <button id="btn-preview-pat" class="btn-new" style="background:#444; border:1px solid #666; font-size:0.8rem; padding:8px 12px;">▶ Preview</button>
+                        <button onclick="document.getElementById('pattern-modal').style.display='none'" class="btn-cancel">Cancel</button>
+                    </div>
+                    <button id="btn-save-pat" class="btn-save">Save Pattern</button>
+                </div>
+            </div>
+        </div>`;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
         document.getElementById('btn-add-step').addEventListener('click', () => this.addProgStep());
+        document.getElementById('btn-remove-step').addEventListener('click', () => this.removeProgStep());
         document.getElementById('btn-save-prog').addEventListener('click', () => this.saveCustomProgression());
         document.getElementById('btn-save-pat').addEventListener('click', () => this.saveCustomPattern());
         document.getElementById('btn-preview-pat').addEventListener('click', () => this.togglePatternPreview());
@@ -583,6 +710,7 @@ export class Sequencer {
 
         if (isEdit) {
             if (type === 'drums') currentName = this.state.drumName;
+            else if (type === 'fills') currentName = this.state.fillName;
             else if (type === 'rhythm') currentName = this.state.rhythmName;
             else if (type === 'bass') currentName = this.state.bassName;
             else if (type === 'lead') currentName = this.state.leadName;
@@ -599,7 +727,7 @@ export class Sequencer {
         
         if(this.isPlaying) this.togglePlay();
 
-        if (type === 'drums') this.renderDrumGrid(grid, currentData); 
+        if (type === 'drums' || type === 'fills') this.renderDrumGrid(grid, currentData); 
         else if (type === 'rhythm') this.renderToggleGrid(grid, 'Strum', currentData); 
         else this.renderCycleGrid(grid, SCALE_OPTIONS, currentData); 
     }
@@ -629,11 +757,11 @@ export class Sequencer {
     playPreviewStep(step, time) {
         const type = document.getElementById('pat-modal-title').dataset.type;
         const grid = document.getElementById('pattern-editor-grid');
-        requestAnimationFrame(() => { grid.querySelectorAll('.step-cell').forEach(c => c.style.borderColor = "#444"); if(type === 'drums') grid.querySelectorAll(`.step-cell[data-step="${step}"]`).forEach(c => c.style.borderColor = "#fff"); else { const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); if(cell) cell.style.borderColor = "#fff"; } });
+        requestAnimationFrame(() => { grid.querySelectorAll('.step-cell').forEach(c => c.style.borderColor = "#444"); if(type === 'drums' || type === 'fills') grid.querySelectorAll(`.step-cell[data-step="${step}"]`).forEach(c => c.style.borderColor = "#fff"); else { const cell = grid.querySelector(`.step-cell[data-step="${step}"]`); if(cell) cell.style.borderColor = "#fff"; } });
         
         const C_MAJ_SCALE = ['C','D','E','F','G','A','B']; 
         
-        if (type === 'drums') {
+        if (type === 'drums' || type === 'fills') {
              const getVal = (part) => { const cell = grid.querySelector(`.step-cell[data-part="${part}"][data-step="${step}"]`); return cell && parseInt(cell.dataset.val) === 1; };
              if(getVal('kick')) playDrum('kick', time); 
              if(getVal('snare')) playDrum('snare', time); 
@@ -756,7 +884,7 @@ export class Sequencer {
         const grid = document.getElementById('pattern-editor-grid'); 
         let data; 
         
-        if (type === 'drums') { 
+        if (type === 'drums' || type === 'fills') { 
             data = { kick: [], snare: [], hihat: [], tom: [], crash: [] }; 
             grid.querySelectorAll('.step-cell').forEach(cell => { 
                 data[cell.dataset.part][cell.dataset.step] = parseInt(cell.dataset.val); 
@@ -772,13 +900,18 @@ export class Sequencer {
             }); 
         } 
         
+        if (!this.customData[type]) this.customData[type] = {};
+        if (!this.libraries[type]) this.libraries[type] = {};
+
         this.customData[type][name] = data; 
         this.libraries[type][name] = data; 
-        let key = (type==='rhythm') ? 'custom_rhythms' : `custom_${type}`; 
+        let key = `custom_${type}`; 
+        if(type==='rhythm') key = 'custom_rhythms';
         localStorage.setItem(key, JSON.stringify(this.customData[type])); 
         this.populateDropdowns(); 
         
         if(type==='drums') { this.state.drumName = name; this.container.querySelector('#sel-drums').value = name; } 
+        else if(type==='fills') { this.state.fillName = name; this.container.querySelector('#sel-fill').value = name; } 
         else if(type==='rhythm') { this.state.rhythmName = name; this.container.querySelector('#sel-rhythm').value = name; } 
         else if(type==='bass') { this.state.bassName = name; this.container.querySelector('#sel-bass-pattern').value = name; } 
         else if(type==='lead') { this.state.leadName = name; this.container.querySelector('#sel-lead-pattern').value = name; } 
@@ -829,6 +962,13 @@ export class Sequencer {
         }); 
         cont.appendChild(sel); 
     }
+
+    removeProgStep() {
+        const cont = document.getElementById('chord-selectors-container');
+        if (cont.children.length > 1) {
+            cont.removeChild(cont.lastChild);
+        }
+    }
     
     saveCustomProgression() { const name = document.getElementById('new-prog-name').value.trim() || "My Prog"; const sels = document.querySelectorAll('.prog-step-select'); const indices = Array.from(sels).map(s => parseInt(s.value)); this.customData.progressions[name] = indices; this.libraries.progression[name] = indices; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); this.container.querySelector('#sel-progression').value = name; this.state.progressionName = name; document.getElementById('prog-modal').style.display = 'none'; }
     deleteCurrentProgression() { if(confirm(`Delete ${this.state.progressionName}?`)) { delete this.customData.progressions[this.state.progressionName]; delete this.libraries.progression[this.state.progressionName]; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); } }
@@ -838,23 +978,27 @@ export class Sequencer {
         const currentSelection = sel.value;
         let name = "";
 
-        if (currentSelection) {
-            const isOverwrite = confirm(`Do you want to update the existing block: "${currentSelection}"?\n\n(Click OK to Update, or Cancel to save as a new block)`);
-            
-            if (isOverwrite) {
-                name = currentSelection;
-            } else {
-                name = prompt("Save as new block name:", `${currentSelection} - Copy`);
-                if (!name) return; 
-            }
+        if (currentSelection && this.savedPresets[currentSelection]) {
+            const isOverwrite = confirm(`Do you want to update the existing block: "${currentSelection}" in your project?`);
+            if (isOverwrite) name = currentSelection;
+            else name = prompt("Save as new block name:", `${currentSelection} - Copy`);
         } else {
-            name = prompt("Block Name:", "My Track"); 
-            if(!name) return; 
+            name = prompt("Project Block Name:", "My Track"); 
         }
+        if(!name) return; 
 
         const ks = this.getScaleData(); 
         const looperSettings = this.getLooperData ? this.getLooperData() : null;
-        const preset = { name, bpm: this.bpm, key: ks.key, scale: ks.scale, settings: this.settings, state: this.state, looper: looperSettings }; 
+        
+        const preset = { 
+            name, 
+            bpm: this.bpm, 
+            key: ks.key, 
+            scale: ks.scale, 
+            settings: JSON.parse(JSON.stringify(this.settings)), 
+            state: JSON.parse(JSON.stringify(this.state)), 
+            looper: looperSettings ? JSON.parse(JSON.stringify(looperSettings)) : null 
+        }; 
         
         this.savedPresets[name] = preset; 
         localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); 
@@ -862,28 +1006,78 @@ export class Sequencer {
         this.container.querySelector('#sel-presets').value = name; 
         this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; 
     }
+
+    saveFavorite() {
+        const sel = this.container.querySelector('#sel-presets');
+        const currentSelection = sel.value;
+        let defaultName = currentSelection ? currentSelection : "My Favorite Block";
+        
+        let name = prompt("Save to Global Favorites as:", defaultName); 
+        if(!name) return; 
+
+        const ks = this.getScaleData(); 
+        const looperSettings = this.getLooperData ? this.getLooperData() : null;
+        
+        const preset = { 
+            name, 
+            bpm: this.bpm, 
+            key: ks.key, 
+            scale: ks.scale, 
+            settings: JSON.parse(JSON.stringify(this.settings)), 
+            state: JSON.parse(JSON.stringify(this.state)), 
+            looper: looperSettings ? JSON.parse(JSON.stringify(looperSettings)) : null 
+        }; 
+        
+        this.globalFavorites[name] = preset; 
+        localStorage.setItem('sequencer_global_favorites', JSON.stringify(this.globalFavorites)); 
+        this.refreshPresetList(); 
+        this.container.querySelector('#sel-presets').value = name; 
+        this.container.querySelector('#btn-del-preset').style.display = 'inline-block'; 
+    }
     
     loadPreset(name) { 
-        const p = this.savedPresets[name]; if(!p) return; 
-        this.bpm = p.bpm; this.settings = p.settings; 
+        const p = this.savedPresets[name] || this.globalFavorites[name]; 
+        if(!p) return; 
+
+        this.bpm = p.bpm; 
+        
+        this.settings = JSON.parse(JSON.stringify(p.settings)); 
         
         if (!this.settings.pans) this.settings.pans = { chords:0, bass:0, lead:0, samples:0, drums:0 };
+        if (this.settings.autoFill === undefined) this.settings.autoFill = false;
 
         const defaultState = {
             progressionName: 'Pop Hit (I-V-vi-IV)',
             rhythmName: 'Whole Notes',
             drumName: 'Basic Rock',
+            fillName: 'Tom Rundown',
             bassName: 'Root & Fifth',
             leadName: 'Empty',
             samplesName: 'Whole Note (Drone)'
         };
-        this.state = { ...defaultState, ...p.state }; 
+        
+        this.state = { ...defaultState, ...JSON.parse(JSON.stringify(p.state)) }; 
 
         this.container.querySelector('#bpm-slider').value = this.bpm; 
         this.container.querySelector('#bpm-val').textContent = this.bpm; 
         this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; 
+        
         const setVal = (id, val) => { const el = this.container.querySelector(id); if(el) el.value = val; }; 
-        setVal('#sel-instrument', this.settings.instrument); setVal('#sel-bass-instrument', this.settings.bassInstrument); setVal('#sel-lead-instrument', this.settings.leadInstrument); setVal('#sel-samples-instrument', this.settings.samplesInstrument); setVal('#sel-rhythm', this.state.rhythmName); setVal('#sel-bass-pattern', this.state.bassName); setVal('#sel-lead-pattern', this.state.leadName); setVal('#sel-samples-pattern', this.state.samplesName); setVal('#sel-drums', this.state.drumName); setVal('#sel-progression', this.state.progressionName); 
+        setVal('#sel-instrument', this.settings.instrument); 
+        setVal('#sel-bass-instrument', this.settings.bassInstrument); 
+        setVal('#sel-lead-instrument', this.settings.leadInstrument); 
+        setVal('#sel-samples-instrument', this.settings.samplesInstrument); 
+        setVal('#sel-rhythm', this.state.rhythmName); 
+        setVal('#sel-bass-pattern', this.state.bassName); 
+        setVal('#sel-lead-pattern', this.state.leadName); 
+        setVal('#sel-samples-pattern', this.state.samplesName); 
+        setVal('#sel-drums', this.state.drumName); 
+        setVal('#sel-fill', this.state.fillName); 
+        setVal('#sel-progression', this.state.progressionName); 
+        
+        const elAutoFill = this.container.querySelector('#cb-auto-fill');
+        if (elAutoFill) elAutoFill.checked = this.settings.autoFill;
+
         if(this.settings.octaves) {
             ['chords','bass','lead','samples'].forEach(t => {
                 const elOct = this.container.querySelector(`#sel-oct-${t}`);
@@ -910,8 +1104,66 @@ export class Sequencer {
         if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale, looper: p.looper}); 
     }
 
-    refreshPresetList() { const sel = this.container.querySelector('#sel-presets'); sel.innerHTML = '<option value="">Load...</option>'; Object.keys(this.savedPresets).forEach(k => sel.add(new Option(k, k))); }
-    deletePreset() { const name = this.container.querySelector('#sel-presets').value; if(name && confirm('Delete?')) { delete this.savedPresets[name]; localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets)); this.refreshPresetList(); this.container.querySelector('#btn-del-preset').style.display = 'none'; } }
+    refreshPresetList() { 
+        const sel = this.container.querySelector('#sel-presets'); 
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">Load Block...</option>'; 
+
+        if (Object.keys(this.savedPresets).length > 0) {
+            const groupProj = document.createElement('optgroup');
+            groupProj.label = "Project Blocks";
+            Object.keys(this.savedPresets).forEach(k => groupProj.appendChild(new Option(k, k)));
+            sel.appendChild(groupProj);
+        }
+
+        if (Object.keys(this.globalFavorites).length > 0) {
+            const groupFav = document.createElement('optgroup');
+            groupFav.label = "Global Favorites";
+            Object.keys(this.globalFavorites).forEach(k => {
+                if (!this.savedPresets[k]) {
+                    groupFav.appendChild(new Option(k, k));
+                }
+            });
+            sel.appendChild(groupFav);
+        }
+
+        if (currentVal && (this.savedPresets[currentVal] || this.globalFavorites[currentVal])) {
+            sel.value = currentVal;
+        }
+    }
+
+    deletePreset() { 
+        const name = this.container.querySelector('#sel-presets').value; 
+        if(!name) return;
+        
+        const inProj = !!this.savedPresets[name];
+        const inFav = !!this.globalFavorites[name];
+
+        if (inProj && inFav) {
+            if (confirm(`"${name}" exists in both Project and Favorites.\nDelete from Project? (Click Cancel to delete from Favorites)`)) {
+                delete this.savedPresets[name];
+                localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets));
+            } else {
+                if (confirm(`Delete "${name}" from Global Favorites?`)) {
+                    delete this.globalFavorites[name];
+                    localStorage.setItem('sequencer_global_favorites', JSON.stringify(this.globalFavorites));
+                }
+            }
+        } else if (inProj) {
+            if (confirm(`Delete "${name}" from Project?`)) {
+                delete this.savedPresets[name];
+                localStorage.setItem('sequencer_presets', JSON.stringify(this.savedPresets));
+            }
+        } else if (inFav) {
+            if (confirm(`Delete "${name}" from Global Favorites?`)) {
+                delete this.globalFavorites[name];
+                localStorage.setItem('sequencer_global_favorites', JSON.stringify(this.globalFavorites));
+            }
+        }
+        
+        this.refreshPresetList(); 
+        this.container.querySelector('#btn-del-preset').style.display = 'none'; 
+    }
 
     resetProgressionIndex() {
         this.settings.progressionIndex = -1;
@@ -1041,7 +1293,18 @@ export class Sequencer {
 
         if (this.settings.metronome && (stepNumber % this.settings.metronomeSubdivision === 0)) playDrum('metronome', time);
         
-        const drumPat = this.libraries.drums[this.state.drumName];
+        const isFillBar = this.settings.autoFill && prog && (this.settings.progressionIndex === prog.length - 1);
+        let drumPat = this.libraries.drums[this.state.drumName];
+        
+        if (isFillBar) {
+            const fillPat = this.libraries.fills[this.state.fillName];
+            if (fillPat) drumPat = fillPat;
+        }
+
+        if (this.settings.autoFill && stepNumber === 0 && this.settings.progressionIndex === 0 && this.progressionCycles > 0) {
+            playDrum('crash', time);
+        }
+
         if (drumPat) {
             if (drumPat.kick && drumPat.kick[stepNumber]) playDrum('kick', time);
             if (drumPat.snare && drumPat.snare[stepNumber]) playDrum('snare', time);

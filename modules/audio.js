@@ -7,12 +7,10 @@ const ENHARMONIC_MAP = { 'Cb': 'B', 'Db': 'C#', 'Eb': 'D#', 'Fb': 'E', 'Gb': 'F#
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 export const ctx = new AudioContext();
 
-// --- EXPORTED STATE ---
 export const SAMPLE_BANKS = new Array(8).fill(null);
 export const DRUM_SAMPLES = new Array(5).fill(null);
 export const DRUM_VOLUMES = new Array(5).fill(1.0); 
 
-// --- GLOBAL FX STATE ---
 let globalPitchBend = 0; 
 let globalModulation = 0; 
 let activeSynthNodes = []; 
@@ -23,9 +21,8 @@ masterAnalyser.smoothingTimeConstant = 0.85;
 
 const DRUM_MAP = { 'kick': 0, 'snare': 1, 'hihat': 2, 'tom': 3, 'crash': 4 };
 
-// --- ROUTING BUSSES ---
 const recordingDest = ctx.createMediaStreamDestination(); 
-const micRecordingDest = ctx.createMediaStreamDestination(); 
+const processedMicDest = ctx.createMediaStreamDestination(); // NEW: Captures Mic + FX
 
 const masterCompressor = ctx.createDynamicsCompressor();
 masterCompressor.threshold.setValueAtTime(-8, ctx.currentTime);
@@ -53,16 +50,12 @@ function createImpulse(duration, decay) {
 }
 reverbNode.buffer = createImpulse(2.0, 2.0);
 
-// Routing
 masterCompressor.connect(masterGain);
 reverbNode.connect(reverbGain);
 reverbGain.connect(masterGain);
-
 masterGain.connect(masterAnalyser);
 masterAnalyser.connect(ctx.destination);
-// FIXED: We no longer permanently connect masterGain to recordingDest here!
 
-// --- BASE64 AUDIO HELPERS ---
 export async function audioBufferToBase64(buffer) {
     const wavBlob = bufferToWav(buffer);
     return new Promise((resolve, reject) => {
@@ -84,7 +77,6 @@ export async function base64ToAudioBuffer(base64String) {
     }
 }
 
-// --- PITCH BEND & MODULATION ---
 export function setGlobalPitchBend(value) {
     globalPitchBend = value;
     const now = ctx.currentTime;
@@ -106,51 +98,106 @@ export function setGlobalModulation(value) {
     });
 }
 
+// NEW: Adjustable FX Chain
 export function createVocalChain() {
     const lowCut = ctx.createBiquadFilter();
     lowCut.type = 'highpass';
-    lowCut.frequency.value = 100; 
+    lowCut.frequency.value = 10; 
+
     const highShelf = ctx.createBiquadFilter();
     highShelf.type = 'highshelf';
     highShelf.frequency.value = 5000;
-    highShelf.gain.value = 3; 
+    highShelf.gain.value = 0; 
+
     const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -20;
-    compressor.knee.value = 20;
-    compressor.ratio.value = 8;
-    compressor.attack.value = 0.01;
-    compressor.release.value = 0.2;
+    compressor.threshold.value = 0;
+    compressor.ratio.value = 1;
+    compressor.attack.value = 0.005;
+    compressor.release.value = 0.1;
+
+    const delayNode = ctx.createDelay(2.0);
+    delayNode.delayTime.value = 0.3; 
+    const delayFeedback = ctx.createGain();
+    delayFeedback.gain.value = 0.0;
+    const delayOutput = ctx.createGain();
+    delayOutput.gain.value = 0.0;
+
     const reverbSend = ctx.createGain();
-    reverbSend.gain.value = 0.3; 
+    reverbSend.gain.value = 0.0; 
+    
+    const masterOutput = ctx.createGain();
+    masterOutput.gain.value = 1.0;
+
     lowCut.connect(highShelf);
     highShelf.connect(compressor);
+    
+    compressor.connect(delayNode);
+    delayNode.connect(delayFeedback);
+    delayFeedback.connect(delayNode);
+    delayNode.connect(delayOutput);
+
+    compressor.connect(masterOutput); 
+    delayOutput.connect(masterOutput);
+
     compressor.connect(reverbSend);
-    reverbSend.connect(reverbNode);
-    return { input: lowCut, output: compressor, reverbSend: reverbSend };
+    reverbSend.connect(reverbNode); 
+
+    return { 
+        input: lowCut, 
+        output: masterOutput, 
+        reverbSend: reverbSend,
+        nodes: { lowCut, highShelf, compressor, delayNode, delayFeedback, delayOutput }
+    };
 }
 
 export const Microphone = {
-    stream: null, sourceNode: null, gainNode: null, analyserNode: null, fxChain: null, isInitialized: false, studioConnection: null, useFx: false,
+    stream: null, rawStream: null, sourceNode: null, gainNode: null, analyserNode: null, fxChain: null, isInitialized: false,
+    
     async init() {
+        if (this.rawStream && this.rawStream.getAudioTracks().some(t => t.readyState === 'ended')) {
+            this.isInitialized = false;
+        }
+
         if (this.isInitialized) return;
+        
         try {
             const constraints = { audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false, latency: 0, channelCount: 1 } };
             const rawStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+            if (this.sourceNode) {
+                try { this.sourceNode.disconnect(); } catch(e){}
+            }
+
             this.sourceNode = ctx.createMediaStreamSource(rawStream);
-            this.gainNode = ctx.createGain();
-            this.gainNode.gain.value = 1.0; 
-            this.analyserNode = ctx.createAnalyser();
-            this.analyserNode.fftSize = 4096; 
-            this.fxChain = createVocalChain();
+
+            if (!this.gainNode) {
+                this.gainNode = ctx.createGain();
+                this.gainNode.gain.value = 1.0; 
+                this.analyserNode = ctx.createAnalyser();
+                this.analyserNode.fftSize = 4096; 
+                this.fxChain = createVocalChain();
+                
+                this.gainNode.connect(this.fxChain.input);
+                this.fxChain.output.connect(processedMicDest);
+                this.fxChain.output.connect(this.analyserNode);
+            }
+
             this.sourceNode.connect(this.gainNode);
-            this.gainNode.connect(this.analyserNode);
-            this.stream = rawStream; 
+            this.rawStream = rawStream; 
+            this.stream = processedMicDest.stream; 
             this.isInitialized = true;
+
+            this.rawStream.getAudioTracks().forEach(track => {
+                track.onended = () => { this.isInitialized = false; };
+            });
+
+            // Automatically restore last used FX settings
+            const savedFx = JSON.parse(localStorage.getItem('mic_fx_current'));
+            if(savedFx) this.applyFxSettings(savedFx);
+
         } catch (err) { console.error("Mic Init Failed:", err); throw err; }
     },
     setGain(val) { if(this.gainNode && isFinite(val)) this.gainNode.gain.setTargetAtTime(val, ctx.currentTime, 0.02); },
-    setReverbAmount(val) { if(this.fxChain && isFinite(val)) this.fxChain.reverbSend.gain.setTargetAtTime(val, ctx.currentTime, 0.02); },
-    setFxEnabled(enabled) { this.useFx = enabled; },
     getLevel() {
         if(!this.analyserNode) return 0;
         const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
@@ -159,35 +206,39 @@ export const Microphone = {
         for(let i = 0; i < dataArray.length; i++) { const x = (dataArray[i] - 128) / 128.0; sum += x * x; }
         return Math.sqrt(sum / dataArray.length);
     },
-    connectToStudio() {
-        if (!this.gainNode) return;
-        this.disconnectFromStudio();
-        if (this.useFx && this.fxChain) { 
-            this.gainNode.connect(this.fxChain.input); 
-            this.studioConnection = this.fxChain.output.connect(micRecordingDest); 
-        } else { 
-            this.studioConnection = this.gainNode.connect(micRecordingDest); 
-        }
-    },
-    disconnectFromStudio() {
-        if (this.gainNode) {
-            try { this.gainNode.disconnect(micRecordingDest); } catch(e){}
-            if (this.fxChain) { 
-                try { this.gainNode.disconnect(this.fxChain.input); } catch(e){} 
-                try { this.fxChain.output.disconnect(micRecordingDest); } catch(e){} 
-            }
-            this.studioConnection = null;
-        }
+    applyFxSettings(settings) {
+        if (!this.fxChain) return;
+        const now = ctx.currentTime;
+        
+        this.fxChain.nodes.lowCut.frequency.setTargetAtTime(settings.lowCut || 10, now, 0.05);
+        this.fxChain.nodes.highShelf.gain.setTargetAtTime(settings.presence || 0, now, 0.05);
+        
+        const comp = settings.compression || 0;
+        this.fxChain.nodes.compressor.threshold.setTargetAtTime(-40 * comp, now, 0.05);
+        this.fxChain.nodes.compressor.ratio.setTargetAtTime(1 + (11 * comp), now, 0.05);
+        
+        const del = settings.delay || 0;
+        this.fxChain.nodes.delayOutput.gain.setTargetAtTime(del * 0.5, now, 0.05);
+        this.fxChain.nodes.delayFeedback.gain.setTargetAtTime(del * 0.4, now, 0.05);
+        
+        this.fxChain.reverbSend.gain.setTargetAtTime(settings.reverb || 0, now, 0.05);
     }
 };
+
+if (navigator.mediaDevices) {
+    navigator.mediaDevices.addEventListener('devicechange', async () => {
+        if (Microphone.isInitialized || Microphone.rawStream) {
+            Microphone.isInitialized = false; 
+            try { await Microphone.init(); } catch(e) {} 
+        }
+    });
+}
 
 export function startStudioRecording(sourceType = 'mix') {
     let targetStream;
     if (sourceType === 'mic') {
-        Microphone.connectToStudio();
-        targetStream = micRecordingDest.stream;
+        targetStream = Microphone.stream; // Uses the processed stream dynamically
     } else {
-        // FIXED: Dynamically connect the master mix to the recorder ONLY when recording starts!
         masterGain.connect(recordingDest);
         targetStream = recordingDest.stream;
     }
@@ -198,10 +249,7 @@ export function startStudioRecording(sourceType = 'mix') {
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     const stopPromise = new Promise(resolve => {
         recorder.onstop = () => { 
-            if(sourceType === 'mic') {
-                Microphone.disconnectFromStudio(); 
-            } else {
-                // FIXED: Disconnect the recorder instantly so standard playback remains Stereo!
+            if(sourceType !== 'mic') {
                 masterGain.disconnect(recordingDest);
             }
             const blob = new Blob(chunks, { type: 'audio/webm' }); 
@@ -212,7 +260,6 @@ export function startStudioRecording(sourceType = 'mix') {
     return { stop: () => { if (recorder.state !== 'inactive') recorder.stop(); return stopPromise; } };
 }
 
-// --- TRACK MIXER ---
 const tracks = ['chords', 'bass', 'lead', 'drums', 'samples', 'looper', 'vocal'];
 const mixer = {};
 
@@ -223,7 +270,6 @@ tracks.forEach(name => {
     const volume = ctx.createGain();
     const reverbSend = ctx.createGain();
     
-    // Explicitly enforce Stereo for every track
     panner.channelCountMode = 'explicit';
     panner.channelCount = 2;
     volume.channelCountMode = 'explicit';
@@ -257,7 +303,6 @@ export function setTrackPan(t, v) { if(mixer[t] && isFinite(v)) mixer[t].panner.
 export function setTrackReverb(t, v) { if(mixer[t] && isFinite(v)) mixer[t].reverbSend.gain.setTargetAtTime(v * 0.8, ctx.currentTime, 0.02); }
 export function getTrackInput(name) { return mixer[name] ? mixer[name].input : masterCompressor; }
 
-// --- SAMPLER FUNCTIONS ---
 export async function loadSavedSamples() {
     for(let i=0; i<8; i++) { 
         const entry = await SampleStorage.loadSample(i, ctx, 'slot'); 
@@ -650,4 +695,5 @@ export function playScaleSequence(notes) {
         const freq = getFrequency(note, currentOctave); startNote(freq, -1, 'Lead Synth', now + (index * 0.4), 0.5, 'lead');
     });
 }
+
 export function playSingleNote(note, oct, time, inst) { const t = time||ctx.currentTime; startNote(getFrequency(note, oct), -1, inst || 'Piano', t, 1.5, 'lead'); }

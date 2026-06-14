@@ -18,12 +18,16 @@ export class ProjectManager {
 
         stopAllSounds();
 
-        // 1. Reset Sequencer State
+        // 1. Reset Sequencer State AND Project Presets!
         if (this.sequencer) {
+            this.sequencer.savedPresets = {}; 
+            localStorage.setItem('sequencer_presets', '{}');
+
             this.sequencer.state = {
                 progressionName: 'Pop Hit (I-V-vi-IV)',
                 rhythmName: 'Whole Notes',
                 drumName: 'Basic Rock',
+                fillName: 'Tom Rundown',
                 bassName: 'Root & Fifth',
                 leadName: 'Empty',
                 samplesName: 'Whole Note (Drone)'
@@ -58,6 +62,7 @@ export class ProjectManager {
             });
 
             this.sequencer.populateDropdowns();
+            this.sequencer.refreshPresetList();
         }
 
         // 2. Clear SongBuilder
@@ -117,7 +122,7 @@ export class ProjectManager {
                 savedSongs: this.songBuilder.savedSongs
             },
             sequencer: {
-                presets: this.sequencer.savedPresets,
+                presets: this.sequencer.savedPresets, 
                 customData: this.sequencer.customData,
                 state: this.sequencer.state,
                 settings: this.sequencer.settings 
@@ -202,15 +207,18 @@ export class ProjectManager {
                 this.sequencer.savedPresets = data.sequencer.presets || {};
                 this.sequencer.customData = data.sequencer.customData || {};
                 
-                // Merge libraries
                 const lib = this.sequencer.libraries;
                 const cust = this.sequencer.customData;
+                
+                if (!cust.fills) cust.fills = {};
+
                 lib.progression = { ...lib.progression, ...cust.progressions };
                 lib.rhythm = { ...lib.rhythm, ...cust.rhythm };
                 lib.bass = { ...lib.bass, ...cust.bass };
                 lib.lead = { ...lib.lead, ...cust.lead };
                 lib.samples = { ...lib.samples, ...cust.samples };
                 lib.drums = { ...lib.drums, ...cust.drums };
+                lib.fills = { ...lib.fills, ...cust.fills };
                 
                 localStorage.setItem('sequencer_presets', JSON.stringify(this.sequencer.savedPresets));
                 
@@ -220,7 +228,6 @@ export class ProjectManager {
                 this.sequencer.populateDropdowns();
                 this.sequencer.refreshPresetList();
 
-                // Restore Mixer UI & Audio Engine
                 const s = this.sequencer.settings;
                 ['chords', 'bass', 'lead', 'samples', 'drums'].forEach(t => {
                     if (s.volumes && s.volumes[t] !== undefined) {
@@ -257,7 +264,18 @@ export class ProjectManager {
 
             // 3. Restore Audio (Loops)
             if (data.audio && data.audio.loops) {
-                // SILENTLY clear all banks first to avoid the popups
+                // NEW: Ensure enough banks exist for incoming project without throwing errors!
+                let maxIndex = -1;
+                data.audio.loops.forEach(loop => { if (loop.index > maxIndex) maxIndex = loop.index; });
+                
+                while (this.looper.banks.length <= maxIndex) {
+                    this.looper.addBank(false); // Add without triggering a full redraw yet
+                }
+                
+                // Now we need to redraw so the UI elements exist before we update them!
+                this.looper.render();
+                this.looper.bindEvents();
+
                 for(let i=0; i < this.looper.banks.length; i++) {
                     const bank = this.looper.banks[i];
                     bank.buffer = null;

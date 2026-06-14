@@ -24,6 +24,7 @@ export const TUNINGS = {
     drop_d: { name: 'Drop D', notes: ['D', 'A', 'D', 'G', 'B', 'E'] },
     dadgad: { name: 'DADGAD', notes: ['D', 'A', 'D', 'G', 'A', 'D'] },
     open_g: { name: 'Open G', notes: ['D', 'G', 'D', 'G', 'B', 'D'] },
+    d_standard: { name: 'D Standard (D G C F A D)', notes: ['D', 'G', 'C', 'F', 'A', 'D'] },
     bass_standard: { name: 'Standard (E)', notes: ['E', 'A', 'D', 'G'] },
     bass_drop_d: { name: 'Drop D', notes: ['D', 'A', 'D', 'G'] }
 };

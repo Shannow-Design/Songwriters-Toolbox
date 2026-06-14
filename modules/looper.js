@@ -1,37 +1,59 @@
 // modules/looper.js
-import { Microphone, recordSample, autoTrimBuffer, applyFades, shiftBuffer, playSample, ctx, decodeAudioFile, bufferToWav, getTrackInput } from './audio.js';
+import { Microphone, recordSample, applyFades, playSample, ctx, decodeAudioFile, bufferToWav, getTrackInput } from './audio.js';
 import { SampleStorage } from './storage.js';
+
+function normalizeLoopBuffer(buffer) {
+    if (!buffer) return null;
+    let maxAmp = 0;
+    
+    for (let c = 0; c < buffer.numberOfChannels; c++) {
+        const data = buffer.getChannelData(c);
+        for (let i = 0; i < data.length; i++) {
+            if (Math.abs(data[i]) > maxAmp) maxAmp = Math.abs(data[i]);
+        }
+    }
+    
+    if (maxAmp > 0) {
+        const gainMult = 0.95 / maxAmp;
+        for (let c = 0; c < buffer.numberOfChannels; c++) {
+            const data = buffer.getChannelData(c);
+            for (let i = 0; i < data.length; i++) {
+                data[i] *= gainMult;
+            }
+        }
+    }
+    return buffer;
+}
+
+function processLoopBuffer(buffer, trimStartMs, exactDurationSec) {
+    if (!buffer) return null;
+    const trimSamples = Math.floor((trimStartMs / 1000) * buffer.sampleRate);
+    const exactSamples = Math.floor(exactDurationSec * buffer.sampleRate);
+    
+    const availableSamples = buffer.length - trimSamples;
+    if (availableSamples <= 0) return null;
+
+    const newLen = Math.min(exactSamples, availableSamples);
+    const newBuf = ctx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
+    for (let c = 0; c < buffer.numberOfChannels; c++) {
+        const oldData = buffer.getChannelData(c);
+        const newData = newBuf.getChannelData(c);
+        for (let i = 0; i < newLen; i++) {
+            newData[i] = oldData[i + trimSamples];
+        }
+    }
+    return newBuf;
+}
 
 export class Looper {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
         
-        // 8 Banks
-        this.banks = Array(16).fill(0).map((_, i) => {
-            const gainNode = ctx.createGain();
-            const pannerNode = ctx.createStereoPanner();
-            
-            // Internal Chain: Bank Gain -> Bank Panner -> Looper Track Input
-            gainNode.gain.value = 1.0;
-            pannerNode.pan.value = 0;
-            gainNode.connect(pannerNode);
-            pannerNode.connect(getTrackInput('looper'));
-
-            return { 
-                id: i,
-                buffer: null, 
-                name: `Loop ${i+1}`,
-                state: 'empty', 
-                isMuted: false, 
-                volume: 1.0,
-                pan: 0.0, // NEW: Pan state
-                recorder: null,
-                startTime: 0,
-                activeSource: null,
-                gainNode: gainNode,
-                pannerNode: pannerNode // NEW: Panner Node
-            };
-        });
+        this.bankCount = parseInt(localStorage.getItem('looper_bank_count')) || 16;
+        this.banks = [];
+        for(let i = 0; i < this.bankCount; i++) {
+            this.banks.push(this.createBank(i));
+        }
 
         this.bpm = 100; 
         this.latencyMs = 50; 
@@ -41,6 +63,70 @@ export class Looper {
         this.startMeterLoop();
         this.loadLoops(); 
         this.bindEvents(); 
+    }
+
+    createBank(i) {
+        const gainNode = ctx.createGain();
+        const pannerNode = ctx.createStereoPanner();
+        
+        gainNode.gain.value = 1.0;
+        pannerNode.pan.value = 0;
+        gainNode.connect(pannerNode);
+        pannerNode.connect(getTrackInput('looper'));
+
+        return { 
+            id: i,
+            buffer: null, 
+            name: `Loop ${i+1}`,
+            state: 'empty', 
+            isMuted: false, 
+            volume: 1.0,
+            pan: 0.0, 
+            recorder: null,
+            startTime: 0,
+            scheduledTime: 0, 
+            activeSource: null,
+            gainNode: gainNode,
+            pannerNode: pannerNode
+        };
+    }
+
+    addBank(renderUI = true) {
+        const newIndex = this.banks.length;
+        this.banks.push(this.createBank(newIndex));
+        this.bankCount = this.banks.length;
+        localStorage.setItem('looper_bank_count', this.bankCount);
+        
+        if (renderUI) {
+            this.render();
+            this.bindEvents();
+        }
+    }
+
+    async removeBank() {
+        if (this.banks.length <= 1) {
+            alert("You must have at least 1 loop station!");
+            return;
+        }
+
+        const index = this.banks.length - 1;
+        const bank = this.banks[index];
+        
+        const proceed = bank.buffer ? confirm(`Delete "${bank.name}"?\n\nRemoving this station will permanently delete its recorded audio.`) : true;
+        
+        if (proceed) {
+            if (bank.activeSource) { try { bank.activeSource.stop(); } catch(e){} }
+            await SampleStorage.deleteSample(index, 'loop');
+            
+            try { bank.gainNode.disconnect(); bank.pannerNode.disconnect(); } catch(e){}
+
+            this.banks.pop();
+            this.bankCount = this.banks.length;
+            localStorage.setItem('looper_bank_count', this.bankCount);
+            
+            this.render();
+            this.bindEvents();
+        }
     }
 
     setBpm(bpm) {
@@ -55,12 +141,12 @@ export class Looper {
         const settings = this.banks.map(b => ({
             muted: b.isMuted,
             volume: b.volume,
-            pan: b.pan // Save Pan
+            pan: b.pan 
         }));
         return {
             banks: settings,
             latencyMs: this.latencyMs,
-            micGain: parseFloat(document.getElementById('mic-gain').value)
+            micGain: parseFloat(this.container.querySelector('#mic-gain').value)
         };
     }
 
@@ -101,7 +187,6 @@ export class Looper {
                     const volSlider = this.container.querySelector(`.loop-vol-slider[data-index="${i}"]`);
                     if(volSlider) volSlider.value = newVol;
 
-                    // Restore Pan
                     const newPan = (typeof s.pan === 'number') ? s.pan : 0.0;
                     this.updatePan(i, newPan);
                     const panSlider = this.container.querySelector(`.loop-pan-slider[data-index="${i}"]`);
@@ -114,7 +199,7 @@ export class Looper {
     }
 
     async loadLoops() {
-        for(let i=0; i<16; i++) {
+        for(let i=0; i < this.banks.length; i++) {
             const entry = await SampleStorage.loadSample(i, ctx, 'loop');
             if (entry && entry.buffer) {
                 const faded = applyFades(entry.buffer);
@@ -133,24 +218,28 @@ export class Looper {
 
         this.banks.forEach(async (bank, index) => {
             if (bank.state === 'armed' && isLoopStart && cycleCount > 0) {
-                this.startRecording(index, totalDuration);
+                this.startRecording(index, totalDuration, time);
                 bank.state = 'recording';
                 this.updateBankUI(index);
             }
             else if (bank.state === 'recording' && isLoopStart && bank.recorder) {
                 if (ctx.currentTime - bank.startTime > 1.0) {
-                    await this.finishRecording(index);
                     bank.state = 'playing';
                     this.updateBankUI(index);
+                    
+                    const lookaheadDelta = Math.max(0, time - ctx.currentTime);
+                    const stopDelay = lookaheadDelta + (this.latencyMs / 1000) + 0.1; 
+                    
+                    setTimeout(() => {
+                        this.finishRecording(index, totalDuration, time);
+                    }, stopDelay * 1000);
                 }
             }
             if (bank.state === 'playing' && bank.buffer && isLoopStart && !bank.isMuted) {
                 if (bank.activeSource) {
                     try { bank.activeSource.stop(time); } catch(e){}
                 }
-                const playTime = time || ctx.currentTime;
-                // Pass the gainNode as destination (it connects to Panner -> Track)
-                const result = playSample(-1, playTime, null, 'looper', bank.buffer, bank.gainNode);
+                const result = playSample(-1, time, null, 'looper', bank.buffer, bank.gainNode);
                 if (result) bank.activeSource = result.osc; 
             }
         });
@@ -171,22 +260,35 @@ export class Looper {
         });
     }
 
-    async startRecording(index, duration) {
+    async startRecording(index, duration, scheduledTime) {
+        const bank = this.banks[index];
+
+        // FIXED: Immediately clear the old buffer from memory so it doesn't accidentally
+        // trigger a ghost playback when the track loops around!
+        bank.buffer = null;
+        if (bank.activeSource) {
+            try { bank.activeSource.stop(); } catch(e) {}
+            bank.activeSource = null;
+        }
+
         try {
             await Microphone.init();
             const stream = Microphone.stream;
-            this.banks[index].startTime = ctx.currentTime;
-            const controller = recordSample(stream, duration + 2.0);
-            this.banks[index].recorder = controller;
-            this.banks[index].stream = stream;
+            
+            bank.scheduledTime = scheduledTime;
+            bank.startTime = ctx.currentTime;
+            
+            const controller = recordSample(stream, duration + 2.0); 
+            bank.recorder = controller;
+            bank.stream = stream;
         } catch (err) {
             console.error("Looper Mic Error", err);
-            this.banks[index].state = 'empty';
+            bank.state = 'empty';
             this.updateBankUI(index);
         }
     }
 
-    async finishRecording(index) {
+    async finishRecording(index, exactDuration, currentDownbeatTime) {
         const bank = this.banks[index];
         if (!bank.recorder) return;
 
@@ -194,13 +296,33 @@ export class Looper {
         let buffer = await bank.recorder.result;
 
         if (buffer) {
-            buffer = shiftBuffer(buffer, this.latencyMs);
-            bank.buffer = applyFades(buffer, 0.01);
-            await SampleStorage.saveSample(index, bank.buffer, bank.name, 'loop');
+            const lookaheadDelayMs = Math.max(0, (bank.scheduledTime - bank.startTime) * 1000);
+            const totalTrimMs = Math.max(0, this.latencyMs + lookaheadDelayMs);
+            
+            const processed = processLoopBuffer(buffer, totalTrimMs, exactDuration);
+            
+            if (processed) {
+                bank.buffer = applyFades(normalizeLoopBuffer(processed), 0.01);
+                
+                if (!bank.isMuted && bank.state === 'playing') {
+                    const offset = ctx.currentTime - currentDownbeatTime;
+                    if (offset > 0 && offset < exactDuration) {
+                        const source = ctx.createBufferSource();
+                        source.buffer = bank.buffer;
+                        source.connect(bank.gainNode);
+                        source.start(ctx.currentTime, offset);
+                        bank.activeSource = source;
+                    }
+                }
+                await SampleStorage.saveSample(index, bank.buffer, bank.name, 'loop');
+            } else {
+                bank.state = 'empty';
+            }
         } else {
             bank.state = 'empty';
         }
         bank.recorder = null;
+        this.updateBankUI(index);
     }
 
     toggleArm(index) {
@@ -243,8 +365,8 @@ export class Looper {
         const buffer = await decodeAudioFile(file);
         if (buffer) {
             const bank = this.banks[index];
-            const trimmed = autoTrimBuffer(buffer);
-            bank.buffer = applyFades(trimmed);
+            const normalized = normalizeLoopBuffer(buffer);
+            bank.buffer = applyFades(normalized);
             bank.state = 'playing';
             bank.name = file.name.replace(/\.[^/.]+$/, "") || `Loop ${index+1}`;
             await SampleStorage.saveSample(index, bank.buffer, bank.name, 'loop');
@@ -280,7 +402,6 @@ export class Looper {
         }
     }
 
-    // NEW: Pan Update
     updatePan(index, val) {
         const bank = this.banks[index];
         bank.pan = val;
@@ -378,6 +499,15 @@ export class Looper {
         this.container.innerHTML = `
             <div class="input-controls-header">
                 <div class="ctrl-group">
+                    <label>STATIONS</label>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <button id="btn-remove-bank" title="Remove Station" style="background:#444; border:none; color:white; border-radius:3px; padding:2px 8px; cursor:pointer; font-weight:bold;">-</button>
+                        <span style="color:#00e5ff; font-size:0.8rem; font-weight:bold; width:20px; text-align:center;">${this.banks.length}</span>
+                        <button id="btn-add-bank" title="Add Station" style="background:#444; border:none; color:white; border-radius:3px; padding:2px 8px; cursor:pointer; font-weight:bold;">+</button>
+                    </div>
+                </div>
+
+                <div class="ctrl-group" style="border-left: 1px solid #333; padding-left: 15px; margin-left: 5px;">
                     <label>MIC GAIN</label>
                     <input type="range" id="mic-gain" min="0" max="3" step="0.1" value="1" class="mini-slider">
                 </div>
@@ -393,7 +523,7 @@ export class Looper {
                 </div>
                 <div class="ctrl-group" style="flex:1;">
                     <label>INPUT LEVEL</label>
-                    <div class="meter-bg"><div class="meter-fill" id="input-meter"></div></div>
+                    <div class="meter-bg"><div class="meter-fill" id="looper-input-meter"></div></div>
                 </div>
             </div>
 
@@ -480,6 +610,9 @@ export class Looper {
     }
 
     bindEvents() {
+        this.container.querySelector('#btn-add-bank').addEventListener('click', () => this.addBank());
+        this.container.querySelector('#btn-remove-bank').addEventListener('click', () => this.removeBank());
+
         this.container.querySelectorAll('.btn-loop-arm').forEach(btn => {
             btn.addEventListener('click', (e) => this.toggleArm(parseInt(e.target.dataset.index)));
         });
@@ -498,7 +631,6 @@ export class Looper {
             });
         });
 
-        // NEW: Pan Slider Event
         this.container.querySelectorAll('.loop-pan-slider').forEach(inp => {
             inp.addEventListener('input', (e) => {
                 this.updatePan(parseInt(e.target.dataset.index), parseFloat(e.target.value));
@@ -541,9 +673,11 @@ export class Looper {
         const bank = this.banks[index];
         const el = document.getElementById(`loop-bank-${index}`);
         if(!el) return;
+        
         const status = document.getElementById(`loop-status-${index}`);
         const btnArm = el.querySelector('.btn-loop-arm');
         const btnPlay = el.querySelector('.btn-loop-play');
+        const nameInput = el.querySelector('.loop-name-input'); 
 
         const isLoaded = (bank.state !== 'empty');
         const isActive = (bank.state === 'recording' || (bank.state === 'playing' && !bank.isMuted));
@@ -552,6 +686,8 @@ export class Looper {
         if (isActive) el.classList.add('active-slot'); else el.classList.remove('active-slot');
 
         status.textContent = bank.state.toUpperCase();
+        
+        if (nameInput) nameInput.value = bank.name; 
 
         if (bank.state === 'armed' || bank.state === 'recording') {
             btnArm.classList.add('armed');
@@ -569,8 +705,9 @@ export class Looper {
     }
 
     startMeterLoop() {
-        const meter = document.getElementById('input-meter');
         const update = () => {
+            const meter = this.container.querySelector('#looper-input-meter');
+            
             if (meter && Microphone.isInitialized) {
                 const level = Microphone.getLevel();
                 const width = Math.min(100, level * 200); 

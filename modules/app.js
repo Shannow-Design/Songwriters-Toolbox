@@ -17,6 +17,7 @@ import { KeyFinder } from './keyfinder.js';
 import { ProjectManager } from './project.js';
 import { playScaleSequence, playSingleNote, loadSavedSamples, stopAllSounds } from './audio.js';
 import { CircleOfFifths } from './circle.js'; 
+import { MicFX } from './micfx.js'; // NEW
 
 // --- Module-Scope Variables ---
 let keySelect, scaleSelect, tuningSelect, bassTuningSelect, capoSelect;
@@ -26,7 +27,7 @@ let checkBoxes = {};
 
 // Module Instances
 let theory, guitar, bass, chordRenderer, extraChordRenderer, tuner, keyboard, sampler, drumSampler, looper, visualizer, lyricPad, keyFinder;
-let sequencer, vocalGenerator, songBuilder, studio, projectManager, circle;
+let sequencer, vocalGenerator, songBuilder, studio, projectManager, circle, micFxModule;
 
 // State Variables
 let currentActiveChordNotes = []; 
@@ -40,33 +41,83 @@ function getActiveNotes() {
     return generateScale(keySelect.value, scaleSelect.value); 
 }
 
-function addSpanToggle(wrapperId) {
+function moveModule(wrapperId, direction) {
+    const wrapper = document.getElementById(wrapperId);
+    if (!wrapper || !moduleContainer) return;
+
+    const children = Array.from(moduleContainer.children);
+    const currentIndex = children.indexOf(wrapper);
+    
+    if (currentIndex === -1) return;
+    
+    if (direction === -1 && currentIndex > 0) {
+        moduleContainer.insertBefore(wrapper, children[currentIndex - 1]);
+        saveLayoutSettings(true); 
+        wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (direction === 1 && currentIndex < children.length - 1) {
+        moduleContainer.insertBefore(wrapper, children[currentIndex + 2] || null);
+        saveLayoutSettings(true); 
+        wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function addModuleControls(wrapperId, addSpan = false, headerSelector = 'h3') {
     const wrapper = document.getElementById(wrapperId);
     if(!wrapper) return;
     
-    const header = wrapper.querySelector('h3');
+    const header = wrapper.querySelector(headerSelector);
     if(!header) return;
 
-    if(header.querySelector('.btn-span-toggle')) return;
+    if(header.querySelector('.module-header-controls')) return;
 
-    const btn = document.createElement('button');
-    btn.textContent = "↔ Span";
-    btn.className = "btn-span-toggle";
-    btn.title = "Toggle Full Width in Grid Mode";
-    btn.style.cssText = `
-        float: right; font-size: 0.6rem; background: #333; border: 1px solid #555; 
-        color: #888; padding: 2px 6px; border-radius: 3px; cursor: pointer; margin-left: 10px;
-        text-transform: none; letter-spacing: 0; font-weight: normal;
-    `;
-    
-    btn.onclick = (e) => {
-        e.stopPropagation();
-        const isSpanned = wrapper.classList.toggle('col-span-full');
-        btn.style.color = isSpanned ? '#00e5ff' : '#888';
-        btn.style.borderColor = isSpanned ? '#00e5ff' : '#555';
-    };
+    const ctrlGroup = document.createElement('div');
+    ctrlGroup.className = "module-header-controls";
+    ctrlGroup.style.cssText = "float: right; display: flex; gap: 5px; align-items: center; margin-top: -2px;";
 
-    header.appendChild(btn);
+    const btnStyle = "font-size: 0.65rem; background: #333; border: 1px solid #555; color: #888; padding: 2px 6px; border-radius: 3px; cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: normal; transition: all 0.2s;";
+
+    const btnUp = document.createElement('button');
+    btnUp.innerHTML = "▲";
+    btnUp.title = "Move Module Up";
+    btnUp.style.cssText = btnStyle;
+    btnUp.onmouseover = () => btnUp.style.color = "#fff";
+    btnUp.onmouseout = () => btnUp.style.color = "#888";
+    btnUp.onclick = (e) => { e.stopPropagation(); moveModule(wrapperId, -1); };
+
+    const btnDown = document.createElement('button');
+    btnDown.innerHTML = "▼";
+    btnDown.title = "Move Module Down";
+    btnDown.style.cssText = btnStyle;
+    btnDown.onmouseover = () => btnDown.style.color = "#fff";
+    btnDown.onmouseout = () => btnDown.style.color = "#888";
+    btnDown.onclick = (e) => { e.stopPropagation(); moveModule(wrapperId, 1); };
+
+    ctrlGroup.appendChild(btnUp);
+    ctrlGroup.appendChild(btnDown);
+
+    if (addSpan) {
+        const btnSpan = document.createElement('button');
+        btnSpan.textContent = "↔ Span";
+        btnSpan.className = "btn-span-toggle";
+        btnSpan.title = "Toggle Full Width in Grid Mode";
+        btnSpan.style.cssText = btnStyle;
+        
+        if (wrapper.classList.contains('col-span-full')) {
+            btnSpan.style.color = '#00e5ff';
+            btnSpan.style.borderColor = '#00e5ff';
+        }
+
+        btnSpan.onclick = (e) => {
+            e.stopPropagation();
+            const isSpanned = wrapper.classList.toggle('col-span-full');
+            btnSpan.style.color = isSpanned ? '#00e5ff' : '#888';
+            btnSpan.style.borderColor = isSpanned ? '#00e5ff' : '#555';
+            saveLayoutSettings(true);
+        };
+        ctrlGroup.appendChild(btnSpan);
+    }
+
+    header.appendChild(ctrlGroup);
 }
 
 function updateFretboards(chordNotes, chordRoot = null, chordShape = null) {
@@ -186,30 +237,41 @@ function renderNoteButtons(scaleNotes) {
     });
 }
 
-function saveLayoutSettings() {
+function saveLayoutSettings(silent = false) {
     if (!btnSaveLayout) return;
 
     const settings = {
         mode: layoutModeSelect.value,
         cols: layoutColsSelect.value,
-        checkboxes: {}
+        checkboxes: {},
+        order: [],     
+        spans: {}      
     };
     
     for (const [id, cb] of Object.entries(checkBoxes)) {
         if(cb) settings.checkboxes[id] = cb.checked;
     }
+
+    if (moduleContainer) {
+        settings.order = Array.from(moduleContainer.children).map(child => child.id).filter(id => id);
+        Array.from(moduleContainer.children).forEach(child => {
+            if(child.id) settings.spans[child.id] = child.classList.contains('col-span-full');
+        });
+    }
     
     localStorage.setItem('songwriter_layout_settings', JSON.stringify(settings));
     
-    const originalText = btnSaveLayout.textContent;
-    btnSaveLayout.textContent = "✔ SAVED!";
-    btnSaveLayout.style.color = "#00ff55";
-    btnSaveLayout.style.borderColor = "#00ff55";
-    setTimeout(() => {
-        btnSaveLayout.textContent = originalText;
-        btnSaveLayout.style.color = "";
-        btnSaveLayout.style.borderColor = "";
-    }, 1500);
+    if (!silent) {
+        const originalText = btnSaveLayout.textContent;
+        btnSaveLayout.textContent = "✔ SAVED!";
+        btnSaveLayout.style.color = "#00ff55";
+        btnSaveLayout.style.borderColor = "#00ff55";
+        setTimeout(() => {
+            btnSaveLayout.textContent = originalText;
+            btnSaveLayout.style.color = "";
+            btnSaveLayout.style.borderColor = "";
+        }, 1500);
+    }
 }
 
 function loadLayoutSettings() {
@@ -235,6 +297,25 @@ function loadLayoutSettings() {
                 if (cb) {
                     cb.checked = isChecked;
                     cb.dispatchEvent(new Event('change')); 
+                }
+            }
+        }
+
+        if (settings.order && moduleContainer) {
+            settings.order.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && moduleContainer.contains(el)) {
+                    moduleContainer.appendChild(el); 
+                }
+            });
+        }
+
+        if (settings.spans) {
+            for (const [id, isSpanned] of Object.entries(settings.spans)) {
+                const el = document.getElementById(id);
+                if (el) {
+                    if (isSpanned) el.classList.add('col-span-full');
+                    else el.classList.remove('col-span-full');
                 }
             }
         }
@@ -266,7 +347,6 @@ function initOutputMonitor() {
 
 // --- INITIALIZATION ---
 function init() {
-    // 1. Grab DOM Elements
     keySelect = document.getElementById('key-select');
     scaleSelect = document.getElementById('scale-select');
     tuningSelect = document.getElementById('tuning-select');
@@ -283,15 +363,16 @@ function init() {
     visualizerWrapper = document.getElementById('wrapper-visualizer');
     btnSaveLayout = document.getElementById('btn-save-layout');
 
-    // 2. Map Checkboxes
     const ids = [
         'cb-keyfinder', 'cb-tuner', 'cb-buttons', 'cb-circle', 'cb-chords', 'cb-extra-chords',
         'cb-guitar', 'cb-bass', 'cb-keyboard', 'cb-sequencer', 'cb-vocal', 'cb-songbuilder',
-        'cb-sampler', 'cb-drum-sampler', 'cb-looper', 'cb-studio', 'cb-lyrics', 'cb-visualizer'
+        'cb-sampler', 'cb-drum-sampler', 'cb-looper', 'cb-studio', 'cb-lyrics', 'cb-visualizer',
+        'cb-micfx' // NEW
     ];
-    ids.forEach(id => checkBoxes[id] = document.getElementById(id));
+    ids.forEach(id => {
+        if(document.getElementById(id)) checkBoxes[id] = document.getElementById(id);
+    });
 
-    // 3. Initialize Modules
     theory = new TheoryEngine(); 
     guitar = new Fretboard('fretboard-container');
     bass = new Fretboard('bass-fretboard-container');
@@ -304,6 +385,7 @@ function init() {
     looper = new Looper('looper-module'); 
     visualizer = new Visualizer('visualizer-module');
     lyricPad = new LyricPad('lyrics-module');
+    micFxModule = new MicFX('micfx-module'); // NEW
 
     keyFinder = new KeyFinder('keyfinder-module', (root, scale) => {
         keySelect.value = root;
@@ -313,10 +395,8 @@ function init() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
-    // Sequencer Initialization
     sequencer = new Sequencer('sequencer-container', 
         () => { return { key: keySelect.value, scale: scaleSelect.value }; },
-        // Chord Change Callback
         (chordIndex) => {
             if (chordIndex === -1) {
                 chordRenderer.clearHighlights();
@@ -334,7 +414,6 @@ function init() {
                 }
             }
         },
-        // Preset Load Callback
         (presetData) => {
             keySelect.value = presetData.key;
             scaleSelect.value = presetData.scale;
@@ -346,17 +425,13 @@ function init() {
             document.body.style.background = "#222";
             setTimeout(() => document.body.style.background = "", 100);
         },
-        // Step Callback
         (step, progIndex, progLength, cycleCount, time) => {
             looper.onStep(step, progIndex, progLength, cycleCount, time);
             if (songBuilder) songBuilder.onStep(step, time);
             if (vocalGenerator) vocalGenerator.onStep(step, progIndex, progLength, cycleCount, time);
         },
-        // Stop Callback
         () => { looper.stopAll(); },
-        // Get Looper Data
         () => { return looper.getSettings(); },
-        // Lead Visual Callback
         (midiNumber) => {
             if (keyboard) keyboard.highlightLeadNote(midiNumber);
         }
@@ -379,7 +454,6 @@ function init() {
         keySelect.dispatchEvent(new Event('change'));
     });
 
-    // 4. Setup Options
     getNotes().forEach(note => { const option = document.createElement('option'); option.value = note; option.textContent = note; keySelect.appendChild(option); });
     keySelect.value = 'C'; 
     for (const [key, value] of Object.entries(SCALES)) { const option = document.createElement('option'); option.value = key; option.textContent = value.name; scaleSelect.appendChild(option); }
@@ -388,7 +462,6 @@ function init() {
     tuningSelect.value = 'standard';
     bassTuningSelect.value = 'bass_standard';
 
-    // 5. Global Listeners
     keySelect.addEventListener('change', () => { keyboard.clearHighlights(); updateFretboards([], null); updateDisplay(); });
     scaleSelect.addEventListener('change', () => { keyboard.clearHighlights(); updateFretboards([], null); updateDisplay(); });
     tuningSelect.addEventListener('change', () => updateDisplay());
@@ -405,7 +478,6 @@ function init() {
         });
     }
 
-    // 6. Setup Visibility Toggles
     const wrappers = {
         'cb-keyfinder': 'wrapper-keyfinder',
         'cb-tuner': 'wrapper-tuner',
@@ -423,7 +495,8 @@ function init() {
         'cb-drum-sampler': 'wrapper-drum-sampler',
         'cb-looper': 'wrapper-looper',
         'cb-studio': 'wrapper-studio',
-        'cb-lyrics': 'wrapper-lyrics'
+        'cb-lyrics': 'wrapper-lyrics',
+        'cb-micfx': 'wrapper-micfx' // NEW
     };
 
     const toggleModule = (cb, wrapperId) => {
@@ -456,7 +529,6 @@ function init() {
         });
     }
 
-    // 7. Layout Mode Logic
     const updateLayout = () => {
         const mode = layoutModeSelect.value; 
         const cols = layoutColsSelect.value; 
@@ -491,41 +563,30 @@ function init() {
     layoutModeSelect.addEventListener('change', updateLayout);
     layoutColsSelect.addEventListener('change', updateLayout);
     
-    // 8. Bind Save Layout Button
     if(btnSaveLayout) {
-        btnSaveLayout.addEventListener('click', saveLayoutSettings);
+        btnSaveLayout.addEventListener('click', () => saveLayoutSettings(false));
     }
 
-    // 9. Load Saved Audio & Settings
     loadSavedSamples().then(() => { sampler.updateStatus(); });
+    
     loadLayoutSettings(); 
 
-    // 10. Add Span Buttons
-    addSpanToggle('wrapper-guitar');
-    addSpanToggle('wrapper-bass');
-    addSpanToggle('wrapper-keyfinder');
-    addSpanToggle('wrapper-keyboard'); 
-    addSpanToggle('wrapper-extra-chords');
-    addSpanToggle('wrapper-sequencer'); 
+    const spannableModules = [
+        'wrapper-guitar', 'wrapper-bass', 'wrapper-keyfinder', 
+        'wrapper-keyboard', 'wrapper-extra-chords', 'wrapper-sequencer', 'wrapper-looper', 'wrapper-micfx'
+    ];
+
+    Object.values(wrappers).forEach(wrapperId => {
+        if (wrapperId === 'wrapper-vocal') return; 
+        
+        const wantsSpan = spannableModules.includes(wrapperId);
+        addModuleControls(wrapperId, wantsSpan);
+    });
 
     setTimeout(() => {
-        const vocalHeader = document.querySelector('.vocal-header');
-        if(vocalHeader) {
-            const btn = document.createElement('button'); 
-            btn.textContent = "↔ Span"; 
-            btn.className = "btn-span-toggle"; 
-            btn.style.cssText = "font-size:0.6rem; background:#333; border:1px solid #555; color:#888; padding:2px 6px; border-radius:3px; cursor:pointer; margin-left:10px;";
-            btn.onclick = () => { 
-                const wrapper = document.getElementById('wrapper-vocal'); 
-                const isSpanned = wrapper.classList.toggle('col-span-full'); 
-                btn.style.color = isSpanned ? '#00e5ff' : '#888'; 
-                btn.style.borderColor = isSpanned ? '#00e5ff' : '#555'; 
-            };
-            vocalHeader.insertBefore(btn, vocalHeader.lastElementChild);
-        }
+        addModuleControls('wrapper-vocal', true, '.vocal-header');
     }, 500);
 
-    // 11. Final Global Bindings
     const btnExport = document.getElementById('btn-project-export');
     const btnImport = document.getElementById('btn-project-import');
     const inputImport = document.getElementById('input-project-import');
@@ -539,20 +600,15 @@ function init() {
         }); 
     }
 
-    // NEW: Inject the New Project Button dynamically right before the Import button
     if (btnExport && btnExport.parentNode && !document.getElementById('btn-project-new')) {
         const btnNew = document.createElement('button');
         btnNew.id = 'btn-project-new';
-        btnNew.className = btnExport.className; // Inherit Tailwind CSS classes from Export button
+        btnNew.className = btnExport.className; 
         btnNew.innerHTML = "📄 NEW PROJECT";
-        
-        // Add a subtle red tint so it looks like a reset/danger button
         btnNew.style.backgroundColor = "rgba(255, 0, 85, 0.15)";
         btnNew.style.color = "#ff4466";
         btnNew.style.borderColor = "#ff0055";
-        
         btnExport.parentNode.insertBefore(btnNew, btnImport);
-        
         btnNew.addEventListener('click', () => projectManager.newProject());
     }
 
