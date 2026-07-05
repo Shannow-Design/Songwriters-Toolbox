@@ -110,6 +110,7 @@ export class Sequencer {
         };
         
         this.settings = {
+            timeSignature: '4/4', // NEW: Dynamic Time Signature
             metronome: false,
             metronomeSubdivision: 4, 
             shuffle: false,
@@ -125,12 +126,17 @@ export class Sequencer {
             octaves: { chords: 0, bass: 0, lead: 0, samples: 0 },
             drops: { chords: false, bass: false, lead: false, samples: false },
             upStrums: true,
-            progressionIndex: 0 
+            progressionIndex: 0,
+            progressionStep: 0 
         };
 
         this.renderUI();
         this.injectModals(); 
     }
+
+    // Dynamic length getters based on Time Signature
+    get beatsPerBar() { return parseInt(this.settings.timeSignature.split('/')[0]) || 4; }
+    get stepsPerBar() { return this.beatsPerBar * 4; }
 
     renderUI() {
         const style = document.createElement('style');
@@ -146,84 +152,20 @@ export class Sequencer {
                 align-items: center;
                 border: 1px solid #2a2a2a;
             }
-            .track-header-col {
-                width: 115px; 
-                flex-shrink: 0;
-            }
-            .track-header-col strong {
-                color: #00e5ff; 
-                font-size: 0.85rem; 
-                letter-spacing: 1px;
-            }
-            .track-mixer-col {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 15px;
-                flex: 2;
-                min-width: 240px;
-                max-width: 400px;
-            }
-            .slider-group {
-                display: flex;
-                flex-direction: column;
-                flex: 1;
-                min-width: 60px;
-            }
-            .slider-group label {
-                font-size: 0.65rem; 
-                color: #888;
-                margin-bottom: 4px;
-            }
-            .slider-group input {
-                width: 100%; 
-                accent-color: var(--primary-cyan);
-            }
-            .track-sound-col {
-                flex: 1.5;
-                min-width: 140px;
-                max-width: 250px;
-                display: flex;
-                flex-direction: column;
-            }
-            .track-pattern-col {
-                flex: 2.5;
-                min-width: 200px;
-                display: flex;
-                flex-direction: column;
-            }
-            .track-octave-col {
-                width: 60px;
-                flex-shrink: 0;
-                display: flex;
-                flex-direction: column;
-            }
-            .full-width-select {
-                width: 100%;
-                background: #111;
-                color: #fff;
-                border: 1px solid #444;
-                padding: 6px 8px;
-                border-radius: 4px;
-                font-size: 0.8rem;
-            }
-            .bpm-btn {
-                background: #444;
-                border: none;
-                color: #fff;
-                cursor: pointer;
-                padding: 0 6px;
-                border-radius: 3px;
-                font-size: 0.9rem;
-                font-weight: bold;
-                height: 20px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .bpm-btn:hover {
-                background: var(--primary-cyan);
-                color: #000;
-            }
+            .track-header-col { width: 115px; flex-shrink: 0; }
+            .track-header-col strong { color: #00e5ff; font-size: 0.85rem; letter-spacing: 1px; }
+            .track-mixer-col { display: flex; flex-wrap: wrap; gap: 15px; flex: 2; min-width: 240px; max-width: 400px; }
+            .slider-group { display: flex; flex-direction: column; flex: 1; min-width: 60px; }
+            .slider-group label { font-size: 0.65rem; color: #888; margin-bottom: 4px; }
+            .slider-group input { width: 100%; accent-color: var(--primary-cyan); }
+            .track-sound-col { flex: 1.5; min-width: 140px; max-width: 250px; display: flex; flex-direction: column; }
+            .track-pattern-col { flex: 2.5; min-width: 200px; display: flex; flex-direction: column; }
+            .track-octave-col { width: 60px; flex-shrink: 0; display: flex; flex-direction: column; }
+            .full-width-select { width: 100%; background: #111; color: #fff; border: 1px solid #444; padding: 6px 8px; border-radius: 4px; font-size: 0.8rem; }
+            .bpm-btn { background: #444; border: none; color: #fff; cursor: pointer; padding: 0 6px; border-radius: 3px; font-size: 0.9rem; font-weight: bold; height: 20px; display: flex; align-items: center; justify-content: center; }
+            .bpm-btn:hover { background: var(--primary-cyan); color: #000; }
+            .step-dot { display: inline-block; width: 10px; height: 10px; background: #333; border-radius: 50%; margin: 2px; }
+            .step-dot.hidden { display: none !important; }
         `;
         this.container.appendChild(style);
 
@@ -279,7 +221,17 @@ export class Sequencer {
                     </div>
                     
                     <div style="display: flex; gap: 15px; align-items: center; border-left: 1px solid #444; padding-left: 15px; flex-wrap:wrap;">
-                        <div style="display:flex; align-items:center; gap:5px;">
+                        <div style="display:flex; flex-direction:column; gap:2px;">
+                            <label style="font-size:0.5rem; color:#888; text-transform:uppercase;">Time Sig</label>
+                            <select id="sel-time-sig" class="full-width-select" style="width:60px; padding:2px; font-size:0.75rem; text-align:center;">
+                                <option value="3/4">3/4</option>
+                                <option value="4/4" selected>4/4</option>
+                                <option value="5/4">5/4</option>
+                                <option value="6/4">6/4</option>
+                            </select>
+                        </div>
+                        
+                        <div style="display:flex; align-items:center; gap:5px; margin-left:10px;">
                             <input type="checkbox" id="cb-metronome" style="accent-color: #00e5ff; width:16px; height:16px; cursor:pointer;">
                             <label for="cb-metronome" style="cursor:pointer; font-size:0.85rem; color:#ccc;">Click</label>
                         </div>
@@ -302,9 +254,7 @@ export class Sequencer {
                 </div>
 
                 <div class="track-row">
-                    <div class="track-header-col">
-                        <strong>CHORDS</strong>
-                    </div>
+                    <div class="track-header-col"><strong>CHORDS</strong></div>
                     <div class="track-mixer-col">
                         ${createSliderGroup('vol-chords', 'Vol', this.settings.volumes.chords)}
                         ${createSliderGroup('pan-chords', 'Pan', this.settings.pans.chords, -1, 1, 0.1)}
@@ -327,9 +277,7 @@ export class Sequencer {
                 </div>
 
                 <div class="track-row">
-                    <div class="track-header-col">
-                        <strong>BASS</strong>
-                    </div>
+                    <div class="track-header-col"><strong>BASS</strong></div>
                     <div class="track-mixer-col">
                         ${createSliderGroup('vol-bass', 'Vol', this.settings.volumes.bass)}
                         ${createSliderGroup('pan-bass', 'Pan', this.settings.pans.bass, -1, 1, 0.1)}
@@ -348,9 +296,7 @@ export class Sequencer {
                 </div>
 
                 <div class="track-row">
-                    <div class="track-header-col">
-                        <strong>LEAD</strong>
-                    </div>
+                    <div class="track-header-col"><strong>LEAD</strong></div>
                     <div class="track-mixer-col">
                         ${createSliderGroup('vol-lead', 'Vol', this.settings.volumes.lead)}
                         ${createSliderGroup('pan-lead', 'Pan', this.settings.pans.lead, -1, 1, 0.1)}
@@ -369,9 +315,7 @@ export class Sequencer {
                 </div>
 
                 <div class="track-row">
-                    <div class="track-header-col">
-                        <strong>SAMPLES</strong>
-                    </div>
+                    <div class="track-header-col"><strong>SAMPLES</strong></div>
                     <div class="track-mixer-col">
                         ${createSliderGroup('vol-samples', 'Vol', this.settings.volumes.samples)}
                         ${createSliderGroup('pan-samples', 'Pan', this.settings.pans.samples, -1, 1, 0.1)}
@@ -390,9 +334,7 @@ export class Sequencer {
                 </div>
 
                 <div class="track-row">
-                    <div class="track-header-col">
-                        <strong>DRUMS</strong>
-                    </div>
+                    <div class="track-header-col"><strong>DRUMS</strong></div>
                     <div class="track-mixer-col">
                         ${createSliderGroup('vol-drums', 'Vol', this.settings.volumes.drums)}
                         ${createSliderGroup('pan-drums', 'Pan', this.settings.pans.drums, -1, 1, 0.1)}
@@ -439,7 +381,7 @@ export class Sequencer {
                 </div>
 
                 <div class="step-tracker">
-                    ${Array(16).fill(0).map((_, i) => `<div class="step-dot" id="step-${i}"></div>`).join('')}
+                    ${Array(24).fill(0).map((_, i) => `<div class="step-dot" id="step-${i}"></div>`).join('')}
                 </div>
             </div>
         `;
@@ -451,6 +393,7 @@ export class Sequencer {
         this.populateDropdowns();
         this.refreshPresetList();
         this.bindEvents();
+        this.updateStepTrackerVisibility();
     }
 
     bindEvents() {
@@ -469,7 +412,6 @@ export class Sequencer {
             updateBpm(parseInt(e.target.value));
         });
 
-        // BPM Up/Down Buttons
         this.container.querySelector('#btn-bpm-down').addEventListener('click', () => {
             if (this.bpm > 40) updateBpm(this.bpm - 1);
         });
@@ -478,7 +420,17 @@ export class Sequencer {
             if (this.bpm < 200) updateBpm(this.bpm + 1);
         });
 
-        // + NEW Buttons
+        // TIME SIG CHANGE
+        const selTimeSig = this.container.querySelector('#sel-time-sig');
+        if (selTimeSig) {
+            selTimeSig.value = this.settings.timeSignature || '4/4';
+            selTimeSig.addEventListener('change', (e) => {
+                this.settings.timeSignature = e.target.value;
+                this.updateStepTrackerVisibility();
+                if (this.currentStep >= this.stepsPerBar) this.currentStep = 0;
+            });
+        }
+
         this.container.querySelectorAll('.btn-new').forEach(btn => {
             if(btn.id === 'btn-save-preset' || btn.id === 'btn-fav-preset') return;
             btn.addEventListener('click', (e) => {
@@ -488,7 +440,6 @@ export class Sequencer {
             });
         });
 
-        // EDIT Buttons
         this.container.querySelectorAll('.btn-edit-pat').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const type = e.target.dataset.type;
@@ -522,14 +473,12 @@ export class Sequencer {
         bindSelect('#sel-fill', 'fillName', 'fills'); 
         bindSelect('#sel-progression', 'progressionName', 'progression');
 
-        // Auto Fill Checkbox
         const cbAutoFill = this.container.querySelector('#cb-auto-fill');
         if(cbAutoFill) {
             cbAutoFill.checked = this.settings.autoFill;
             cbAutoFill.addEventListener('change', (e) => this.settings.autoFill = e.target.checked);
         }
 
-        // Mixer Binding
         const bindMixer = (id, type, track) => {
             const el = this.container.querySelector(id);
             if(!el) return;
@@ -598,6 +547,15 @@ export class Sequencer {
         this.container.querySelector('#sel-metronome-sub').addEventListener('change', (e) => this.settings.metronomeSubdivision = parseInt(e.target.value));
     }
 
+    updateStepTrackerVisibility() {
+        const dots = this.container.querySelectorAll('.step-dot');
+        const maxSteps = this.stepsPerBar;
+        dots.forEach((dot, index) => {
+            if (index >= maxSteps) dot.classList.add('hidden');
+            else dot.classList.remove('hidden');
+        });
+    }
+
     populateDropdowns() {
         const populate = (id, lib) => { const sel = this.container.querySelector(id); sel.innerHTML = ''; Object.keys(lib).forEach(k => sel.add(new Option(k, k))); };
         const insts = Object.keys(INSTRUMENTS);
@@ -664,11 +622,11 @@ export class Sequencer {
         const modalHtml = `<div id="prog-modal" class="modal-overlay">
             <div class="modal-content" style="max-width:500px;">
                 <h3 class="modal-title">Edit Progression</h3>
-                <input type="text" id="new-prog-name" placeholder="Name" style="width:100%; margin-bottom:10px; padding:5px; background:#222; border:1px solid #555; color:white;">
-                <div id="chord-selectors-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:5px; margin-bottom:15px;"></div>
+                <input type="text" id="new-prog-name" placeholder="Name" style="width:100%; margin-bottom:15px; padding:8px; background:#222; border:1px solid #555; color:white;">
+                <div id="chord-selectors-container" style="display:flex; flex-direction:column; gap:5px; margin-bottom:15px;"></div>
                 <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
-                    <button id="btn-remove-step" class="btn-delete-custom" style="padding:4px 12px; background:#aa0033; color:white; border:none; border-radius:3px; cursor:pointer;">- Step</button>
-                    <button id="btn-add-step" class="btn-new" style="padding:4px 12px; cursor:pointer;">+ Step</button>
+                    <button id="btn-remove-step" class="btn-delete-custom" style="padding:4px 12px; background:#aa0033; color:white; border:none; border-radius:3px; cursor:pointer;">- Remove Chord</button>
+                    <button id="btn-add-step" class="btn-new" style="padding:4px 12px; cursor:pointer;">+ Add Chord</button>
                 </div>
                 <div class="modal-actions">
                     <button onclick="document.getElementById('prog-modal').style.display='none'" class="btn-cancel">Cancel</button>
@@ -692,7 +650,7 @@ export class Sequencer {
         </div>`;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         
-        document.getElementById('btn-add-step').addEventListener('click', () => this.addProgStep());
+        document.getElementById('btn-add-step').addEventListener('click', () => this.addProgStep(0, 4));
         document.getElementById('btn-remove-step').addEventListener('click', () => this.removeProgStep());
         document.getElementById('btn-save-prog').addEventListener('click', () => this.saveCustomProgression());
         document.getElementById('btn-save-pat').addEventListener('click', () => this.saveCustomPattern());
@@ -749,7 +707,10 @@ export class Sequencer {
             let noteDuration = 0.25 * secondsPerBeat;
             if (this.settings.shuffle) { noteDuration = (this.previewStep % 2 === 0) ? noteDuration * 1.33 : noteDuration * 0.67; }
             this.nextNoteTime += noteDuration;
-            this.previewStep = (this.previewStep + 1) % 16;
+            
+            // Dynamic Preview Wrap
+            this.previewStep++;
+            if (this.previewStep >= this.stepsPerBar) this.previewStep = 0;
         }
         this.timerID = window.setTimeout(() => this.previewScheduler(), this.lookahead);
     }
@@ -794,7 +755,7 @@ export class Sequencer {
             const row = document.createElement('div'); 
             row.className = 'pattern-row'; 
             row.innerHTML = `<div class="row-label">${part.toUpperCase()}</div>`; 
-            for(let i=0; i<16; i++) { 
+            for(let i=0; i<this.stepsPerBar; i++) { 
                 const cell = document.createElement('div'); 
                 cell.className = 'step-cell'; 
                 cell.dataset.part = part; 
@@ -821,7 +782,7 @@ export class Sequencer {
         const row = document.createElement('div'); 
         row.className = 'pattern-row'; 
         row.innerHTML = `<div class="row-label">${label}</div>`; 
-        for(let i=0; i<16; i++) { 
+        for(let i=0; i<this.stepsPerBar; i++) { 
             const cell = document.createElement('div'); 
             cell.className = 'step-cell'; 
             cell.dataset.step = i; 
@@ -847,7 +808,7 @@ export class Sequencer {
         row.className = 'pattern-row'; 
         row.innerHTML = `<div class="row-label">Note</div>`; 
         const cycle = options; 
-        for(let i=0; i<16; i++) { 
+        for(let i=0; i<this.stepsPerBar; i++) { 
             const cell = document.createElement('div'); 
             cell.className = 'step-cell'; 
             
@@ -938,29 +899,57 @@ export class Sequencer {
             const currentName = this.state.progressionName;
             nameInput.value = currentName;
             const progData = this.libraries.progression[currentName] || [0,0,0,0];
-            progData.forEach(chordIdx => {
-                this.addProgStep(chordIdx);
+            progData.forEach(item => {
+                if (typeof item === 'number') {
+                    this.addProgStep(item, 4);
+                } else if (item && item.c !== undefined) {
+                    const beats = item.beats !== undefined ? item.beats : (item.b !== undefined ? item.b * 4 : 4);
+                    this.addProgStep(item.c, beats);
+                }
             });
         } else {
             nameInput.value = ''; 
-            for(let i=0; i<4; i++) this.addProgStep(); 
+            for(let i=0; i<4; i++) this.addProgStep(0, 4);
         }
     }
     
-    addProgStep(defaultVal = 0) { 
+    addProgStep(defaultVal = 0, defaultBeats = 4) { 
         const cont = document.getElementById('chord-selectors-container'); 
-        const sel = document.createElement('select'); 
-        sel.className = 'prog-step-select'; 
-        sel.style.width = '70px'; 
-        sel.style.margin='2px'; 
-        sel.style.fontSize='0.8rem';
+        
+        const row = document.createElement('div');
+        row.className = 'prog-step-row';
+        row.style.cssText = 'display:flex; gap:10px; align-items:center; margin-bottom:8px; width:100%;';
+        
+        const selChord = document.createElement('select'); 
+        selChord.className = 'prog-step-chord'; 
+        selChord.style.cssText = 'flex:2; background:#111; color:white; border:1px solid #555; padding:6px; border-radius:3px; font-size:0.85rem;';
         
         ROMAN_NUMERALS.forEach((r, i) => {
             const opt = new Option(r, i);
             if (i === defaultVal) opt.selected = true;
-            sel.add(opt);
+            selChord.add(opt);
         }); 
-        cont.appendChild(sel); 
+
+        const selBars = document.createElement('select');
+        selBars.className = 'prog-step-bars';
+        selBars.style.cssText = 'flex:1.5; background:#111; color:#00e5ff; border:1px solid #555; padding:6px; border-radius:3px; font-size:0.85rem; font-weight:bold;';
+        
+        [1, 2, 3, 4, 8, 12, 16, 32].forEach(b => {
+            let label = b + " Beat" + (b > 1 ? "s" : "");
+            if (b === 4) label = "1 Bar (4 Beats)";
+            if (b === 8) label = "2 Bars";
+            if (b === 12) label = "3 Bars";
+            if (b === 16) label = "4 Bars";
+            if (b === 32) label = "8 Bars";
+            
+            const opt = new Option(label, b);
+            if (b === defaultBeats) opt.selected = true;
+            selBars.add(opt);
+        });
+
+        row.appendChild(selChord);
+        row.appendChild(selBars);
+        cont.appendChild(row); 
     }
 
     removeProgStep() {
@@ -970,8 +959,39 @@ export class Sequencer {
         }
     }
     
-    saveCustomProgression() { const name = document.getElementById('new-prog-name').value.trim() || "My Prog"; const sels = document.querySelectorAll('.prog-step-select'); const indices = Array.from(sels).map(s => parseInt(s.value)); this.customData.progressions[name] = indices; this.libraries.progression[name] = indices; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); this.container.querySelector('#sel-progression').value = name; this.state.progressionName = name; document.getElementById('prog-modal').style.display = 'none'; }
-    deleteCurrentProgression() { if(confirm(`Delete ${this.state.progressionName}?`)) { delete this.customData.progressions[this.state.progressionName]; delete this.libraries.progression[this.state.progressionName]; localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); this.populateDropdowns(); } }
+    saveCustomProgression() { 
+        const name = document.getElementById('new-prog-name').value.trim() || "My Prog"; 
+        const rows = document.querySelectorAll('.prog-step-row'); 
+        
+        const data = Array.from(rows).map(row => {
+            return {
+                c: parseInt(row.querySelector('.prog-step-chord').value),
+                beats: parseInt(row.querySelector('.prog-step-bars').value) 
+            };
+        });
+
+        if (!this.customData.progressions) this.customData.progressions = {};
+        if (!this.libraries.progression) this.libraries.progression = {};
+
+        this.customData.progressions[name] = data; 
+        this.libraries.progression[name] = data; 
+        
+        localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); 
+        this.populateDropdowns(); 
+        
+        this.container.querySelector('#sel-progression').value = name; 
+        this.state.progressionName = name; 
+        document.getElementById('prog-modal').style.display = 'none'; 
+    }
+    
+    deleteCurrentProgression() { 
+        if(confirm(`Delete ${this.state.progressionName}?`)) { 
+            delete this.customData.progressions[this.state.progressionName]; 
+            delete this.libraries.progression[this.state.progressionName]; 
+            localStorage.setItem('custom_progressions', JSON.stringify(this.customData.progressions)); 
+            this.populateDropdowns(); 
+        } 
+    }
     
     savePreset() { 
         const sel = this.container.querySelector('#sel-presets');
@@ -1044,6 +1064,7 @@ export class Sequencer {
         this.settings = JSON.parse(JSON.stringify(p.settings)); 
         
         if (!this.settings.pans) this.settings.pans = { chords:0, bass:0, lead:0, samples:0, drums:0 };
+        if (!this.settings.timeSignature) this.settings.timeSignature = '4/4';
         if (this.settings.autoFill === undefined) this.settings.autoFill = false;
 
         const defaultState = {
@@ -1061,6 +1082,9 @@ export class Sequencer {
         this.container.querySelector('#bpm-slider').value = this.bpm; 
         this.container.querySelector('#bpm-val').textContent = this.bpm; 
         this.container.querySelector('#cb-shuffle').checked = this.settings.shuffle; 
+        
+        const selTimeSig = this.container.querySelector('#sel-time-sig');
+        if (selTimeSig) selTimeSig.value = this.settings.timeSignature;
         
         const setVal = (id, val) => { const el = this.container.querySelector(id); if(el) el.value = val; }; 
         setVal('#sel-instrument', this.settings.instrument); 
@@ -1100,7 +1124,9 @@ export class Sequencer {
             if(t!=='drums' && isFinite(this.settings.reverbs[t])) setTrackReverb(t, this.settings.reverbs[t]); 
         }; 
         ['chords','bass','lead','samples','drums'].forEach(applyMix); 
-        this.populateDropdowns(); 
+        this.populateDropdowns();
+        this.updateStepTrackerVisibility();
+        
         if(this.onPresetLoad) this.onPresetLoad({key: p.key, scale: p.scale, looper: p.looper}); 
     }
 
@@ -1167,6 +1193,7 @@ export class Sequencer {
 
     resetProgressionIndex() {
         this.settings.progressionIndex = -1;
+        this.settings.progressionStep = -1; 
         this.progressionCycles = 0;
     }
 
@@ -1177,6 +1204,7 @@ export class Sequencer {
             if (ctx.state === 'suspended') ctx.resume();
             this.currentStep = 0;
             this.settings.progressionIndex = -1; 
+            this.settings.progressionStep = -1; 
             this.progressionCycles = 0; 
             this.nextNoteTime = ctx.currentTime;
             this.scheduler(); 
@@ -1212,39 +1240,58 @@ export class Sequencer {
         }
         this.nextNoteTime += noteDuration;
         this.currentStep++;
-        if (this.currentStep === 16) this.currentStep = 0;
+        
+        // Loop based on dynamic time signature
+        if (this.currentStep >= this.stepsPerBar) this.currentStep = 0;
     }
 
     scheduleNote(stepNumber, time) {
-        let prog = this.libraries.progression[this.state.progressionName];
-        if (!prog) {
+        let rawProg = this.libraries.progression[this.state.progressionName];
+        if (!rawProg) {
             this.state.progressionName = 'Pop Hit (I-V-vi-IV)';
-            prog = this.libraries.progression[this.state.progressionName];
+            rawProg = this.libraries.progression[this.state.progressionName];
         }
 
-        if (stepNumber === 0) {
-            const nextIndex = (this.settings.progressionIndex + 1) % prog.length;
-            if (nextIndex === 0 && this.settings.progressionIndex !== -1) {
-                this.progressionCycles++;
+        let progSteps = [];
+        rawProg.forEach(item => {
+            let c = 0;
+            let beats = 4;
+            if (typeof item === 'number') {
+                c = item;
+            } else if (item && item.c !== undefined) {
+                c = item.c;
+                beats = item.beats !== undefined ? item.beats : (item.b !== undefined ? item.b * 4 : 4);
             }
-            if (this.settings.progressionIndex === -1) {
-                this.settings.progressionIndex = 0;
-            } else {
-                this.settings.progressionIndex = nextIndex;
+            const stepsCount = beats * 4; 
+            for (let i = 0; i < stepsCount; i++) {
+                progSteps.push(c);
             }
+        });
+        if (progSteps.length === 0) progSteps = Array(this.stepsPerBar).fill(0);
+
+        if (this.settings.progressionStep === undefined || this.settings.progressionStep === -1) {
+            this.settings.progressionStep = 0;
+            this.progressionCycles = 0;
         }
+
+        const pStep = this.settings.progressionStep;
+        const chordIndex = progSteps[pStep];
 
         requestAnimationFrame(() => {
             this.updateVisualTracker(stepNumber);
-            if (stepNumber === 0 && this.onChordChange && prog) {
-                this.onChordChange(prog[this.settings.progressionIndex]);
+            
+            let isFirstStepOfChord = (pStep === 0);
+            if (pStep > 0 && progSteps[pStep] !== progSteps[pStep - 1]) isFirstStepOfChord = true;
+
+            if (isFirstStepOfChord && this.onChordChange) {
+                this.onChordChange(chordIndex);
             }
 
             if (this.onLeadStep) {
                 const leadPat = this.libraries.lead[this.state.leadName];
                 let visualMidi = null; 
                 const chords = getAllChords(this.getScaleData().key, this.getScaleData().scale);
-                const chord = chords[prog[this.settings.progressionIndex]];
+                const chord = chords[chordIndex]; 
                 
                 if (leadPat && leadPat[stepNumber] && chord) {
                     const fullScale = generateScale(this.getScaleData().key, this.getScaleData().scale);
@@ -1287,13 +1334,18 @@ export class Sequencer {
             }
         });
 
+        const syntheticProgIndex = Math.floor(pStep / this.stepsPerBar);
+        const syntheticProgLength = Math.max(1, Math.ceil(progSteps.length / this.stepsPerBar));
+        this.settings.progressionIndex = syntheticProgIndex; 
+
+        // Pass this.beatsPerBar dynamically down to Looper
         if (this.onStepCallback) {
-            this.onStepCallback(stepNumber, this.settings.progressionIndex, prog.length, this.progressionCycles, time);
+            this.onStepCallback(stepNumber, syntheticProgIndex, syntheticProgLength, this.progressionCycles, time, this.beatsPerBar);
         }
 
         if (this.settings.metronome && (stepNumber % this.settings.metronomeSubdivision === 0)) playDrum('metronome', time);
         
-        const isFillBar = this.settings.autoFill && prog && (this.settings.progressionIndex === prog.length - 1);
+        const isFillBar = this.settings.autoFill && (syntheticProgIndex === syntheticProgLength - 1);
         let drumPat = this.libraries.drums[this.state.drumName];
         
         if (isFillBar) {
@@ -1301,24 +1353,26 @@ export class Sequencer {
             if (fillPat) drumPat = fillPat;
         }
 
-        if (this.settings.autoFill && stepNumber === 0 && this.settings.progressionIndex === 0 && this.progressionCycles > 0) {
+        if (this.settings.autoFill && pStep === 0 && this.progressionCycles > 0) {
             playDrum('crash', time);
         }
 
         if (drumPat) {
-            if (drumPat.kick && drumPat.kick[stepNumber]) playDrum('kick', time);
-            if (drumPat.snare && drumPat.snare[stepNumber]) playDrum('snare', time);
-            if (drumPat.hihat && drumPat.hihat[stepNumber]) playDrum('hihat', time);
-            if (drumPat.tom && drumPat.tom[stepNumber]) playDrum('tom', time);
-            if (drumPat.crash && drumPat.crash[stepNumber]) playDrum('crash', time);
+            // Arrays are assumed to wrap at 16 automatically when accessed, 
+            // but we use the exact stepNumber so it naturally stops hitting higher indexes.
+            const wrapStep = stepNumber % 16; 
+            if (drumPat.kick && drumPat.kick[wrapStep]) playDrum('kick', time);
+            if (drumPat.snare && drumPat.snare[wrapStep]) playDrum('snare', time);
+            if (drumPat.hihat && drumPat.hihat[wrapStep]) playDrum('hihat', time);
+            if (drumPat.tom && drumPat.tom[wrapStep]) playDrum('tom', time);
+            if (drumPat.crash && drumPat.crash[wrapStep]) playDrum('crash', time);
         }
 
         const { key, scale } = this.getScaleData();
         const chords = getAllChords(key, scale); 
         const fullScale = generateScale(key, scale); 
         
-        if (!prog || !chords) return;
-        const chordIndex = prog[this.settings.progressionIndex];
+        if (!chords) return;
         const chord = chords[chordIndex]; 
 
         if (chord) {
@@ -1333,14 +1387,14 @@ export class Sequencer {
             const sampDrop = this.settings.drops.samples || false;
 
             const rhythmPat = this.libraries.rhythm[this.state.rhythmName];
-            if (rhythmPat && rhythmPat[stepNumber]) {
+            if (rhythmPat && rhythmPat[stepNumber % 16]) {
                 const isBassStr = this.settings.instrument === 'Bass Guitar';
                 const octaveOffset = isBassStr ? -1 : 0; 
                 if (chord.notes) {
                     const frequencies = chord.notes.map(note => 
                         this.getFrequencyForChord(note, key, chord.root, octaveOffset + chordOct, chordDrop)
                     );
-                    const strumStep = this.settings.upStrums ? stepNumber : 0;
+                    const strumStep = this.settings.upStrums ? (stepNumber % 16) : 0;
                     playStrum(frequencies, time, this.settings.instrument, strumStep);
                 }
             }
@@ -1377,13 +1431,19 @@ export class Sequencer {
             };
 
             const bassPat = this.libraries.bass[this.state.bassName];
-            if (bassPat) playScaleNote(bassPat[stepNumber], this.settings.bassInstrument, bassOct, bassDrop, 'bass', 0.4);
+            if (bassPat) playScaleNote(bassPat[stepNumber % 16], this.settings.bassInstrument, bassOct, bassDrop, 'bass', 0.4);
 
             const leadPat = this.libraries.lead[this.state.leadName];
-            if (leadPat) playScaleNote(leadPat[stepNumber], this.settings.leadInstrument, leadOct, leadDrop, 'lead', 0.2);
+            if (leadPat) playScaleNote(leadPat[stepNumber % 16], this.settings.leadInstrument, leadOct, leadDrop, 'lead', 0.2);
 
             const samplesPat = this.libraries.samples[this.state.samplesName];
-            if (samplesPat) playScaleNote(samplesPat[stepNumber], this.settings.samplesInstrument, sampOct, sampDrop, 'samples', 0.2);
+            if (samplesPat) playScaleNote(samplesPat[stepNumber % 16], this.settings.samplesInstrument, sampOct, sampDrop, 'samples', 0.2);
+        }
+
+        this.settings.progressionStep++;
+        if (this.settings.progressionStep >= progSteps.length) {
+            this.settings.progressionStep = 0;
+            this.progressionCycles++;
         }
     }
     

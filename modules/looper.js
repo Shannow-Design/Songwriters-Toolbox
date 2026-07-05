@@ -1,5 +1,5 @@
 // modules/looper.js
-import { Microphone, recordSample, applyFades, playSample, ctx, decodeAudioFile, bufferToWav, getTrackInput } from './audio.js';
+import { Microphone, recordSample, applyFades, playSample, ctx, decodeAudioFile, bufferToWav, getTrackInput, createVocalChain } from './audio.js';
 import { SampleStorage } from './storage.js';
 
 function normalizeLoopBuffer(buffer) {
@@ -59,6 +59,8 @@ export class Looper {
         this.latencyMs = 50; 
         this.isLatencyTesting = false;
         
+        this.lastCycleCount = -1; 
+        
         this.render();
         this.startMeterLoop();
         this.loadLoops(); 
@@ -68,10 +70,13 @@ export class Looper {
     createBank(i) {
         const gainNode = ctx.createGain();
         const pannerNode = ctx.createStereoPanner();
+        const fxChain = createVocalChain(); 
         
         gainNode.gain.value = 1.0;
         pannerNode.pan.value = 0;
-        gainNode.connect(pannerNode);
+        
+        gainNode.connect(fxChain.input);
+        fxChain.output.connect(pannerNode);
         pannerNode.connect(getTrackInput('looper'));
 
         return { 
@@ -82,6 +87,8 @@ export class Looper {
             isMuted: false, 
             volume: 1.0,
             pan: 0.0, 
+            fx: { lowCut: 10, presence: 0, compression: 0, delay: 0, reverb: 0 },
+            fxChain: fxChain,
             recorder: null,
             startTime: 0,
             scheduledTime: 0, 
@@ -141,7 +148,8 @@ export class Looper {
         const settings = this.banks.map(b => ({
             muted: b.isMuted,
             volume: b.volume,
-            pan: b.pan 
+            pan: b.pan,
+            fx: b.fx
         }));
         return {
             banks: settings,
@@ -183,7 +191,6 @@ export class Looper {
 
                     const newVol = (typeof s.volume === 'number') ? s.volume : 1.0;
                     this.updateVolume(i, newVol);
-                    
                     const volSlider = this.container.querySelector(`.loop-vol-slider[data-index="${i}"]`);
                     if(volSlider) volSlider.value = newVol;
 
@@ -191,6 +198,14 @@ export class Looper {
                     this.updatePan(i, newPan);
                     const panSlider = this.container.querySelector(`.loop-pan-slider[data-index="${i}"]`);
                     if(panSlider) panSlider.value = newPan;
+
+                    if (s.fx) {
+                        Object.keys(s.fx).forEach(param => {
+                            this.updateFX(i, param, s.fx[param]);
+                            const fxSlider = this.container.querySelector(`.loop-fx-slider[data-index="${i}"][data-param="${param}"]`);
+                            if(fxSlider) fxSlider.value = s.fx[param];
+                        });
+                    }
                     
                     this.updateBankUI(i);
                 }
@@ -211,30 +226,44 @@ export class Looper {
         }
     }
 
-    onStep(stepIndex, progIndex, progLength, cycleCount, time) {
-        const isLoopStart = (stepIndex === 0 && progIndex === 0);
+    onStep(stepIndex, progIndex, progLength, cycleCount, time, beatsPerBar = 4) {
+        let isLoopStart = false;
+        
+        if (cycleCount !== this.lastCycleCount) {
+            isLoopStart = true;
+            this.lastCycleCount = cycleCount;
+        }
+        
+        if (stepIndex === 0 && progIndex === 0 && cycleCount === 0) {
+            isLoopStart = true;
+            this.lastCycleCount = 0;
+        }
+
         const secondsPerBeat = 60.0 / this.bpm;
-        const totalDuration = secondsPerBeat * 4 * progLength;
+        const fallbackDuration = secondsPerBeat * beatsPerBar * progLength;
 
         this.banks.forEach(async (bank, index) => {
             if (bank.state === 'armed' && isLoopStart && cycleCount > 0) {
-                this.startRecording(index, totalDuration, time);
+                this.startRecording(index, fallbackDuration * 2, time);
                 bank.state = 'recording';
                 this.updateBankUI(index);
             }
             else if (bank.state === 'recording' && isLoopStart && bank.recorder) {
-                if (ctx.currentTime - bank.startTime > 1.0) {
+                if (ctx.currentTime - bank.startTime > 0.5) {
                     bank.state = 'playing';
                     this.updateBankUI(index);
+                    
+                    const exactDuration = time - bank.scheduledTime;
                     
                     const lookaheadDelta = Math.max(0, time - ctx.currentTime);
                     const stopDelay = lookaheadDelta + (this.latencyMs / 1000) + 0.1; 
                     
                     setTimeout(() => {
-                        this.finishRecording(index, totalDuration, time);
+                        this.finishRecording(index, exactDuration, time);
                     }, stopDelay * 1000);
                 }
             }
+            
             if (bank.state === 'playing' && bank.buffer && isLoopStart && !bank.isMuted) {
                 if (bank.activeSource) {
                     try { bank.activeSource.stop(time); } catch(e){}
@@ -246,6 +275,7 @@ export class Looper {
     }
 
     stopAll() {
+        this.lastCycleCount = -1; 
         this.banks.forEach(bank => {
             if (bank.activeSource) {
                 try { bank.activeSource.stop(); } catch(e){}
@@ -260,11 +290,9 @@ export class Looper {
         });
     }
 
-    async startRecording(index, duration, scheduledTime) {
+    async startRecording(index, maxDuration, scheduledTime) {
         const bank = this.banks[index];
 
-        // FIXED: Immediately clear the old buffer from memory so it doesn't accidentally
-        // trigger a ghost playback when the track loops around!
         bank.buffer = null;
         if (bank.activeSource) {
             try { bank.activeSource.stop(); } catch(e) {}
@@ -275,10 +303,10 @@ export class Looper {
             await Microphone.init();
             const stream = Microphone.stream;
             
-            bank.scheduledTime = scheduledTime;
+            bank.scheduledTime = scheduledTime; 
             bank.startTime = ctx.currentTime;
             
-            const controller = recordSample(stream, duration + 2.0); 
+            const controller = recordSample(stream, maxDuration + 2.0); 
             bank.recorder = controller;
             bank.stream = stream;
         } catch (err) {
@@ -374,18 +402,108 @@ export class Looper {
         }
     }
 
-    downloadLoop(index) {
+    // NEW: Offline rendering to "print" the FX chain directly into the downloaded WAV file
+    async downloadLoop(index) {
         const bank = this.banks[index];
-        if (bank.buffer) {
-            const blob = bufferToWav(bank.buffer);
+        if (!bank.buffer) return;
+
+        // Briefly show user it's rendering
+        const btn = document.querySelector(`.btn-loop-save[data-index="${index}"]`);
+        const origText = btn.textContent;
+        if (btn) btn.textContent = '⏳';
+
+        try {
+            const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+            const offlineCtx = new OfflineCtx(2, bank.buffer.length, bank.buffer.sampleRate);
+            
+            const source = offlineCtx.createBufferSource();
+            source.buffer = bank.buffer;
+
+            // Reconstruct the loop's specific FX chain for the offline render
+            const lowCut = offlineCtx.createBiquadFilter();
+            lowCut.type = 'highpass';
+            lowCut.frequency.value = bank.fx.lowCut || 10;
+
+            const highShelf = offlineCtx.createBiquadFilter();
+            highShelf.type = 'highshelf';
+            highShelf.frequency.value = 5000;
+            highShelf.gain.value = bank.fx.presence || 0;
+
+            const compRatio = bank.fx.compression || 0;
+            const compressor = offlineCtx.createDynamicsCompressor();
+            compressor.threshold.value = -40 * compRatio;
+            compressor.ratio.value = 1 + (11 * compRatio);
+            compressor.attack.value = 0.005;
+            compressor.release.value = 0.1;
+
+            const delayNode = offlineCtx.createDelay(2.0);
+            delayNode.delayTime.value = 0.3;
+            
+            const delayFeedback = offlineCtx.createGain();
+            delayFeedback.gain.value = (bank.fx.delay || 0) * 0.4;
+            
+            const delayOutput = offlineCtx.createGain();
+            delayOutput.gain.value = (bank.fx.delay || 0) * 0.5;
+
+            // Quick offline impulse response for reverb
+            const reverbNode = offlineCtx.createConvolver();
+            const revLen = offlineCtx.sampleRate * 2.0;
+            const impulse = offlineCtx.createBuffer(2, revLen, offlineCtx.sampleRate);
+            for(let i=0; i<revLen; i++){
+                let val = (Math.random()*2-1) * Math.pow(1 - i/revLen, 2.0);
+                impulse.getChannelData(0)[i] = val;
+                impulse.getChannelData(1)[i] = val;
+            }
+            reverbNode.buffer = impulse;
+
+            const reverbSend = offlineCtx.createGain();
+            reverbSend.gain.value = bank.fx.reverb || 0;
+
+            const masterOutput = offlineCtx.createGain();
+            masterOutput.gain.value = bank.volume; 
+
+            const panner = offlineCtx.createStereoPanner();
+            panner.pan.value = bank.pan; 
+
+            // Connect offline graph
+            source.connect(lowCut);
+            lowCut.connect(highShelf);
+            highShelf.connect(compressor);
+            
+            compressor.connect(delayNode);
+            delayNode.connect(delayFeedback);
+            delayFeedback.connect(delayNode);
+            delayNode.connect(delayOutput);
+
+            compressor.connect(masterOutput);
+            delayOutput.connect(masterOutput);
+
+            compressor.connect(reverbSend);
+            reverbSend.connect(reverbNode);
+            reverbNode.connect(masterOutput);
+
+            masterOutput.connect(panner);
+            panner.connect(offlineCtx.destination);
+
+            source.start(0);
+
+            // Render and Download
+            const renderedBuffer = await offlineCtx.startRendering();
+            const blob = bufferToWav(renderedBuffer);
+            
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             const safeName = bank.name.replace(/[^a-z0-9_\-\s]/gi, '').trim() || `loop_${index+1}`;
-            a.download = `${safeName}.wav`;
+            a.download = `${safeName}_FX.wav`;
             a.click();
             URL.revokeObjectURL(url);
+            
+        } catch(e) {
+            console.error("Offline Render Failed:", e);
         }
+
+        if (btn) btn.textContent = origText;
     }
 
     updateName(index, newName) {
@@ -407,6 +525,26 @@ export class Looper {
         bank.pan = val;
         if (bank.pannerNode && isFinite(val)) {
             bank.pannerNode.pan.setTargetAtTime(val, ctx.currentTime, 0.05);
+        }
+    }
+
+    updateFX(index, param, val) {
+        const bank = this.banks[index];
+        bank.fx[param] = val;
+        const now = ctx.currentTime;
+        
+        if (param === 'lowCut') bank.fxChain.nodes.lowCut.frequency.setTargetAtTime(val, now, 0.05);
+        if (param === 'presence') bank.fxChain.nodes.highShelf.gain.setTargetAtTime(val, now, 0.05);
+        if (param === 'compression') {
+            bank.fxChain.nodes.compressor.threshold.setTargetAtTime(-40 * val, now, 0.05);
+            bank.fxChain.nodes.compressor.ratio.setTargetAtTime(1 + (11 * val), now, 0.05);
+        }
+        if (param === 'delay') {
+            bank.fxChain.nodes.delayOutput.gain.setTargetAtTime(val * 0.5, now, 0.05);
+            bank.fxChain.nodes.delayFeedback.gain.setTargetAtTime(val * 0.4, now, 0.05);
+        }
+        if (param === 'reverb') {
+            bank.fxChain.reverbSend.gain.setTargetAtTime(val, now, 0.05);
         }
     }
 
@@ -560,6 +698,31 @@ export class Looper {
                                 <span style="font-size:0.55rem; color:#666; font-weight:bold; width:20px;">PAN</span>
                                 <input type="range" class="loop-pan-slider" data-index="${i}" min="-1" max="1" step="0.1" value="${b.pan}" style="width:75%; height:3px; accent-color:var(--primary-cyan);">
                             </div>
+                            
+                            <button class="btn-toggle-fx" data-index="${i}" style="width:100%; margin-top:4px; background:#222; border:1px solid #333; color:#00e5ff; font-size:0.55rem; border-radius:3px; cursor:pointer; font-weight:bold; padding:2px;">FX CHAIN ▼</button>
+                            
+                            <div id="loop-fx-panel-${i}" style="display:none; flex-direction:column; gap:2px; margin-top:4px; border-top:1px dashed #333; padding-top:4px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-size:0.5rem; color:#00e5ff; font-weight:bold; width:30px; text-align:left;">LCUT</span>
+                                    <input type="range" class="loop-fx-slider" data-index="${i}" data-param="lowCut" min="10" max="1000" step="10" value="${b.fx.lowCut}" style="width:65%; height:3px; accent-color:var(--primary-cyan);">
+                                </div>
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-size:0.5rem; color:#00e5ff; font-weight:bold; width:30px; text-align:left;">PRES</span>
+                                    <input type="range" class="loop-fx-slider" data-index="${i}" data-param="presence" min="-10" max="10" step="0.5" value="${b.fx.presence}" style="width:65%; height:3px; accent-color:var(--primary-cyan);">
+                                </div>
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-size:0.5rem; color:#00e5ff; font-weight:bold; width:30px; text-align:left;">COMP</span>
+                                    <input type="range" class="loop-fx-slider" data-index="${i}" data-param="compression" min="0" max="1" step="0.05" value="${b.fx.compression}" style="width:65%; height:3px; accent-color:var(--primary-cyan);">
+                                </div>
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-size:0.5rem; color:#00e5ff; font-weight:bold; width:30px; text-align:left;">DLY</span>
+                                    <input type="range" class="loop-fx-slider" data-index="${i}" data-param="delay" min="0" max="1" step="0.05" value="${b.fx.delay}" style="width:65%; height:3px; accent-color:var(--primary-cyan);">
+                                </div>
+                                <div style="display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-size:0.5rem; color:#00e5ff; font-weight:bold; width:30px; text-align:left;">REV</span>
+                                    <input type="range" class="loop-fx-slider" data-index="${i}" data-param="reverb" min="0" max="1" step="0.05" value="${b.fx.reverb}" style="width:65%; height:3px; accent-color:var(--primary-cyan);">
+                                </div>
+                            </div>
                         </div>
 
                         <div class="loop-file-controls">
@@ -634,6 +797,30 @@ export class Looper {
         this.container.querySelectorAll('.loop-pan-slider').forEach(inp => {
             inp.addEventListener('input', (e) => {
                 this.updatePan(parseInt(e.target.dataset.index), parseFloat(e.target.value));
+            });
+        });
+
+        this.container.querySelectorAll('.loop-fx-slider').forEach(inp => {
+            inp.addEventListener('input', (e) => {
+                this.updateFX(parseInt(e.target.dataset.index), e.target.dataset.param, parseFloat(e.target.value));
+            });
+        });
+
+        this.container.querySelectorAll('.btn-toggle-fx').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = e.target.dataset.index;
+                const panel = this.container.querySelector(`#loop-fx-panel-${idx}`);
+                if (panel.style.display === 'none') {
+                    panel.style.display = 'flex';
+                    e.target.textContent = 'FX CHAIN ▲';
+                    e.target.style.background = '#00e5ff';
+                    e.target.style.color = '#000';
+                } else {
+                    panel.style.display = 'none';
+                    e.target.textContent = 'FX CHAIN ▼';
+                    e.target.style.background = '#222';
+                    e.target.style.color = '#00e5ff';
+                }
             });
         });
 

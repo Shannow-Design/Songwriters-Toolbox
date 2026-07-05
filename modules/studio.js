@@ -12,6 +12,10 @@ export class Studio {
         this.activeRecorder = null;
         this.recordingSource = 'mix'; 
         
+        // NEW: Playback State
+        this.isPlayingMix = false;
+        this.mixTimer = null;
+        
         this.settings = {
             masterVolume: 1.0,
             autoExport: false
@@ -34,6 +38,11 @@ export class Studio {
                     <button id="btn-studio-record-mic" class="btn-record">● REC MIC</button>
                     <button id="btn-studio-bounce" class="btn-bounce">● BOUNCE SONG</button>
                     
+                    <div style="border-left: 1px solid #444; margin-left: 5px; padding-left: 15px; display:flex; gap:10px;">
+                        <button id="btn-studio-play-mix" class="btn-play-mix">▶ PLAY MIX</button>
+                        <button id="btn-studio-stop-mix" class="btn-stop-mix" style="display:none;">⏹ STOP MIX</button>
+                    </div>
+
                     <button id="btn-studio-export" class="btn-export" disabled>💾 EXPORT ALL</button>
                 </div>
             </div>
@@ -66,6 +75,12 @@ export class Studio {
             .btn-bounce:hover { background: #ff9900; box-shadow: 0 0 10px rgba(255,153,0,0.5); }
             .btn-bounce.recording { background: #ff9900; animation: pulse-bounce 1s infinite; }
             
+            .btn-play-mix { background: #00e5ff; color: #000; border: none; padding: 6px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+            .btn-play-mix:hover { background: #00ffaa; box-shadow: 0 0 10px rgba(0,255,170,0.5); }
+            
+            .btn-stop-mix { background: #aa0033; color: white; border: none; padding: 6px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+            .btn-stop-mix:hover { background: #ff0055; box-shadow: 0 0 10px rgba(255,0,85,0.5); }
+
             @keyframes pulse-record { 0% { box-shadow: 0 0 5px #ff0055; } 50% { box-shadow: 0 0 20px #ff0055; } 100% { box-shadow: 0 0 5px #ff0055; } }
             @keyframes pulse-bounce { 0% { box-shadow: 0 0 5px #ff9900; } 50% { box-shadow: 0 0 20px #ff9900; } 100% { box-shadow: 0 0 5px #ff9900; } }
             
@@ -79,7 +94,7 @@ export class Studio {
             .empty-state { text-align: center; color: #666; font-style: italic; padding: 30px; background: #111; border-radius: 6px; border: 1px dashed #333; }
 
             .studio-track-row { display: flex; align-items: center; gap: 15px; background: #222; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #444; flex-wrap: wrap; }
-            .studio-track-row.playing { border-left-color: #00ff55; }
+            .studio-track-row.playing { border-left-color: #00ff55; background: #2a2a2a; box-shadow: inset 0 0 10px rgba(0,255,85,0.05); }
             
             .track-name-input { background: transparent; border: none; color: #fff; font-weight: bold; width: 120px; font-size: 0.9rem; border-bottom: 1px solid transparent; }
             .track-name-input:focus { outline: none; border-bottom-color: var(--primary-cyan); }
@@ -94,7 +109,7 @@ export class Studio {
             .btn-mute { background: #333; border: 1px solid #555; color: #888; border-radius: 4px; width: 30px; height: 25px; cursor: pointer; font-weight: bold; }
             .btn-mute.muted { background: #ffaa00; color: #000; border-color: #ffaa00; }
             
-            .btn-track-action { background: none; border: none; color: #666; cursor: pointer; font-size: 1.1rem; transition: color 0.2s; }
+            .btn-track-action { background: none; border: none; color: #666; cursor: pointer; font-size: 1.1rem; transition: color 0.2s; width: 25px;}
             .btn-track-action:hover { color: #fff; }
             .btn-track-action.del:hover { color: #ff5555; }
         `;
@@ -104,6 +119,9 @@ export class Studio {
     bindEvents() {
         this.container.querySelector('#btn-studio-record-mic').addEventListener('click', () => this.toggleRecording('mic'));
         this.container.querySelector('#btn-studio-bounce').addEventListener('click', () => this.toggleRecording('mix'));
+
+        this.container.querySelector('#btn-studio-play-mix').addEventListener('click', () => this.playMix());
+        this.container.querySelector('#btn-studio-stop-mix').addEventListener('click', () => this.stopMix());
 
         this.container.querySelector('#cb-auto-export').addEventListener('change', (e) => {
             this.settings.autoExport = e.target.checked;
@@ -128,9 +146,116 @@ export class Studio {
         });
     }
 
+    // --- MASTER MIX PLAYBACK ---
+    playMix() {
+        if (this.isPlayingMix || this.tracks.length === 0) return;
+        if (ctx.state === 'suspended') ctx.resume();
+
+        this.isPlayingMix = true;
+        this.container.querySelector('#btn-studio-play-mix').style.display = 'none';
+        this.container.querySelector('#btn-studio-stop-mix').style.display = 'inline-block';
+
+        const now = ctx.currentTime + 0.05; // Tight buffer for perfect multi-track sync
+        let maxDuration = 0;
+
+        this.tracks.forEach(track => {
+            if (!track.buffer || track.muted) return;
+
+            // Stop track if it was individually previewing
+            if (track._activeSource) {
+                try { track._activeSource.stop(); } catch(e){}
+                track._activeSource.onended = null;
+            }
+            if (track._activeGain) {
+                try { track._activeGain.disconnect(); } catch(e){}
+            }
+
+            const source = ctx.createBufferSource();
+            source.buffer = track.buffer;
+            
+            const panner = ctx.createStereoPanner();
+            panner.pan.value = track.pan;
+            
+            const gain = ctx.createGain();
+            gain.gain.value = track.volume * this.settings.masterVolume;
+            
+            source.connect(panner);
+            panner.connect(gain);
+            gain.connect(getTrackInput('vocal'));
+            
+            track._activeSource = source;
+            track._activeGain = gain;
+            track._activePanner = panner;
+
+            // Math to handle positive vs negative nudging
+            const nudgeSec = (track.nudge || 0) / 1000;
+            let startTime = now + nudgeSec;
+            let offset = 0;
+            
+            if (startTime < now) {
+                offset = now - startTime;
+                startTime = now;
+            }
+
+            const trackDur = track.buffer.duration - offset + nudgeSec;
+            if (trackDur > maxDuration) maxDuration = trackDur;
+
+            const row = document.getElementById(`studio-row-${track.id}`);
+            const btn = row?.querySelector('.play-test');
+            
+            if (row) row.classList.add('playing');
+            if (btn) {
+                btn.textContent = "⏹";
+                btn.style.color = "#00e5ff";
+            }
+
+            source.onended = () => {
+                if (row) row.classList.remove('playing');
+                if (btn) {
+                    btn.textContent = "▶";
+                    btn.style.color = "";
+                }
+                track._activeSource = null;
+            };
+
+            source.start(startTime, offset);
+        });
+
+        // Auto-reset when the longest track naturally finishes
+        this.mixTimer = setTimeout(() => {
+            this.stopMix();
+        }, (maxDuration * 1000) + 100);
+    }
+
+    stopMix() {
+        this.isPlayingMix = false;
+        clearTimeout(this.mixTimer);
+
+        this.container.querySelector('#btn-studio-play-mix').style.display = 'inline-block';
+        this.container.querySelector('#btn-studio-stop-mix').style.display = 'none';
+
+        this.tracks.forEach(track => {
+            if (track._activeSource) {
+                try { track._activeSource.stop(); } catch(e){}
+                track._activeSource.onended = null;
+                track._activeSource = null;
+            }
+            const row = document.getElementById(`studio-row-${track.id}`);
+            const btn = row?.querySelector('.play-test');
+            if (row) row.classList.remove('playing');
+            if (btn) {
+                btn.textContent = "▶";
+                btn.style.color = "";
+            }
+        });
+    }
+
+    // --- RECORDING ---
     async toggleRecording(source = 'mix') {
         const btnMic = this.container.querySelector('#btn-studio-record-mic');
         const btnBounce = this.container.querySelector('#btn-studio-bounce');
+
+        if (this.isPlayingMix) this.stopMix();
 
         if (this.isRecording) {
             this.isRecording = false;
@@ -198,6 +323,7 @@ export class Studio {
             pan: 0.0,
             nudge: 0, 
             muted: false,
+            _activeSource: null,
             _activeGain: null,
             _activePanner: null
         };
@@ -210,6 +336,9 @@ export class Studio {
         const index = this.tracks.findIndex(t => t.id === id);
         if (index > -1) {
             const track = this.tracks[index];
+            if (track._activeSource) {
+                try { track._activeSource.stop(); } catch(e){}
+            }
             if (track._activeGain) {
                 try { track._activeGain.disconnect(); } catch(e){}
             }
@@ -288,7 +417,7 @@ export class Studio {
             row.id = `studio-row-${track.id}`;
 
             row.innerHTML = `
-                <button class="btn-track-action play-test" title="Test Play">▶</button>
+                <button class="btn-track-action play-test" title="Play / Stop Track">▶</button>
                 <input type="text" class="track-name-input" value="${track.name}">
                 
                 <button class="btn-mute ${track.muted ? 'muted' : ''}" title="Mute">M</button>
@@ -342,6 +471,23 @@ export class Studio {
     testPlayTrack(track) {
         if (!track.buffer) return;
 
+        const row = document.getElementById(`studio-row-${track.id}`);
+        const btn = row?.querySelector('.play-test');
+
+        // NEW: Toggle logic - Stop if already playing
+        if (track._activeSource) {
+            try { track._activeSource.stop(); } catch(e){}
+            track._activeSource.onended = null;
+            track._activeSource = null;
+            
+            if (row) row.classList.remove('playing');
+            if (btn) {
+                btn.textContent = "▶";
+                btn.style.color = "";
+            }
+            return;
+        }
+
         if (track._activeGain) {
             try { track._activeGain.disconnect(); } catch(e){}
         }
@@ -361,16 +507,34 @@ export class Studio {
         const studioDest = getTrackInput('vocal'); 
         gain.connect(studioDest);
         
+        track._activeSource = source;
         track._activeGain = gain;
         track._activePanner = panner;
         
-        const row = document.getElementById(`studio-row-${track.id}`);
         if (row) row.classList.add('playing');
+        if (btn) {
+            btn.textContent = "⏹";
+            btn.style.color = "#00e5ff";
+        }
 
         source.onended = () => {
             if (row) row.classList.remove('playing');
+            if (btn) {
+                btn.textContent = "▶";
+                btn.style.color = "";
+            }
+            track._activeSource = null;
         };
 
-        source.start(ctx.currentTime);
+        // Added Nudge support for individual track previews!
+        const nudgeSec = (track.nudge || 0) / 1000;
+        let startTime = ctx.currentTime + nudgeSec;
+        let offset = 0;
+        if (startTime < ctx.currentTime) {
+            offset = ctx.currentTime - startTime;
+            startTime = ctx.currentTime;
+        }
+        
+        source.start(startTime, offset);
     }
 }

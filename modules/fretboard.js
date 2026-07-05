@@ -48,16 +48,12 @@ export class Fretboard {
             }
         }
 
-        // Strings
-        // FIX: i=0 is Top (High Pitch) -> Thin. i=max is Bottom (Low Pitch) -> Thick.
         for (let i = 0; i < stringCount; i++) {
             const y = 30 + (i * 30);
-            // Thickness increases as we go down visually
             const thickness = 1 + (i * 0.4); 
             svg += `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#888" stroke-width="${thickness}" />`;
         }
 
-        // Fret Dots
         const dotFrets = [3, 5, 7, 9, 12];
         const midY = (15 + (height - 15)) / 2;
         dotFrets.forEach(f => {
@@ -72,29 +68,40 @@ export class Fretboard {
 
         // 2. Draw Notes
         const allNotes = getNotes();
+        const safeScaleNotes = scaleNotes || [];
+        const safeChordNotes = activeChordNotes || [];
+
+        // NEW: Enharmonic converter ensures flats map to fretboard sharps correctly
+        const toSharp = n => ({'Cb':'B', 'Db':'C#', 'Eb':'D#', 'Fb':'E', 'Gb':'F#', 'Ab':'G#', 'Bb':'A#'}[n] || n);
         
         for (let s = 0; s < stringCount; s++) {
-            const stringIndex = stringCount - 1 - s; // High string at top visually
+            const stringIndex = stringCount - 1 - s; 
             const openNoteName = tuning[stringIndex]; 
             const openNoteIndex = getNoteIndex(openNoteName);
             const y = 30 + (s * 30);
 
             for (let f = 0; f <= numFrets; f++) {
                 const currentNoteIndex = (openNoteIndex + f) % 12;
-                const noteName = allNotes[currentNoteIndex];
+                const rawNoteName = allNotes[currentNoteIndex]; 
                 
                 let isVisible = false;
+                let displayNoteName = rawNoteName;
                 
-                // --- Dynamic Root Logic ---
-                let isRoot = false;
-                if (activeChordRoot) {
-                    isRoot = (noteName === activeChordRoot);
-                } else {
-                    isRoot = (noteName === key);
-                }
+                // --- Dynamic Root & Chord Tone Matchers (With Enharmonic Safety) ---
+                const matchedRoot = (activeChordRoot && toSharp(rawNoteName) === toSharp(activeChordRoot)) ? activeChordRoot : 
+                                    ((!activeChordRoot && key && toSharp(rawNoteName) === toSharp(key)) ? key : null);
+                
+                const matchedChordNote = safeChordNotes.find(n => toSharp(n) === toSharp(rawNoteName));
+                const matchedScaleNote = safeScaleNotes.find(n => toSharp(n) === toSharp(rawNoteName));
 
-                let isChordTone = false;
-                
+                let isRoot = !!matchedRoot;
+                let isChordTone = !!matchedChordNote;
+
+                // Prefer the flat/sharp spelling given by the scale or chord rather than the raw fretboard name
+                if (matchedRoot) displayNoteName = matchedRoot;
+                else if (matchedChordNote) displayNoteName = matchedChordNote;
+                else if (matchedScaleNote) displayNoteName = matchedScaleNote;
+
                 // --- SHAPE LOGIC (Guitar Chords) ---
                 if (activeShape) {
                     const shapeFret = activeShape[stringIndex]; 
@@ -110,11 +117,10 @@ export class Fretboard {
                     if (f < capo) continue; 
 
                     if (this.displayMode === 'scale') {
-                        if (scaleNotes.includes(noteName)) isVisible = true;
+                        if (matchedScaleNote) isVisible = true;
                     }
                     
-                    if (activeChordNotes && activeChordNotes.includes(noteName)) {
-                        isChordTone = true;
+                    if (isChordTone) {
                         if (this.displayMode === 'chord') isVisible = true;
                     } else if (this.displayMode === 'chord') {
                         isVisible = false;
@@ -128,7 +134,6 @@ export class Fretboard {
                     let radius = 9;
                     let textColor = '#aaa';
                     
-                    // Priority Coloring: Root > Chord Tone > Scale Note
                     if (isRoot) { 
                         fillColor = colorRoot; 
                         textColor = '#000'; 
@@ -145,8 +150,10 @@ export class Fretboard {
 
                     svg += `<circle cx="${x}" cy="${y}" r="${radius}" fill="${fillColor}" stroke="#111" stroke-width="1" />`;
                     
-                    // Show Note Name
-                    svg += `<text x="${x}" y="${y + 3}" text-anchor="middle" font-size="9" font-family="sans-serif" fill="${textColor}" font-weight="bold">${noteName}</text>`;
+                    // Format flats for better aesthetics inside small circles
+                    let formattedDisplay = displayNoteName.replace('b', '♭');
+                    
+                    svg += `<text x="${x}" y="${y + 3}" text-anchor="middle" font-size="9" font-family="sans-serif" fill="${textColor}" font-weight="bold">${formattedDisplay}</text>`;
                 }
             }
         }

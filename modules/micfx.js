@@ -6,24 +6,27 @@ export class MicFX {
         this.container = document.getElementById(containerId);
         if (!this.container) return;
 
+        // NEW: Acoustic instrument presets added to the built-in library
         this.presets = {
             'Bypass (Dry)': { lowCut: 10, presence: 0, compression: 0, delay: 0, reverb: 0 },
             'Podcast / Broadcast': { lowCut: 80, presence: 4, compression: 0.8, delay: 0, reverb: 0 },
             'Pop Vocal': { lowCut: 120, presence: 6, compression: 0.6, delay: 0.15, reverb: 0.4 },
             'Stadium Rock': { lowCut: 100, presence: 3, compression: 0.5, delay: 0.4, reverb: 0.8 },
-            'Telephone': { lowCut: 800, presence: 10, compression: 1.0, delay: 0, reverb: 0 }
+            'Telephone': { lowCut: 800, presence: 10, compression: 1.0, delay: 0, reverb: 0 },
+            'Acoustic Guitar (Strum)': { lowCut: 80, presence: 4, compression: 0.3, delay: 0, reverb: 0.25 },
+            'Acoustic Guitar (Finger)': { lowCut: 40, presence: 6, compression: 0.5, delay: 0, reverb: 0.35 },
+            'Acoustic Bass': { lowCut: 20, presence: 2, compression: 0.7, delay: 0, reverb: 0.05 },
+            'Room Mic (Ambient)': { lowCut: 60, presence: 2, compression: 0.4, delay: 0.1, reverb: 0.7 }
         };
 
         this.customPresets = JSON.parse(localStorage.getItem('mic_fx_custom')) || {};
         this.currentSettings = JSON.parse(localStorage.getItem('mic_fx_current')) || { ...this.presets['Bypass (Dry)'] };
 
-        // --- TEST BOOTH STATE ---
         this.isTesting = false;
         this.testRecorder = null;
         this.testBlobUrl = null;
         this.testAudio = new Audio();
         
-        // Auto-reset the Play button when the test track finishes
         this.testAudio.onended = () => {
             const btnPlay = this.container.querySelector('#btn-micfx-test-play');
             const status = this.container.querySelector('#micfx-test-status');
@@ -130,7 +133,7 @@ export class MicFX {
             slider.addEventListener('input', (e) => {
                 this.currentSettings[id] = parseFloat(e.target.value);
                 this.applyToEngine();
-                this.container.querySelector('#sel-micfx-preset').value = ""; // Jump to custom
+                this.container.querySelector('#sel-micfx-preset').value = ""; 
             });
         });
 
@@ -170,7 +173,6 @@ export class MicFX {
             }
         });
 
-        // Test Booth Events
         this.container.querySelector('#btn-micfx-test-rec').addEventListener('click', () => this.toggleTestRecord());
         this.container.querySelector('#btn-micfx-test-play').addEventListener('click', () => this.playTest());
     }
@@ -181,7 +183,6 @@ export class MicFX {
         const status = this.container.querySelector('#micfx-test-status');
 
         if (this.isTesting) {
-            // STOP RECORDING
             this.isTesting = false;
             btnRec.textContent = "● TEST REC";
             btnRec.style.background = "#aa0033";
@@ -203,7 +204,6 @@ export class MicFX {
                 }
             }
         } else {
-            // START RECORDING
             if (ctx.state === 'suspended') await ctx.resume();
 
             this.isTesting = true;
@@ -214,7 +214,7 @@ export class MicFX {
             btnPlay.disabled = true;
             btnPlay.style.background = "#444";
             btnPlay.style.color = "#fff";
-            status.textContent = "Recording through FX chain... (Speak now)";
+            status.textContent = "Recording through FX chain... (Play/Speak now)";
             
             if (this.testAudio && !this.testAudio.paused) {
                 this.testAudio.pause();
@@ -222,8 +222,6 @@ export class MicFX {
             }
 
             if (!Microphone.isInitialized) await Microphone.init();
-            
-            // Sneakily route the mic to our custom recording tracker
             this.testRecorder = startStudioRecording('mic');
         }
     }
@@ -235,7 +233,6 @@ export class MicFX {
         const status = this.container.querySelector('#micfx-test-status');
         
         if (this.testAudio && !this.testAudio.paused) {
-            // Stop playback early
             this.testAudio.pause();
             this.testAudio.currentTime = 0;
             btnPlay.textContent = "▶ PLAY";
@@ -243,7 +240,6 @@ export class MicFX {
             return;
         }
 
-        // Play the recorded blob
         this.testAudio.src = this.testBlobUrl;
         this.testAudio.play();
         btnPlay.textContent = "⏹ STOP";
